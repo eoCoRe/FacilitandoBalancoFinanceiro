@@ -7,6 +7,13 @@ export const GLOSSARY: Record<string, string> = {
   'Passivo Total': 'Tudo que a empresa deve a terceiros: bancos, fornecedores e outras dívidas.',
   'Liquidez Corrente':
     'Mostra se a empresa tem bens e direitos suficientes no curto prazo para pagar o que deve no curto prazo.',
+  'Liquidez Seca':
+    'A mesma ideia da liquidez corrente, mas sem contar com a venda dos estoques — um teste mais rígido.',
+  'Endividamento Geral':
+    'Qual fatia de tudo que a empresa possui foi financiada com dívidas, em vez de capital próprio dos sócios.',
+  'Margem Líquida': 'De cada R$ 100 vendidos, quanto vira lucro depois de todas as despesas e impostos.',
+  ROE: 'Quanto de lucro a empresa gerou para cada R$ 100 investidos pelos próprios sócios.',
+  'Giro do Ativo': 'Quantas vezes, no ano, a empresa transforma em vendas tudo que ela possui.',
   'Ativo Circulante':
     'Bens e valores que a empresa deve transformar em dinheiro em até 12 meses (caixa, estoque, contas a receber).',
   'Ativo Realizável a Longo Prazo': 'Bens e valores a receber que só devem virar dinheiro depois de 12 meses.',
