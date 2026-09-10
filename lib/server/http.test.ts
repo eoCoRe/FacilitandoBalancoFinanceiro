@@ -1,12 +1,18 @@
 import { describe, expect, it } from "vitest"
 import { handleRouteError } from "./http"
-import { ValidationError } from "./validation"
+import { UnauthorizedError, ValidationError } from "./validation"
 
 describe("handleRouteError", () => {
   it("converte ValidationError em 400 com a mensagem do erro", async () => {
     const response = handleRouteError(new ValidationError("Nome é obrigatório."))
     expect(response.status).toBe(400)
     expect(await response.json()).toEqual({ error: "Nome é obrigatório." })
+  })
+
+  it("converte UnauthorizedError em 401 com a mensagem do erro", async () => {
+    const response = handleRouteError(new UnauthorizedError("Token de acesso LGPD inválido."))
+    expect(response.status).toBe(401)
+    expect(await response.json()).toEqual({ error: "Token de acesso LGPD inválido." })
   })
 
   it("converte SyntaxError (JSON malformado) em 400", async () => {

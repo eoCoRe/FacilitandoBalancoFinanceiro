@@ -125,3 +125,18 @@ model AuditLog {
 
   @@map("audit_log")
 }
+
+// Comprovante do direito de eliminação (LGPD Art. 18, VI) — de propósito SEM relação
+// com Empresa: precisa sobreviver à própria exclusão que registra (AuditLog, por ter FK
+// com onDelete: Cascade, seria apagado junto e não serviria de prova).
+model LgpdErasureLog {
+  id                Int      @id @default(autoincrement())
+  empresaId         Int      @map("empresa_id")
+  cnpj              String
+  razaoSocial       String   @map("razao_social")
+  registrosApagados Json     @map("registros_apagados")
+  solicitadoPor     String   @default("Sistema") @map("solicitado_por")
+  criadoEm          DateTime @default(now()) @map("criado_em")
+
+  @@map("lgpd_erasure_log")
+}

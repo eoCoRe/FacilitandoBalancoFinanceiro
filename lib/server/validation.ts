@@ -3,6 +3,10 @@
 
 export class ValidationError extends Error {}
 
+// Token LGPD ausente/incorreto (ver lib/server/lgpd.ts) — 401, não 400: o problema não é
+// a forma do payload, é a credencial de acesso ao endpoint.
+export class UnauthorizedError extends Error {}
+
 export function requireNonEmptyString(value: unknown, field: string, maxLength = 200): string {
   if (typeof value !== "string" || !value.trim()) {
     throw new ValidationError(`${field} é obrigatório.`)
