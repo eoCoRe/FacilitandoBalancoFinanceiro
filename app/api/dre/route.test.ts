@@ -58,4 +58,43 @@ describe("GET /api/dre", () => {
 
     expect(body.valoresPorExercicio["1T2026"]["receita-liquida"]).toBeUndefined()
   })
+
+  it("calcula cada exercício de forma independente, sem misturar insumos entre períodos", async () => {
+    prisma.conta.findMany.mockResolvedValue([
+      {
+        id: 1,
+        codigo: "receita-bruta",
+        descricao: "Receita Bruta",
+        valores: [
+          { valor: 1000, exercicio: { periodo: "4T2024" } },
+          { valor: 2000, exercicio: { periodo: "1T2025" } },
+        ],
+      },
+      {
+        id: 2,
+        codigo: "deducoes",
+        descricao: "(-) Deduções da Receita",
+        valores: [
+          { valor: -100, exercicio: { periodo: "4T2024" } },
+          { valor: -200, exercicio: { periodo: "1T2025" } },
+        ],
+      },
+    ])
+
+    const response = await GET()
+    const body = await response.json()
+
+    expect(body.valoresPorExercicio["4T2024"]["receita-liquida"]).toBe(900)
+    expect(body.valoresPorExercicio["1T2025"]["receita-liquida"]).toBe(1800)
+  })
+
+  it("devolve linhas com valoresPorExercicio vazio quando não há contas de DRE lançadas", async () => {
+    prisma.conta.findMany.mockResolvedValue([])
+    const response = await GET()
+    const body = await response.json()
+
+    expect(body.valoresPorExercicio).toEqual({})
+    expect(body.linhas.length).toBeGreaterThan(0) // linhas do catálogo continuam presentes
+    expect(body.linhas.every((l: { contaId: number | null }) => l.contaId === null)).toBe(true)
+  })
 })

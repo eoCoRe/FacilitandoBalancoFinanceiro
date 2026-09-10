@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 const { prisma } = vi.hoisted(() => ({
   prisma: {
     valor: { upsert: vi.fn(), deleteMany: vi.fn() },
+    conta: { findUnique: vi.fn() },
+    exercicio: { findUnique: vi.fn() },
     empresa: { findFirst: vi.fn() },
     auditLog: { create: vi.fn() },
   },
@@ -15,6 +17,8 @@ import { PUT } from "./route"
 beforeEach(() => {
   vi.clearAllMocks()
   prisma.empresa.findFirst.mockResolvedValue({ id: 1 })
+  prisma.conta.findUnique.mockResolvedValue({ id: 5 })
+  prisma.exercicio.findUnique.mockResolvedValue({ id: 2 })
 })
 
 function buildRequest(body: unknown) {
@@ -67,5 +71,43 @@ describe("PUT /api/valores", () => {
     expect(prisma.auditLog.create).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ acao: "Valor removido" }) }),
     )
+  })
+
+  it("permite apagar mesmo que contaId/exercicioId não existam mais (deleteMany é inofensivo)", async () => {
+    prisma.conta.findUnique.mockResolvedValue(null)
+    prisma.exercicio.findUnique.mockResolvedValue(null)
+
+    const response = await PUT(buildRequest({ contaId: 999, exercicioId: 999, valor: null }))
+
+    expect(response.status).toBe(200)
+    expect(prisma.valor.deleteMany).toHaveBeenCalledWith({ where: { contaId: 999, exercicioId: 999 } })
+  })
+
+  it("rejeita com 400 (não 500 de violação de FK) quando contaId não existe", async () => {
+    prisma.conta.findUnique.mockResolvedValue(null)
+
+    const response = await PUT(buildRequest({ contaId: 999, exercicioId: 2, valor: 100 }))
+    const body = await response.json()
+
+    expect(response.status).toBe(400)
+    expect(body.error).toMatch(/Conta não encontrada/)
+    expect(prisma.valor.upsert).not.toHaveBeenCalled()
+  })
+
+  it("rejeita com 400 quando exercicioId não existe", async () => {
+    prisma.exercicio.findUnique.mockResolvedValue(null)
+
+    const response = await PUT(buildRequest({ contaId: 5, exercicioId: 999, valor: 100 }))
+    const body = await response.json()
+
+    expect(response.status).toBe(400)
+    expect(body.error).toMatch(/Exercício não encontrado/)
+    expect(prisma.valor.upsert).not.toHaveBeenCalled()
+  })
+
+  it("rejeita corpo com JSON malformado", async () => {
+    const response = await PUT(new Request("http://localhost/api/valores", { method: "PUT", body: "{ isso não é json" }))
+    expect(response.status).toBe(400)
+    expect(prisma.valor.upsert).not.toHaveBeenCalled()
   })
 })

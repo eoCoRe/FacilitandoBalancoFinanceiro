@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import {
   accountTotalByName,
   applyScale,
+  buildSalesOpinion,
   collectLeaves,
   computeDre,
   deltaPercent,
@@ -16,9 +17,11 @@ import {
   indicatorStatus,
   INDICATORS,
   makeIndicatorContext,
+  suggestedCreditLimit,
   sumAccount,
   type Account,
   type DreValues,
+  type StaticLine,
 } from "./financial-data"
 
 // Árvore mínima só para os testes — não depende dos dados de exemplo do app,
@@ -68,6 +71,10 @@ describe("sumAccount", () => {
     const [ativo] = buildFixtureAccounts()
     expect(sumAccount(ativo.children![0].children![1], "P2")).toBeUndefined()
   })
+
+  it("retorna undefined para um nó sem values e sem children (nó incompleto/malformado)", () => {
+    expect(sumAccount({ code: "x", name: "Nó vazio" }, "P1")).toBeUndefined()
+  })
 })
 
 describe("findAccountByName / findAccountByCode / accountTotalByName", () => {
@@ -84,6 +91,10 @@ describe("findAccountByName / findAccountByCode / accountTotalByName", () => {
   it("retorna undefined para conta inexistente", () => {
     expect(findAccountByName(accounts, "Não existe")).toBeUndefined()
     expect(accountTotalByName(accounts, "Não existe", "P1")).toBeUndefined()
+  })
+
+  it("findAccountByCode retorna undefined quando o código não existe", () => {
+    expect(findAccountByCode(accounts, "9.9")).toBeUndefined()
   })
 
   it("soma pelo nome, propagando dados insuficientes", () => {
@@ -156,6 +167,10 @@ describe("applyScale / formatBRL / formatScaled / formatRatio / formatPercent", 
   it("formatScaled mostra travessão para valor indefinido (dados insuficientes)", () => {
     expect(formatScaled(undefined, "milhares")).toBe("—")
     expect(formatScaled(1000, "milhares")).toBe("1.000")
+  })
+
+  it("formatScaled usa 2 casas decimais na escala 'milhões'", () => {
+    expect(formatScaled(1_000_000, "milhoes")).toBe("1.000,00")
   })
 
   it("formatRatio e formatPercent usam as casas decimais esperadas", () => {
@@ -232,5 +247,177 @@ describe("motor de índices (INDICATORS + makeIndicatorContext)", () => {
     const ctx = makeIndicatorContext(accounts, computeDre({}), "P1")
     const liquidezCorrente = INDICATORS.find((i) => i.id === "liquidez-corrente")!
     expect(liquidezCorrente.compute(ctx)).toBeUndefined()
+  })
+
+  it("calcula Liquidez Seca com a subtração real (Ativo Circulante − Estoques), não só o caminho de dado insuficiente", () => {
+    const accounts: Account[] = [
+      { code: "1.1", name: "Ativo Circulante", values: { P1: 800 } },
+      { code: "1.1.4", name: "Estoques", values: { P1: 200 } },
+      { code: "2.1", name: "Passivo Circulante", values: { P1: 400 } },
+    ]
+    const ctx = makeIndicatorContext(accounts, computeDre({}), "P1")
+    const liquidezSeca = INDICATORS.find((i) => i.id === "liquidez-seca")!
+    expect(liquidezSeca.compute(ctx)).toBe(1.5) // (800 - 200) / 400
+  })
+
+  it("calcula os prazos médios (PMRE/PMRV/PMPC) multiplicando a razão por 360 dias", () => {
+    const accounts: Account[] = [
+      { code: "1.1.4", name: "Estoques", values: { P1: 300 } },
+      { code: "1.1.3", name: "Contas a Receber de Clientes", values: { P1: 250 } },
+      { code: "2.1.1", name: "Fornecedores", values: { P1: 400 } },
+    ]
+    const dre = computeDre({ "receita-bruta": 1000, cmv: -600, compras: 800 })
+    const ctx = makeIndicatorContext(accounts, dre, "P1")
+
+    expect(INDICATORS.find((i) => i.id === "pmre")!.compute(ctx)).toBe(180) // (300/600)*360
+    expect(INDICATORS.find((i) => i.id === "pmrv")!.compute(ctx)).toBe(90) // (250/1000)*360
+    expect(INDICATORS.find((i) => i.id === "pmpc")!.compute(ctx)).toBe(180) // (400/800)*360
+  })
+})
+
+// ---- Opinião de Venda (parecer de crédito) ----
+// Fixture de uma empresa saudável: liquidez > 1,5, endividamento < 50%, margem > 5%.
+function healthyAccounts(): Account[] {
+  return [
+    { code: "1", name: "Ativo", values: { P0: 2500, P1: 3000 } },
+    { code: "1.1", name: "Ativo Circulante", values: { P0: 900, P1: 1000 } },
+    { code: "2.1", name: "Passivo Circulante", values: { P0: 500, P1: 500 } },
+    { code: "2.2", name: "Exigível a Longo Prazo", values: { P0: 300, P1: 300 } },
+    { code: "2.3", name: "Patrimônio Líquido", values: { P0: 1700, P1: 2000 } },
+  ]
+}
+
+function healthyDreByExercicio(): Record<string, DreValues> {
+  return {
+    P0: { "receita-bruta": 1000, deducoes: -200, cmv: -350, "despesas-operacionais": -100, "resultado-financeiro": -30, "ir-csll": -20 },
+    // receitaLiquida=800, lucroBruto=450, ebit=350, antesIr=320, lucroLiquido=300
+    P1: { "receita-bruta": 1200, deducoes: -200, cmv: -400, "despesas-operacionais": -100, "resultado-financeiro": -50, "ir-csll": -50 },
+    // receitaLiquida=1000, lucroBruto=600, ebit=500, antesIr=450, lucroLiquido=400
+  }
+}
+
+const healthyDfc: StaticLine[] = [{ name: "Fluxo de Caixa Operacional", values: { P0: 250, P1: 300 }, kind: "subtotal" }]
+
+describe("suggestedCreditLimit", () => {
+  it("usa o menor entre 25% da receita anualizada, 120% do PL e 3x o caixa operacional anualizado", () => {
+    const dre = computeDre(healthyDreByExercicio().P1) // receita-liquida: 1000, lucro-liquido: 400
+    // candidatos (em milhares): 1000*4*0.25=1000 | 2000*1.2=2400 | 300*4*3=3600 -> menor é 1000
+    const limit = suggestedCreditLimit(healthyAccounts(), dre, healthyDfc, "P1")
+    expect(limit).toBe(1_000_000) // milhares -> reais
+  })
+
+  it("nunca retorna negativo mesmo com PL ou caixa operacional negativos", () => {
+    const accounts: Account[] = [{ code: "2.3", name: "Patrimônio Líquido", values: { P1: -500 } }]
+    const dfc: StaticLine[] = [{ name: "Fluxo de Caixa Operacional", values: { P1: -100 }, kind: "subtotal" }]
+    const dre = computeDre({ "receita-bruta": 100 })
+    const limit = suggestedCreditLimit(accounts, dre, dfc, "P1")
+    expect(limit).toBe(0)
+  })
+})
+
+describe("buildSalesOpinion", () => {
+  it("dá parecer favorável para uma empresa saudável, com valor solicitado dentro do limite", () => {
+    const opinion = buildSalesOpinion(healthyAccounts(), healthyDreByExercicio(), healthyDfc, "P1", "P0", 500_000)
+
+    expect(opinion.rating).toBe("favoravel")
+    expect(opinion.score).toBeGreaterThanOrEqual(70)
+    expect(opinion.criteria.find((c) => c.label === "Liquidez Corrente")?.status).toBe("ok")
+    expect(opinion.criteria.find((c) => c.label === "Margem Líquida")?.status).toBe("ok")
+    // lucro cresceu de 300 (P0) para 400 (P1) -> tendência positiva
+    expect(opinion.criteria.find((c) => c.label === "Tendência do Lucro")?.status).toBe("ok")
+    expect(opinion.coverage).toBeGreaterThanOrEqual(1) // 500k cabe no limite sugerido
+    expect(opinion.narrative.some((n) => n.includes("cabe dentro"))).toBe(true)
+  })
+
+  it("dá parecer desfavorável para uma empresa com liquidez, endividamento e margem ruins", () => {
+    const weakAccounts: Account[] = [
+      { code: "1", name: "Ativo", values: { P1: 1000 } },
+      { code: "1.1", name: "Ativo Circulante", values: { P1: 200 } },
+      { code: "2.1", name: "Passivo Circulante", values: { P1: 800 } }, // liquidez 0,25 -> risco
+      { code: "2.2", name: "Exigível a Longo Prazo", values: { P1: 700 } }, // endividamento ~150% -> risco
+      { code: "2.3", name: "Patrimônio Líquido", values: { P1: 100 } },
+    ]
+    const weakDre: Record<string, DreValues> = {
+      P1: { "receita-bruta": 1000, deducoes: -100, cmv: -850, "despesas-operacionais": -100, "resultado-financeiro": -50, "ir-csll": 0 },
+      // receitaLiquida=900, lucroBruto=50, ebit=-50, antesIr=-100, lucroLiquido=-100 -> margem negativa
+    }
+    const weakDfc: StaticLine[] = [{ name: "Fluxo de Caixa Operacional", values: { P1: -50 }, kind: "subtotal" }]
+
+    const opinion = buildSalesOpinion(weakAccounts, weakDre, weakDfc, "P1", undefined, 1_000_000)
+
+    expect(opinion.rating).toBe("desfavoravel")
+    expect(opinion.score).toBeLessThan(45)
+    expect(opinion.criteria.find((c) => c.label === "Liquidez Corrente")?.status).toBe("risco")
+    expect(opinion.criteria.find((c) => c.label === "Margem Líquida")?.status).toBe("risco")
+    expect(opinion.narrative.some((n) => n.includes("dificuldade"))).toBe(true)
+  })
+
+  it("recomenda reduzir o valor quando o pedido excede o limite sugerido", () => {
+    const opinion = buildSalesOpinion(healthyAccounts(), healthyDreByExercicio(), healthyDfc, "P1", "P0", 50_000_000)
+    expect(opinion.coverage).toBeLessThan(1)
+    expect(opinion.narrative.some((n) => n.includes("maior do que a empresa consegue sustentar"))).toBe(true)
+  })
+
+  it("sem período anterior, não afirma tendência — pede para informar o valor quando requestedValue é zero", () => {
+    const opinion = buildSalesOpinion(healthyAccounts(), healthyDreByExercicio(), healthyDfc, "P1", undefined, 0)
+    expect(opinion.narrative.some((n) => n.includes("Ainda não há período anterior"))).toBe(true)
+    expect(opinion.narrative.some((n) => n.includes("Informe o valor pedido"))).toBe(true)
+  })
+
+  it("classifica como 'ressalvas' quando os critérios ficam todos na faixa intermediária (atenção)", () => {
+    const accounts: Account[] = [
+      { code: "1", name: "Ativo", values: { P1: 3000 } },
+      { code: "1.1", name: "Ativo Circulante", values: { P1: 600 } },
+      { code: "2.1", name: "Passivo Circulante", values: { P1: 500 } },
+      { code: "2.2", name: "Exigível a Longo Prazo", values: { P1: 1300 } },
+      { code: "2.3", name: "Patrimônio Líquido", values: { P1: 700 } },
+    ]
+    const dreByExercicio: Record<string, DreValues> = {
+      P1: {
+        "receita-bruta": 1030,
+        deducoes: -30,
+        cmv: -600,
+        "despesas-operacionais": -350,
+        "resultado-financeiro": -10,
+        "ir-csll": -10,
+      },
+      // receitaLiquida=1000, lucroBruto=400, ebit=50, antesIr=40, lucroLiquido=30 -> margem 3%
+    }
+
+    const opinion = buildSalesOpinion(accounts, dreByExercicio, healthyDfc, "P1", undefined, 0)
+
+    expect(opinion.rating).toBe("ressalvas")
+    expect(opinion.score).toBeGreaterThanOrEqual(45)
+    expect(opinion.score).toBeLessThan(70)
+    expect(opinion.criteria.find((c) => c.label === "Liquidez Corrente")?.status).toBe("atencao")
+    expect(opinion.criteria.find((c) => c.label === "Endividamento")?.status).toBe("atencao")
+    // texto de "atenção" (faixa intermediária) das narrativas de liquidez e endividamento
+    expect(opinion.narrative.some((n) => n.includes("com pouca margem"))).toBe(true)
+    expect(opinion.narrative.some((n) => n.includes("pede atenção"))).toBe(true)
+  })
+
+  it("não crasha e aplica os defaults (0) quando faltam contas, DFC e o período anterior tabulado", () => {
+    // accounts/dfc vazios e dreByExercicio sem a chave do período anterior — exercita
+    // todos os `?? 0`/`?.` defensivos de suggestedCreditLimit e buildSalesOpinion.
+    const opinion = buildSalesOpinion([], {}, [], "P1", "P0", 0)
+
+    expect(opinion.suggestedLimit).toBe(0)
+    expect(opinion.coverage).toBe(0)
+    expect(["favoravel", "ressalvas", "desfavoravel"]).toContain(opinion.rating)
+    expect(opinion.criteria).toHaveLength(5)
+  })
+
+  it("narrativa aponta queda de lucro (não crescimento) quando o resultado recua frente ao período anterior", () => {
+    const dreByExercicio: Record<string, DreValues> = {
+      ...healthyDreByExercicio(),
+      P0: { "receita-bruta": 1500, deducoes: -200, cmv: -400, "despesas-operacionais": -100, "resultado-financeiro": -30, "ir-csll": -20 },
+      // P0: lucroLiquido=750, bem maior que o lucroLiquido=400 de P1 -> tendência negativa
+    }
+
+    const opinion = buildSalesOpinion(healthyAccounts(), dreByExercicio, healthyDfc, "P1", "P0", 500_000)
+
+    const tendencia = opinion.criteria.find((c) => c.label === "Tendência do Lucro")!
+    expect(tendencia.value.startsWith("-")).toBe(true)
+    expect(opinion.narrative.some((n) => n.includes("recuou"))).toBe(true)
   })
 })

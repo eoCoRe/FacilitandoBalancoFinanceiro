@@ -35,4 +35,11 @@ describe("GET /api/dfc", () => {
     expect(body.linhas[0].valores).toEqual({ "4T2024": 1500, "1T2026": 500 })
     expect(prisma.conta.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { tipo: "DFC" } }))
   })
+
+  it("retorna lista vazia quando não há contas de DFC cadastradas", async () => {
+    prisma.conta.findMany.mockResolvedValue([])
+    const response = await GET()
+    const body = await response.json()
+    expect(body.linhas).toEqual([])
+  })
 })

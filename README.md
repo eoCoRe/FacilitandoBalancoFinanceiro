@@ -11,13 +11,21 @@ Tabulação (fluxo *human-in-the-loop*).
 
 - [Next.js](https://nextjs.org/) (App Router) + React 19 + TypeScript
 - [Tailwind CSS](https://tailwindcss.com/) v4
-- Estado da aplicação em memória + `localStorage`, sem backend (dados de
-  demonstração seedados em `lib/financial-data.ts`)
+- Backend: rotas de API do próprio Next.js (`app/api/`) + Prisma + Postgres
+- A interface (telas) ainda roda em memória + `localStorage`
+  (`lib/store.tsx`, dados de exemplo em `lib/financial-data.ts`) e por
+  enquanto **não consome** as rotas de API — a integração fica para uma
+  fase seguinte
 
 ## Estrutura
 
 ```
-app/                       # rotas do App Router (layout, página)
+app/
+├── api/                     # backend: rotas do App Router (empresa, exercicios,
+│                            #   plano-de-contas, valores, dre, dfc, indices,
+│                            #   extracoes, auditoria, health) — cada uma com
+│                            #   route.test.ts ao lado
+├── layout.tsx / page.tsx
 components/
 ├── screens/                # telas: dashboard, plano-de-contas, tabulacao,
 │                            #   demonstracoes, indices, opiniao-de-venda,
@@ -25,16 +33,29 @@ components/
 └── ui/                     # componentes genéricos (botão, etc.)
 lib/
 ├── financial-data.ts       # modelo de dados e motor de cálculo (puro, sem estado)
-├── store.tsx               # FinancialDataProvider / useFinancialStore (estado global)
+├── store.tsx               # FinancialDataProvider / useFinancialStore (estado da UI)
+├── db.ts                    # cliente Prisma (usado só pelas rotas de api/)
+├── server/                  # validação, auditoria, erro HTTP — compartilhado entre rotas
 ├── navigation.ts
 └── utils.ts
+prisma/
+├── schema.prisma            # Empresa, Exercicio, Conta, Valor, Indice, Extracao, AuditLog
+└── seed.ts                  # espelha os dados de exemplo de lib/financial-data.ts no Postgres
 ```
 
 ## Rodando localmente
 
+A interface funciona sem banco (usa `localStorage`). Para exercitar as rotas de
+`app/api/` (ex.: via `curl`/Postman, ou nos testes que batem no banco de verdade):
+
 ```bash
 pnpm install
+cp .env.example .env          # ajuste DATABASE_URL se não usar o compose abaixo
+docker compose up -d          # Postgres local
+npx prisma migrate dev
+npx prisma db seed
 pnpm dev
 ```
 
-Acesse `http://localhost:3000`.
+Acesse `http://localhost:3000`. `pnpm test` roda a suíte com Prisma mockado —
+não precisa do banco no ar.

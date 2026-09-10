@@ -60,6 +60,15 @@ describe("GET /api/plano-de-contas", () => {
     const body = await response.json()
     expect(body.contas).toEqual([])
   })
+
+  it("ignora conta cujo contaPaiId não corresponde a nenhuma conta retornada (órfã), sem crashar", async () => {
+    prisma.conta.findMany.mockResolvedValue([
+      { id: 2, codigo: "1.1", descricao: "Ativo Circulante", contaPaiId: 999, valores: [] },
+    ])
+    const response = await GET()
+    const body = await response.json()
+    expect(body.contas).toEqual([]) // não aparece como raiz nem como filha de ninguém
+  })
 })
 
 describe("POST /api/plano-de-contas", () => {
@@ -105,5 +114,19 @@ describe("POST /api/plano-de-contas", () => {
 
     expect(response.status).toBe(201)
     expect(body.codigo).toBe("1.2")
+  })
+
+  it("rejeita corpo com JSON malformado", async () => {
+    const response = await POST(
+      new Request("http://localhost/api/plano-de-contas", { method: "POST", body: "{ isso não é json" }),
+    )
+    expect(response.status).toBe(400)
+    expect(prisma.conta.create).not.toHaveBeenCalled()
+  })
+
+  it("rejeita parentId negativo ou zero sem consultar o banco", async () => {
+    const response = await POST(buildRequest({ parentId: 0, nome: "Subconta" }))
+    expect(response.status).toBe(400)
+    expect(prisma.conta.findUnique).not.toHaveBeenCalled()
   })
 })

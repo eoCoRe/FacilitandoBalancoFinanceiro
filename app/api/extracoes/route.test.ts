@@ -45,6 +45,14 @@ describe("POST /api/extracoes", () => {
     expect(prisma.extracao.create).not.toHaveBeenCalled()
   })
 
+  it("rejeita item que não é objeto (ex.: string ou null na lista de itens)", async () => {
+    const response = await POST(buildRequest({ exercicioId: 1, arquivoOrigem: "a.pdf", itens: ["não é um objeto"] }))
+    const body = await response.json()
+    expect(response.status).toBe(400)
+    expect(body.error).toMatch(/itens\[0\] inválido/)
+    expect(prisma.extracao.create).not.toHaveBeenCalled()
+  })
+
   it("rejeita confiança fora de 0–100", async () => {
     const response = await POST(
       buildRequest({
@@ -94,6 +102,35 @@ describe("POST /api/extracoes", () => {
       }),
     )
   })
+
+  it("usa 'mock-demo-v1' como modeloLlm padrão quando não informado", async () => {
+    prisma.extracao.create.mockResolvedValue({ id: 1 })
+    await POST(buildRequest({ exercicioId: 1, arquivoOrigem: "a.pdf", itens: [{ contaId: null, valor: 1, confianca: 50 }] }))
+    expect(prisma.extracao.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ modeloLlm: "mock-demo-v1" }) }),
+    )
+  })
+
+  it("respeita o modeloLlm informado explicitamente", async () => {
+    prisma.extracao.create.mockResolvedValue({ id: 1 })
+    await POST(
+      buildRequest({
+        exercicioId: 1,
+        arquivoOrigem: "a.pdf",
+        modeloLlm: "gpt-vision-teste",
+        itens: [{ contaId: null, valor: 1, confianca: 50 }],
+      }),
+    )
+    expect(prisma.extracao.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ modeloLlm: "gpt-vision-teste" }) }),
+    )
+  })
+
+  it("rejeita corpo com JSON malformado", async () => {
+    const response = await POST(new Request("http://localhost/api/extracoes", { method: "POST", body: "{ não é json" }))
+    expect(response.status).toBe(400)
+    expect(prisma.extracao.create).not.toHaveBeenCalled()
+  })
 })
 
 describe("GET /api/extracoes", () => {
@@ -115,5 +152,12 @@ describe("GET /api/extracoes", () => {
 
     expect(body.extracoes).toHaveLength(1)
     expect(body.extracoes[0]).toMatchObject({ id: 2, totalItens: 3, exercicio: "1T2026" })
+  })
+
+  it("retorna lista vazia quando não há extrações", async () => {
+    prisma.extracao.findMany.mockResolvedValue([])
+    const response = await GET()
+    const body = await response.json()
+    expect(body.extracoes).toEqual([])
   })
 })
