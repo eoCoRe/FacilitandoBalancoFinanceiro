@@ -15,10 +15,10 @@ export function AppSidebar({ active, onNavigate }: AppSidebarProps) {
     <aside className="flex h-dvh w-60 shrink-0 flex-col border-r border-border bg-sidebar">
       {/* Marca */}
       <div className="flex items-center gap-2.5 px-4 py-4">
-        <div className="flex size-8 items-center justify-center rounded-md bg-primary font-mono text-sm font-semibold text-primary-foreground shadow-md shadow-primary/30">
+        <div className="flex size-8 items-center justify-center rounded-full bg-primary font-display text-sm font-bold text-primary-foreground">
           CB
         </div>
-        <span className="text-sm font-semibold tracking-tight text-foreground">Central de Balanços</span>
+        <span className="font-display text-sm font-bold tracking-tight text-foreground">Central de Balanços</span>
       </div>
 
       {/* Busca */}
@@ -109,16 +109,16 @@ function NavButton({
       onClick={onClick}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "group/nav flex w-full items-center gap-2.5 rounded-md border-l-2 px-2.5 py-1.5 text-sm transition-all duration-150",
+        "group/nav flex w-full items-center gap-2.5 rounded-full px-3 py-1.5 text-sm transition-all duration-150",
         active
-          ? "border-primary bg-primary/10 font-medium text-primary"
-          : "border-transparent text-muted-foreground hover:border-primary/30 hover:bg-primary/[0.04] hover:text-foreground",
+          ? "bg-primary font-semibold text-primary-foreground"
+          : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
       )}
     >
       <Icon
         className={cn(
           "size-4 shrink-0 transition-colors",
-          active ? "text-primary" : "text-muted-foreground group-hover/nav:text-foreground",
+          active ? "text-primary-foreground" : "text-muted-foreground group-hover/nav:text-foreground",
         )}
       />
       <span className="flex-1 text-left">{item.label}</span>

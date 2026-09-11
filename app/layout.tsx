@@ -1,23 +1,30 @@
 import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
-import { IBM_Plex_Sans, IBM_Plex_Mono } from 'next/font/google'
+import { Manrope, Space_Grotesk, Space_Mono } from 'next/font/google'
 import { FinancialDataProvider } from '@/lib/store'
 import './globals.css'
 
-// IBM Plex é uma família única (sans + mono desenhados juntos, pela IBM) em vez do
-// combo Inter + JetBrains Mono — a dupla que praticamente todo template gerado por
-// IA (shadcn, v0, etc.) usa por padrão.
-const plexSans = IBM_Plex_Sans({
+// Manrope (texto/UI) + Space Grotesk (títulos e números de destaque) + Space Mono
+// (valores tabulares) — trio com personalidade própria, em vez do combo
+// Inter + JetBrains Mono que praticamente todo template gerado por IA usa por padrão.
+const manrope = Manrope({
   subsets: ['latin'],
   weight: ['400', '500', '600', '700'],
-  variable: '--font-plex-sans',
+  variable: '--font-manrope',
   display: 'swap',
 })
 
-const plexMono = IBM_Plex_Mono({
+const spaceGrotesk = Space_Grotesk({
   subsets: ['latin'],
-  weight: ['400', '500', '600'],
-  variable: '--font-plex-mono',
+  weight: ['500', '600', '700'],
+  variable: '--font-space-grotesk',
+  display: 'swap',
+})
+
+const spaceMono = Space_Mono({
+  subsets: ['latin'],
+  weight: ['400', '700'],
+  variable: '--font-space-mono',
   display: 'swap',
 })
 
@@ -60,7 +67,7 @@ export default function RootLayout({
   return (
     <html
       lang="pt-BR"
-      className={`${plexSans.variable} ${plexMono.variable} bg-background`}
+      className={`${manrope.variable} ${spaceGrotesk.variable} ${spaceMono.variable} bg-background`}
     >
       <body className="font-sans antialiased">
         <FinancialDataProvider>{children}</FinancialDataProvider>

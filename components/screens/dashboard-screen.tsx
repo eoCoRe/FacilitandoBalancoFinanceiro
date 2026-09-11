@@ -91,18 +91,18 @@ function KpiCard({
   status?: IndicatorStatus
 }) {
   return (
-    <div className="group rounded-md border border-border bg-card p-4 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md hover:shadow-primary/10">
+    <div className="group rounded-3xl bg-muted p-5 transition-transform duration-200 hover:-translate-y-0.5">
       <div className="flex items-start justify-between gap-2">
-        <GlossaryTerm term={label} className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground" />
-        <div className="flex size-7 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary transition-colors group-hover:bg-primary/15">
+        <GlossaryTerm term={label} className="text-xs font-semibold text-muted-foreground" />
+        <div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-background text-primary">
           <Icon className="size-3.5" />
         </div>
       </div>
       <div className="mt-3 flex items-baseline gap-1.5">
-        <span className="font-mono text-2xl font-semibold tabular-nums text-foreground">{value}</span>
+        <span className="font-display text-3xl font-bold tabular-nums text-foreground">{value}</span>
         <span className="text-xs text-muted-foreground">{unit}</span>
       </div>
-      <div className="mt-2 flex items-center gap-1.5">
+      <div className="mt-3 flex items-center gap-1.5">
         <TrendBadge delta={delta} />
         <span className="text-xs text-muted-foreground">vs. período anterior</span>
         {status && (

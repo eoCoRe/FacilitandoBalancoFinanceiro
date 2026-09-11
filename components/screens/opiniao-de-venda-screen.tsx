@@ -144,7 +144,7 @@ export function OpiniaoDeVendaScreen({ onNavigate }: { onNavigate: (id: ScreenId
             <div className="flex items-start gap-3">
               <RatingIcon className={cn("mt-0.5 size-6 shrink-0", ratingStyle.text)} />
               <div className="min-w-0">
-                <p className={cn("text-sm font-semibold", ratingStyle.text)}>{opinion.ratingLabel}</p>
+                <p className={cn("font-display text-lg font-bold", ratingStyle.text)}>{opinion.ratingLabel}</p>
                 <p className="mt-0.5 text-sm text-foreground/80 text-pretty">{opinion.headline}</p>
               </div>
             </div>
@@ -323,7 +323,7 @@ function ScoreGauge({ score, status }: { score: number; status: CriterionStatus 
           />
         </svg>
         <div className="absolute inset-0 flex items-center justify-center">
-          <span className="font-mono text-base font-semibold tabular-nums text-foreground">{score}</span>
+          <span className="font-display text-lg font-bold tabular-nums text-foreground">{score}</span>
         </div>
       </div>
       <div className="leading-tight">
