@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { Check, ChevronRight, FolderPlus, Pencil, Plus, Trash2, X } from "lucide-react"
+import { GlossaryTerm } from "@/components/glossary-term"
 import { PageHeader } from "@/components/page-header"
 import { ScaleToggle } from "@/components/scale-toggle"
 import { Button } from "@/components/ui/button"
@@ -94,14 +95,13 @@ function TreeRow(props: TreeRowProps) {
             className="flex-1 rounded border border-ring bg-background px-1.5 py-0.5 text-sm text-foreground outline-none"
           />
         ) : (
-          <span
+          <GlossaryTerm
+            term={account.name}
             className={cn(
               "flex-1 truncate text-sm",
               isRoot ? "font-semibold text-foreground" : hasChildren ? "font-medium text-foreground" : "text-foreground",
             )}
-          >
-            {account.name}
-          </span>
+          />
         )}
 
         <span
@@ -221,9 +221,10 @@ function PreviewRow({ account, depth, scale, period }: { account: Account; depth
   return (
     <tr className={cn("border-b border-border last:border-0", isRoot && "bg-primary/[0.03]")}>
       <td className="py-1.5 pr-2 text-xs" style={{ paddingLeft: `${depth * 14 + 12}px` }}>
-        <span className={cn("text-foreground", isRoot ? "font-semibold" : hasChildren ? "font-medium" : "text-muted-foreground")}>
-          {account.name}
-        </span>
+        <GlossaryTerm
+          term={account.name}
+          className={cn("text-foreground", isRoot ? "font-semibold" : hasChildren ? "font-medium" : "text-muted-foreground")}
+        />
       </td>
       <td className={cn("py-1.5 pr-3 text-right font-mono text-xs tabular-nums", hasChildren ? "font-semibold text-foreground" : "text-muted-foreground")}>
         {formatScaled(sumAccount(account, period), scale)}

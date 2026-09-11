@@ -84,21 +84,13 @@ function BalancoTable({ accounts, exercicioIds, scale }: { accounts: Account[]; 
               )}
             >
               <td className="px-4 py-1.5" style={{ paddingLeft: `${depth * 18 + 16}px` }}>
-                {depth <= 1 ? (
-                  <GlossaryTerm
-                    term={account.name}
-                    className={cn(isRoot ? "font-semibold uppercase tracking-wide" : "font-medium", "text-foreground")}
-                  />
-                ) : (
-                  <span
-                    className={cn(
-                      "text-foreground",
-                      hasChildren ? "font-medium" : "text-muted-foreground",
-                    )}
-                  >
-                    {account.name}
-                  </span>
-                )}
+                <GlossaryTerm
+                  term={account.name}
+                  className={cn(
+                    "text-foreground",
+                    isRoot ? "font-semibold uppercase tracking-wide" : hasChildren ? "font-medium" : "text-muted-foreground",
+                  )}
+                />
               </td>
               {exercicioIds.map((id) => (
                 <td
@@ -138,13 +130,14 @@ function DreTable({
           const isSubtotal = line.kind === "computed" && !isTotal
           return (
             <tr key={line.id} className={cn("border-b border-border last:border-0", isTotal && "bg-primary/[0.03]")}>
-              <td
-                className={cn(
-                  "px-4 py-1.5 text-foreground",
-                  isTotal ? "font-semibold" : isSubtotal ? "font-medium" : line.deduction ? "text-muted-foreground" : "",
-                )}
-              >
-                {line.name}
+              <td className="px-4 py-1.5">
+                <GlossaryTerm
+                  term={line.name}
+                  className={cn(
+                    "text-foreground",
+                    isTotal ? "font-semibold" : isSubtotal ? "font-medium" : line.deduction ? "text-muted-foreground" : "",
+                  )}
+                />
               </td>
               {exercicioIds.map((id) => {
                 const value = computedByPeriod[id]?.[line.id]
@@ -184,13 +177,11 @@ function StaticStatementTable({ lines, exercicioIds, scale }: { lines: StaticLin
           const isSubtotal = line.kind === "subtotal"
           return (
             <tr key={line.name} className={cn("border-b border-border last:border-0", isTotal && "bg-primary/[0.03]")}>
-              <td
-                className={cn(
-                  "px-4 py-1.5 text-foreground",
-                  isTotal ? "font-semibold" : isSubtotal ? "font-medium" : "",
-                )}
-              >
-                {line.name}
+              <td className="px-4 py-1.5">
+                <GlossaryTerm
+                  term={line.name}
+                  className={cn("text-foreground", isTotal ? "font-semibold" : isSubtotal ? "font-medium" : "")}
+                />
               </td>
               {exercicioIds.map((id) => (
                 <td
@@ -238,7 +229,9 @@ function BalanceteTable({ accounts, period, scale }: { accounts: Account[]; peri
         {leaves.map((account) => (
           <tr key={account.code} className="border-b border-border last:border-0">
             <td className="px-4 py-1.5 font-mono text-xs tabular-nums text-muted-foreground">{account.code}</td>
-            <td className="px-4 py-1.5 text-foreground">{account.name}</td>
+            <td className="px-4 py-1.5">
+              <GlossaryTerm term={account.name} className="text-foreground" />
+            </td>
             <td className="px-4 py-1.5 text-right font-mono tabular-nums text-foreground">
               {period ? formatScaled(sumAccount(account, period), scale) : "—"}
             </td>

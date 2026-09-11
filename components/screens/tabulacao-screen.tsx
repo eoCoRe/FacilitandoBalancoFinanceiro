@@ -296,14 +296,10 @@ function BalancoTab({
                     style={{ paddingLeft: `${depth * 18 + 16}px` }}
                   >
                     <span className="mr-2 font-mono text-[11px] tabular-nums text-muted-foreground">{account.code}</span>
-                    {depth <= 1 ? (
-                      <GlossaryTerm
-                        term={account.name}
-                        className={cn("text-foreground", isRoot ? "font-semibold" : "font-medium")}
-                      />
-                    ) : (
-                      <span className={cn("text-foreground", !isLeaf ? "font-medium" : "")}>{account.name}</span>
-                    )}
+                    <GlossaryTerm
+                      term={account.name}
+                      className={cn("text-foreground", isRoot ? "font-semibold" : !isLeaf ? "font-medium" : "")}
+                    />
                   </td>
                   <td className="px-2 py-1">
                     {isLeaf ? (
@@ -370,14 +366,13 @@ function DreTab({
               return (
                 <tr key={line.id} className={cn("border-b border-border last:border-0", line.isTotal && "bg-primary/[0.03]")}>
                   <td className="px-4 py-1.5">
-                    <span
+                    <GlossaryTerm
+                      term={line.name}
                       className={cn(
                         "text-foreground",
                         line.isTotal ? "font-semibold" : isComputed ? "font-medium" : line.deduction ? "text-muted-foreground" : "",
                       )}
-                    >
-                      {line.name}
-                    </span>
+                    />
                   </td>
                   <td className="px-2 py-1">
                     {isComputed ? (
