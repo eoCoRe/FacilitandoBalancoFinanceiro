@@ -1,11 +1,12 @@
 "use client"
 
-import { useEffect, useRef, useState, type ChangeEvent, type DragEvent } from "react"
+import { useRef, useState, type ChangeEvent, type DragEvent } from "react"
 import {
   AlertTriangle,
   Check,
   CheckCircle2,
   FileText,
+  HelpCircle,
   Loader2,
   Sparkles,
   Upload,
@@ -15,11 +16,12 @@ import { PageHeader } from "@/components/page-header"
 import { Button } from "@/components/ui/button"
 import { useFinancialStore } from "@/lib/store"
 import { flattenAccounts, formatBRL } from "@/lib/financial-data"
-import { generateMockExtraction, type ExtractedRow } from "@/lib/mock-extraction"
+import { extractFromPdfFile, type ExtractedRow } from "@/lib/extraction/pdf-extraction"
+import { GLOSSARY } from "@/lib/glossary"
 import { validateUploadFile } from "@/lib/upload-validation"
 import { cn } from "@/lib/utils"
 
-type Stage = "idle" | "uploading" | "extracting" | "reviewing" | "done"
+type Stage = "idle" | "processing" | "reviewing" | "unsupported" | "done"
 
 interface ReviewRow extends ExtractedRow {
   mappedCode: string | null
@@ -48,18 +50,10 @@ export function ExtracaoIaScreen({ onNavigate }: { onNavigate: (id: "tabulacao")
   const [confirmedCount, setConfirmedCount] = useState(0)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const timeouts = useRef<ReturnType<typeof setTimeout>[]>([])
-
-  useEffect(() => {
-    const pending = timeouts.current
-    return () => {
-      pending.forEach(clearTimeout)
-    }
-  }, [])
 
   const leafOptions = flattenAccounts(store.accounts).filter((r) => !r.account.children)
 
-  function startExtraction(file: File) {
+  async function startExtraction(file: File) {
     const validation = validateUploadFile(file)
     if (!validation.ok) {
       setUploadError(validation.error ?? "Arquivo inválido.")
@@ -67,28 +61,36 @@ export function ExtracaoIaScreen({ onNavigate }: { onNavigate: (id: "tabulacao")
     }
     setUploadError(null)
     setFileName(file.name)
-    setStage("uploading")
     const lastExercicioId = store.exercicios[store.exercicios.length - 1]?.id
     setExercicioId(lastExercicioId ?? "")
 
-    timeouts.current.push(
-      setTimeout(() => {
-        setStage("extracting")
-        timeouts.current.push(
-          setTimeout(() => {
-            const extracted = generateMockExtraction(store.accounts, lastExercicioId)
-            setRows(
-              extracted.map((row) => ({
-                ...row,
-                mappedCode: row.code,
-                confirmedValue: row.value,
-              })),
-            )
-            setStage("reviewing")
-          }, 1100),
-        )
-      }, 700),
-    )
+    const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")
+    if (!isPdf) {
+      // Imagem (PNG/JPG): sem OCR local nesta versão — não há texto pra ler, então nem
+      // tentamos fingir uma extração. Vai direto para o preenchimento manual.
+      setStage("unsupported")
+      return
+    }
+
+    setStage("processing")
+    try {
+      const result = await extractFromPdfFile(file, store.accounts)
+      if (!result.supported || result.rows.length === 0) {
+        setStage("unsupported")
+        return
+      }
+      setRows(
+        result.rows.map((row) => ({
+          ...row,
+          mappedCode: row.code,
+          confirmedValue: row.value,
+        })),
+      )
+      setStage("reviewing")
+    } catch {
+      setUploadError("Não foi possível ler este PDF (arquivo corrompido ou protegido por senha).")
+      setStage("idle")
+    }
   }
 
   function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
@@ -137,7 +139,7 @@ export function ExtracaoIaScreen({ onNavigate }: { onNavigate: (id: "tabulacao")
         actions={
           <span className="inline-flex items-center gap-1.5 rounded border border-border bg-muted px-2 py-1 font-mono text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
             <Sparkles className="size-3" />
-            demo
+            beta
           </span>
         }
       />
@@ -190,20 +192,41 @@ export function ExtracaoIaScreen({ onNavigate }: { onNavigate: (id: "tabulacao")
               ))}
             </div>
 
-            <p className="text-xs text-muted-foreground">
-              Demonstração: o conteúdo do arquivo enviado não é lido — a extração abaixo usa dados de exemplo para
-              ilustrar o fluxo de revisão humana (mapeamento de contas, confiança e conciliação com a Tabulação).
-            </p>
+            <div className="flex items-start gap-2.5 rounded-md border border-border bg-muted/40 px-4 py-3">
+              <HelpCircle className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                A leitura é feita localmente, sem enviar o arquivo pra nenhum serviço externo: funciona bem em PDFs
+                com texto (gerados direto pelo sistema contábil). PDF escaneado ou imagem (PNG/JPG) não tem texto pra
+                ler automaticamente — nesse caso, o lançamento é feito na Tabulação.
+              </p>
+            </div>
           </>
         )}
 
-        {(stage === "uploading" || stage === "extracting") && (
+        {stage === "processing" && (
           <div className="flex flex-col items-center justify-center gap-3 rounded-md border border-border bg-card px-6 py-20 text-center">
             <Loader2 className="size-6 animate-spin text-muted-foreground" />
-            <p className="text-sm font-medium text-foreground">
-              {stage === "uploading" ? `Enviando "${fileName}"…` : "IA identificando contas, valores e páginas…"}
-            </p>
+            <p className="text-sm font-medium text-foreground">Lendo e analisando &ldquo;{fileName}&rdquo;…</p>
             <p className="text-xs text-muted-foreground">Isso pode levar alguns segundos.</p>
+          </div>
+        )}
+
+        {stage === "unsupported" && (
+          <div className="flex flex-col items-center justify-center gap-3 rounded-md border border-dashed border-border bg-card px-6 py-16 text-center">
+            <AlertTriangle className="size-6 text-attention" />
+            <p className="text-sm font-medium text-foreground">Não foi possível extrair automaticamente</p>
+            <p className="max-w-md text-xs leading-relaxed text-muted-foreground">
+              &ldquo;{fileName}&rdquo; não tem texto reconhecível para ler (imagem, digitalização ou PDF sem camada de
+              texto). Lance os valores diretamente na Tabulação.
+            </p>
+            <div className="mt-2 flex gap-2">
+              <Button variant="outline" size="sm" onClick={reset}>
+                Tentar outro arquivo
+              </Button>
+              <Button size="sm" onClick={() => onNavigate("tabulacao")}>
+                Ir para Tabulação
+              </Button>
+            </div>
           </div>
         )}
 
@@ -275,6 +298,10 @@ export function ExtracaoIaScreen({ onNavigate }: { onNavigate: (id: "tabulacao")
                                 <AlertTriangle className="size-3" />
                                 “{row.suggestedName}” não reconhecida
                               </span>
+                              <p className="text-[11px] text-muted-foreground">
+                                Escolha a conta do Plano de Contas que representa o mesmo tipo de valor (passe o mouse
+                                sobre cada opção para ver o que ela significa).
+                              </p>
                               <select
                                 value={row.mappedCode ?? ""}
                                 onChange={(e) => updateRow(row.id, { mappedCode: e.target.value || null })}
@@ -282,7 +309,7 @@ export function ExtracaoIaScreen({ onNavigate }: { onNavigate: (id: "tabulacao")
                               >
                                 <option value="">Mapear para uma conta…</option>
                                 {leafOptions.map(({ account }) => (
-                                  <option key={account.code} value={account.code}>
+                                  <option key={account.code} value={account.code} title={GLOSSARY[account.name]}>
                                     {account.code} — {account.name}
                                   </option>
                                 ))}
