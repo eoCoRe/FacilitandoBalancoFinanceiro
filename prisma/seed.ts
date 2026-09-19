@@ -35,7 +35,7 @@ function slugify(label: string): string {
 async function seedContaTree(accounts: Account[], parentId: number | null, exercicioIdByPeriodo: Map<string, number>) {
   for (const account of accounts) {
     const conta = await prisma.conta.create({
-      data: { codigo: account.code, descricao: account.name, tipo: "BP", contaPaiId: parentId },
+      data: { codigo: account.code, descricao: account.name, tipo: "BP", contaPaiId: parentId, ehGrupo: !!account.children },
     })
     if (account.values) {
       for (const [periodo, valor] of Object.entries(account.values)) {

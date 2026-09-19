@@ -1,7 +1,7 @@
 "use client"
 
 import { Search } from "lucide-react"
-import { COMPANY } from "@/lib/financial-data"
+import { useFinancialStore } from "@/lib/store"
 import { INICIO_NAV, ANALISE_NAV, DETALHADO_NAV, type NavItem, type ScreenId } from "@/lib/navigation"
 import { cn } from "@/lib/utils"
 
@@ -11,6 +11,7 @@ interface AppSidebarProps {
 }
 
 export function AppSidebar({ active, onNavigate }: AppSidebarProps) {
+  const { companyName, cnpj } = useFinancialStore()
   return (
     <aside className="flex h-dvh w-60 shrink-0 flex-col border-r border-border bg-sidebar">
       {/* Marca */}
@@ -39,8 +40,8 @@ export function AppSidebar({ active, onNavigate }: AppSidebarProps) {
       <div className="px-3 pb-4">
         <div className="rounded-md border border-border bg-background p-3">
           <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Empresa</p>
-          <p className="mt-1 text-sm font-medium leading-tight text-foreground text-pretty">{COMPANY.name}</p>
-          <p className="mt-0.5 font-mono text-xs text-muted-foreground tabular-nums">{COMPANY.cnpj}</p>
+          <p className="mt-1 text-sm font-medium leading-tight text-foreground text-pretty">{companyName}</p>
+          <p className="mt-0.5 font-mono text-xs text-muted-foreground tabular-nums">{cnpj}</p>
         </div>
       </div>
 

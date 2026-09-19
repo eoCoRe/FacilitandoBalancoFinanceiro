@@ -190,17 +190,29 @@ export interface StaticLine {
   kind: "line" | "subtotal" | "total"
 }
 
+// Só a apresentação (subtotal/total em destaque) mora no código, como DRE_LINES; os valores
+// vêm do banco. Chave = descrição da linha, que é o que /api/dfc devolve.
+export const DFC_LINE_KINDS: Record<string, StaticLine["kind"]> = {
+  "Fluxo de Caixa Operacional": "subtotal",
+  "Fluxo de Caixa de Investimentos": "subtotal",
+  "Fluxo de Caixa de Financiamentos": "subtotal",
+  "Variação Líquida de Caixa": "total",
+  "Caixa no Início do Período": "line",
+  "Caixa no Fim do Período": "total",
+}
+
 export function createSeedDfc(): StaticLine[] {
   const ids = SEED_EXERCICIOS
   const line = (a: number, b: number, c: number): Record<string, number> => ({ [ids[0]]: a, [ids[1]]: b, [ids[2]]: c })
-  return [
-    { name: "Fluxo de Caixa Operacional", values: line(1500, 420, 500), kind: "subtotal" },
-    { name: "Fluxo de Caixa de Investimentos", values: line(-800, -300, -400), kind: "subtotal" },
-    { name: "Fluxo de Caixa de Financiamentos", values: line(-500, -50, 30), kind: "subtotal" },
-    { name: "Variação Líquida de Caixa", values: line(200, 70, 130), kind: "total" },
-    { name: "Caixa no Início do Período", values: line(650, 850, 920), kind: "line" },
-    { name: "Caixa no Fim do Período", values: line(850, 920, 1050), kind: "total" },
-  ]
+  const series: Record<string, Record<string, number>> = {
+    "Fluxo de Caixa Operacional": line(1500, 420, 500),
+    "Fluxo de Caixa de Investimentos": line(-800, -300, -400),
+    "Fluxo de Caixa de Financiamentos": line(-500, -50, 30),
+    "Variação Líquida de Caixa": line(200, 70, 130),
+    "Caixa no Início do Período": line(650, 850, 920),
+    "Caixa no Fim do Período": line(850, 920, 1050),
+  }
+  return Object.entries(DFC_LINE_KINDS).map(([name, kind]) => ({ name, values: series[name], kind }))
 }
 
 // ---- Cálculos sobre o Plano de Contas ----

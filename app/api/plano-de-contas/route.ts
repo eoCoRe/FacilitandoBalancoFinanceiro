@@ -9,6 +9,7 @@ interface ContaNode {
   id: number
   codigo: string
   descricao: string
+  ehGrupo: boolean
   valores: Record<string, number>
   subcontas?: ContaNode[]
 }
@@ -26,7 +27,7 @@ export async function GET() {
   for (const conta of contas) {
     const valores: Record<string, number> = {}
     for (const v of conta.valores) valores[v.exercicio.periodo] = Number(v.valor)
-    nodeById.set(conta.id, { id: conta.id, codigo: conta.codigo, descricao: conta.descricao, valores })
+    nodeById.set(conta.id, { id: conta.id, codigo: conta.codigo, descricao: conta.descricao, ehGrupo: conta.ehGrupo, valores })
   }
 
   const roots: ContaNode[] = []
@@ -45,18 +46,28 @@ export async function GET() {
 
 // Cria uma conta raiz (parentId null) ou subconta — equivalente a
 // `store.addAccountNode`, gerando o próximo código na mesma convenção
-// (raiz: "1", "2", ...; filha: "<pai>.<n>").
+// (raiz: "1", "2", ...; filha: "<pai>.<n>"). `ehGrupo` distingue grupo (agrupa
+// subcontas) de conta analítica (recebe valores); padrão: analítica.
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const { parentId: rawParentId, nome: rawNome } = body as { parentId: number | null; nome: unknown }
+    const { parentId: rawParentId, nome: rawNome, ehGrupo: rawEhGrupo } = body as {
+      parentId: number | null
+      nome: unknown
+      ehGrupo?: unknown
+    }
 
     const nome = requireNonEmptyString(rawNome, "Nome")
     const parentId = rawParentId === null || rawParentId === undefined ? null : requirePositiveInt(rawParentId, "parentId")
 
+    if (rawEhGrupo !== undefined && typeof rawEhGrupo !== "boolean") {
+      throw new ValidationError("ehGrupo deve ser verdadeiro ou falso.")
+    }
+    const ehGrupo = rawEhGrupo ?? false
+
     const codigo = await nextCodigo(parentId)
     const conta = await prisma.conta.create({
-      data: { codigo, descricao: nome, tipo: "BP", contaPaiId: parentId },
+      data: { codigo, descricao: nome, tipo: "BP", contaPaiId: parentId, ehGrupo },
     })
 
     const empresa = await getDefaultEmpresa()

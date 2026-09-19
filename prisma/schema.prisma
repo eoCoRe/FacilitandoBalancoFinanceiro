@@ -58,6 +58,9 @@ model Conta {
   codigo           String
   descricao        String
   tipo             ContaTipo
+  // Grupo (agrupa subcontas, sem valor próprio) x analítica (recebe valores). Não dá para
+  // inferir de ter filhas: um grupo recém-criado ainda está vazio e precisa aceitar subcontas.
+  ehGrupo          Boolean         @default(false) @map("eh_grupo")
   valores          Valor[]
   valoresExtraidos ValorExtraido[]
 

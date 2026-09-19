@@ -12,10 +12,9 @@ Tabulação (fluxo *human-in-the-loop*).
 - [Next.js](https://nextjs.org/) (App Router) + React 19 + TypeScript
 - [Tailwind CSS](https://tailwindcss.com/) v4
 - Backend: rotas de API do próprio Next.js (`app/api/`) + Prisma + Postgres
-- A interface (telas) ainda roda em memória + `localStorage`
-  (`lib/store.tsx`, dados de exemplo em `lib/financial-data.ts`) e por
-  enquanto **não consome** as rotas de API — a integração fica para uma
-  fase seguinte
+- A interface lê e grava tudo no Postgres pelas rotas de API
+  (`lib/store.tsx` → `lib/api-client.ts`); não há dados em `localStorage` nem
+  dados de exemplo no navegador. O banco é populado por `prisma/seed.ts`
 
 ## Estrutura
 
@@ -34,28 +33,30 @@ components/
 lib/
 ├── financial-data.ts       # modelo de dados e motor de cálculo (puro, sem estado)
 ├── redaction.ts            # anonimização de CNPJ/CPF/razão social (pronto para RF02)
-├── store.tsx               # FinancialDataProvider / useFinancialStore (estado da UI)
+├── store.tsx               # FinancialDataProvider / useFinancialStore (estado da UI, sincronizado com a API)
+├── api-client.ts            # fetch das rotas de /api com erros já traduzidos para o usuário
+├── api-mapping.ts           # resposta da API (ids, Decimal) → modelo que as telas consomem (puro, testado)
 ├── db.ts                    # cliente Prisma (usado só pelas rotas de api/)
 ├── server/                  # validação, auditoria, erro HTTP, retenção, LGPD — compartilhado entre rotas
 ├── navigation.ts
 └── utils.ts
 prisma/
 ├── schema.prisma            # Empresa, Exercicio, Conta, Valor, Indice, Extracao, AuditLog, LgpdErasureLog
-└── seed.ts                  # espelha os dados de exemplo de lib/financial-data.ts no Postgres
+└── seed.ts                  # popula o Postgres com os dados de exemplo de lib/financial-data.ts
 scripts/
 └── purge-expired-data.ts    # expurgo de dados por retenção (LGPD) — roda via cron externo, não HTTP
 ```
 
 ## Rodando localmente
 
-A interface funciona sem banco (usa `localStorage`). Para exercitar as rotas de
-`app/api/` (ex.: via `curl`/Postman, ou nos testes que batem no banco de verdade):
+A interface **precisa do banco no ar**: sem Postgres (ou sem seed) a tela inicial
+mostra "Não foi possível carregar os dados".
 
 ```bash
 pnpm install
 cp .env.example .env          # ajuste DATABASE_URL/LGPD_ADMIN_TOKEN se não usar o compose abaixo
 docker compose up -d          # Postgres local
-npx prisma migrate dev
+npx prisma migrate deploy   # aplica as migrações (use `migrate dev` ao alterar o schema)
 npx prisma db seed
 pnpm dev
 ```

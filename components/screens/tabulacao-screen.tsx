@@ -63,10 +63,13 @@ export function TabulacaoScreen() {
 
   const recentAudit = store.auditLog.slice(0, 6)
 
-  function handleCreateExercicio() {
+  async function handleCreateExercicio() {
     const label = newExercicioLabel.trim()
     if (!label) return
-    const id = store.addExercicio(label)
+    const id = await store.addExercicio(label)
+    // Recusado pelo servidor (ex.: período já existe): o motivo aparece no aviso global e o
+    // campo continua aberto para corrigir o texto.
+    if (id === null) return
     setExercicioId(id)
     setNewExercicioLabel("")
     setCreatingExercicio(false)

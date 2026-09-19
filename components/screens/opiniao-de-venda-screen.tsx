@@ -10,7 +10,6 @@ import {
   computeDre,
   formatBRL,
   suggestedCreditLimit,
-  COMPANY,
   type CriterionStatus,
   type OpinionRating,
 } from "@/lib/financial-data"
@@ -81,7 +80,7 @@ export function OpiniaoDeVendaScreen({ onNavigate }: { onNavigate: (id: ScreenId
   if (!opinion) {
     return (
       <div className="flex flex-col">
-        <PageHeader eyebrow="Início" title="Parecer de Crédito" subtitle={`Nenhum exercício tabulado ainda para ${COMPANY.name}.`} />
+        <PageHeader eyebrow="Início" title="Parecer de Crédito" subtitle={`Nenhum exercício tabulado ainda para ${store.companyName}.`} />
         <div className="px-8 py-6">
           <div className="flex flex-col items-center gap-4 rounded-md border border-dashed border-border bg-card px-6 py-14 text-center">
             <p className="max-w-sm text-sm leading-relaxed text-muted-foreground">
@@ -112,7 +111,7 @@ export function OpiniaoDeVendaScreen({ onNavigate }: { onNavigate: (id: ScreenId
       <PageHeader
         eyebrow="Início"
         title="Parecer de Crédito"
-        subtitle={`Parecer automático para ${COMPANY.name}, com base nos indicadores de ${current}.`}
+        subtitle={`Parecer automático para ${store.companyName}, com base nos indicadores de ${current}.`}
         actions={
           <>
             <button

@@ -31,11 +31,12 @@ function buildRequest(body: unknown) {
 describe("GET /api/plano-de-contas", () => {
   it("monta a árvore hierárquica com os valores por exercício", async () => {
     prisma.conta.findMany.mockResolvedValue([
-      { id: 1, codigo: "1", descricao: "Ativo", contaPaiId: null, valores: [] },
+      { id: 1, codigo: "1", descricao: "Ativo", ehGrupo: true, contaPaiId: null, valores: [] },
       {
         id: 2,
         codigo: "1.1",
         descricao: "Ativo Circulante",
+        ehGrupo: false,
         contaPaiId: 1,
         valores: [{ valor: 100, exercicio: { periodo: "1T2026" } }],
       },
@@ -45,11 +46,12 @@ describe("GET /api/plano-de-contas", () => {
     const body = await response.json()
 
     expect(body.contas).toHaveLength(1)
-    expect(body.contas[0]).toMatchObject({ id: 1, codigo: "1", descricao: "Ativo" })
+    expect(body.contas[0]).toMatchObject({ id: 1, codigo: "1", descricao: "Ativo", ehGrupo: true })
     expect(body.contas[0].subcontas).toHaveLength(1)
     expect(body.contas[0].subcontas[0]).toMatchObject({
       id: 2,
       codigo: "1.1",
+      ehGrupo: false,
       valores: { "1T2026": 100 },
     })
   })
@@ -97,11 +99,29 @@ describe("POST /api/plano-de-contas", () => {
     expect(response.status).toBe(201)
     expect(body.codigo).toBe("3")
     expect(prisma.conta.create).toHaveBeenCalledWith({
-      data: { codigo: "3", descricao: "Contas de Compensação", tipo: "BP", contaPaiId: null },
+      data: { codigo: "3", descricao: "Contas de Compensação", tipo: "BP", contaPaiId: null, ehGrupo: false },
     })
     expect(prisma.auditLog.create).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ empresaId: 1, acao: "Conta criada" }) }),
     )
+  })
+
+  it("persiste ehGrupo quando o cliente cria um grupo (ainda vazio)", async () => {
+    prisma.conta.findMany.mockResolvedValueOnce([])
+    prisma.conta.create.mockResolvedValueOnce({ id: 12, codigo: "1", descricao: "Novo grupo" })
+
+    const response = await POST(buildRequest({ parentId: null, nome: "Novo grupo", ehGrupo: true }))
+
+    expect(response.status).toBe(201)
+    expect(prisma.conta.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ ehGrupo: true }),
+    })
+  })
+
+  it("rejeita ehGrupo que não seja booleano", async () => {
+    const response = await POST(buildRequest({ parentId: null, nome: "X", ehGrupo: "sim" }))
+    expect(response.status).toBe(400)
+    expect(prisma.conta.create).not.toHaveBeenCalled()
   })
 
   it("cria uma subconta usando <código do pai>.<próximo n>", async () => {
