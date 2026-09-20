@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const { prisma, verification } = vi.hoisted(() => ({
   prisma: {
-    usuario: { update: vi.fn() },
+    usuario: { update: vi.fn(), findUnique: vi.fn() },
     empresa: { findFirst: vi.fn() },
     auditLog: { create: vi.fn() },
   },
@@ -32,6 +32,7 @@ beforeEach(() => {
   resetRateLimits()
   prisma.empresa.findFirst.mockResolvedValue({ id: 1 })
   prisma.usuario.update.mockResolvedValue({ id: 5, email: "ana@teste.com" })
+  prisma.usuario.findUnique.mockResolvedValue({ email: "ana@teste.com" })
   verification.releaseResetToken.mockResolvedValue(undefined)
 })
 
@@ -65,6 +66,18 @@ describe("POST /api/auth/redefinir-senha", () => {
     expect(response.status).toBe(400)
     expect(verification.consumeResetToken).not.toHaveBeenCalled()
     expect(prisma.usuario.update).not.toHaveBeenCalled()
+  })
+
+  it("senha parecida com o e-mail do dono do link é recusada, e o link é DEVOLVIDO (não queima o uso)", async () => {
+    verification.consumeResetToken.mockResolvedValue(5)
+    prisma.usuario.findUnique.mockResolvedValue({ email: "joaquim.silva@empresa.com" })
+
+    const response = await post({ token: "id.segredo", novaSenha: "Joaquim.Silva-2026!" })
+
+    expect(response.status).toBe(400)
+    expect((await response.json()).error).toMatch(/comum ou previsível/)
+    expect(prisma.usuario.update).not.toHaveBeenCalled()
+    expect(verification.releaseResetToken).toHaveBeenCalledWith("id.segredo")
   })
 
   it("chute de links: 10 falhas por IP e passa a responder 429", async () => {

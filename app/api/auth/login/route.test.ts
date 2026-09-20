@@ -117,6 +117,22 @@ describe("POST /api/auth/login", () => {
     expect(response.status).toBe(401)
   })
 
+  it("RAJADA PARALELA de chutes: só 5 chegam a conferir a senha, as outras levam 429 (o limite não é furado por concorrência)", async () => {
+    prisma.usuario.findUnique.mockResolvedValue(await usuario())
+    const respostas = await Promise.all(Array.from({ length: 30 }, () => login({ email: "ana@teste.com", senha: "senha-errada-123" })))
+    const status = respostas.map((r) => r.status)
+    expect(status.filter((s) => s === 401)).toHaveLength(5)
+    expect(status.filter((s) => s === 429)).toHaveLength(25)
+    expect(prisma.usuario.findUnique).toHaveBeenCalledTimes(5) // as recusadas nem chegam ao banco
+  })
+
+  it("entrar com a senha certa não gasta o limite do IP (o contador é compartilhado por quem usa a mesma rede)", async () => {
+    prisma.usuario.findUnique.mockResolvedValue(await usuario())
+    for (let i = 0; i < 25; i++) {
+      expect((await login({ email: "ana@teste.com", senha: SENHA }, "9.9.9.9")).status).toBe(200)
+    }
+  })
+
   it("depois de 5 falhas no mesmo e-mail responde 429 e nem consulta mais o banco", async () => {
     prisma.usuario.findUnique.mockResolvedValue(await usuario())
     for (let i = 0; i < 5; i++) {

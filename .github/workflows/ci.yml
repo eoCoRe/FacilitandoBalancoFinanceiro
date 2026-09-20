@@ -69,7 +69,8 @@ jobs:
       AUTH_SECRET: "ci-only-secret-not-used-anywhere-else-0123456789"
       APP_URL: "http://localhost:3000"
       SEED_ADMIN_EMAIL: "admin@ci.local"
-      SEED_ADMIN_PASSWORD: "ci-admin-password-123"
+      # Sem "admin" nem o trecho do e-mail: a política de senha recusa senha parecida com o e-mail.
+      SEED_ADMIN_PASSWORD: "ci-cavalo-bateria-4271"
     steps:
       - uses: actions/checkout@v4
 

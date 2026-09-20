@@ -6,7 +6,7 @@ import { codeCheckMessage } from "@/lib/server/auth/code-messages"
 import { handleRouteError } from "@/lib/server/http"
 import { logEvent } from "@/lib/server/log"
 import { issueSession } from "@/lib/server/auth/login-session"
-import { clearFailures, isRateLimited, recordFailure } from "@/lib/server/auth/rate-limit"
+import { clearFailures, isRateLimited, reserveAttempt } from "@/lib/server/auth/rate-limit"
 import { checkLoginCode, TOTP_CHALLENGE, TOTP_LOGIN_KEY } from "@/lib/server/auth/second-factor"
 import { clearTwoFactorCookie, TWO_FACTOR_CHALLENGE_KEY, TWO_FACTOR_COOKIE, verifyTwoFactorToken } from "@/lib/server/auth/two-factor"
 import { TooManyRequestsError, UnauthorizedError } from "@/lib/server/validation"
@@ -63,13 +63,13 @@ export async function POST(request: NextRequest) {
 // tentativas, então o limite é por usuário (5 erros a cada 15 min) — reentrar com a senha não zera.
 async function verifyAppCode(usuario: Usuario, codigo: unknown): Promise<NextResponse> {
   const key = TOTP_LOGIN_KEY(usuario.id)
-  if (isRateLimited(key)) {
+  // Reserva a tentativa ANTES de conferir (assíncrono), senão uma rajada paralela de chutes passaria toda pela checagem.
+  if (!reserveAttempt(key)) {
     throw new TooManyRequestsError("Muitas tentativas incorretas. Aguarde 15 minutos e entre novamente com a sua senha.")
   }
 
   const resultado = await checkLoginCode(usuario, codigo)
   if (!resultado.ok) {
-    recordFailure(key)
     if (isRateLimited(key)) {
       await logAuditSafe("Verificação em 2 etapas bloqueada", "Tentativas de código do aplicativo esgotadas.", usuario.email)
       logEvent("warn", "auth.2fa.blocked", { email: usuario.email })

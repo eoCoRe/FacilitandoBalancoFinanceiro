@@ -1,4 +1,5 @@
-import { createCipheriv, createDecipheriv, createHmac, hkdfSync, randomBytes, randomInt, timingSafeEqual } from "node:crypto"
+import { createCipheriv, createDecipheriv, createHmac, hkdfSync, randomBytes, randomInt } from "node:crypto"
+import { safeEqual } from "./safe-equal"
 import { getAuthSecret } from "@/lib/server/auth/session"
 
 // Segundo fator por app autenticador (Google Authenticator, Authy, 1Password…): TOTP, RFC 6238
@@ -70,8 +71,6 @@ export function totpCodeAtStep(secretBase32: string, step: number): string {
   return String(binary % 10 ** TOTP_DIGITS).padStart(TOTP_DIGITS, "0")
 }
 
-const equalText = (a: string, b: string) => a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b))
-
 // Passo em que o código confere (dentro da janela), ou null. `afterStep` é o último passo já aceito:
 // um código de passo igual ou anterior é recusado — o mesmo código não vale duas vezes.
 export function matchTotp(
@@ -85,7 +84,7 @@ export function matchTotp(
   let found: number | null = null
   // Sem "return" antecipado: o tempo não deve revelar em qual passo (ou se) o código conferiu.
   for (let step = current - TOTP_WINDOW; step <= current + TOTP_WINDOW; step++) {
-    if (equalText(totpCodeAtStep(secretBase32, step), code) && (afterStep === null || step > afterStep)) found = step
+    if (safeEqual(totpCodeAtStep(secretBase32, step), code) && (afterStep === null || step > afterStep)) found = step
   }
   return found
 }

@@ -1,5 +1,6 @@
-import { createHmac, timingSafeEqual } from "node:crypto"
+import { createHmac } from "node:crypto"
 import { prisma } from "@/lib/db"
+import { safeEqual } from "@/lib/server/auth/safe-equal"
 import { getAuthSecret } from "@/lib/server/auth/session"
 
 // Integridade da trilha de auditoria (RNF03). Cada registro recebe um selo: HMAC-SHA256 dos seus campos
@@ -16,6 +17,12 @@ import { getAuthSecret } from "@/lib/server/auth/session"
 // Trava que serializa a selagem entre requisições simultâneas (dois selando ao mesmo tempo bifurcariam a cadeia).
 const SEAL_LOCK_KEY = 7_310_442
 const SEAL_BATCH = 100
+// Um registro SEM selo só é selado se for recente. Sem esse limite, quem tivesse acesso só ao banco poderia zerar o
+// selo de um trecho final da trilha, alterar o conteúdo e deixar o próprio servidor "carimbar" o resultado. Passado
+// o prazo, registro sem selo é problema a apontar (a selagem está falhando, ou mexeram no banco), não algo a consertar
+// em silêncio. Única exceção: trilha ainda SEM NENHUM selo (primeira execução, ou depois de o histórico ter sido
+// apagado) — aí não há cadeia a defender e todo o histórico existente é selado de uma vez.
+export const SEAL_GRACE_MS = 15 * 60 * 1000
 // Cada lote é uma transação interativa (padrão do Prisma: 5 s). O tempo folgado evita que um banco lento ou remoto
 // aborte o lote no meio e o refaça para sempre; a trava só é mantida enquanto o lote roda.
 const SEAL_TX_OPTIONS = { timeout: 30_000, maxWait: 10_000 }
@@ -38,11 +45,6 @@ export function computeSeal(previousSeal: string | null, row: SealFields): strin
   return createHmac("sha256", sealKey()).update(`auditoria:v1:${canonical}`).digest("hex")
 }
 
-function sameSeal(a: string | null, b: string): boolean {
-  if (a === null || a.length !== b.length) return false
-  return timingSafeEqual(Buffer.from(a), Buffer.from(b))
-}
-
 // Sela os registros que ainda não têm selo e devolve quantos selou. A cadeia segue a ORDEM EM QUE OS SELOS SÃO GERADOS
 // (selo_seq), não o id: se um registro de id menor só for confirmado depois de outro mais novo já selado (duas
 // requisições simultâneas), ele entra no fim da cadeia no próximo lote — nunca fica sem selo.
@@ -57,7 +59,11 @@ export async function sealPending(): Promise<number> {
         orderBy: { seloSeq: "desc" },
         select: { selo: true, seloSeq: true },
       })
-      const pending = await tx.auditLog.findMany({ where: { selo: null }, orderBy: { id: "asc" }, take: SEAL_BATCH })
+      const pending = await tx.auditLog.findMany({
+        where: { selo: null, ...(last ? { criadoEm: { gte: new Date(Date.now() - SEAL_GRACE_MS) } } : {}) },
+        orderBy: { id: "asc" },
+        take: SEAL_BATCH,
+      })
       let previous = last?.selo ?? null
       let seq = last?.seloSeq ?? 0
       for (const row of pending) {
@@ -116,7 +122,7 @@ export async function verifyAuditIntegrity(): Promise<IntegrityReport> {
         quebra = { id: row.id, motivo: "O encadeamento com o registro anterior não confere: há registro apagado ou inserido antes deste." }
         break
       }
-      if (!sameSeal(row.selo, computeSeal(row.seloAnterior, row))) {
+      if (!safeEqual(row.selo, computeSeal(row.seloAnterior, row))) {
         quebra = { id: row.id, motivo: "O conteúdo deste registro não confere com o selo: foi alterado depois de gravado." }
         break
       }
@@ -137,6 +143,21 @@ export async function verifyAuditIntegrity(): Promise<IntegrityReport> {
     })
     if (semPosicao) {
       quebra = { id: semPosicao.id, motivo: "Este registro tem selo mas não tem posição na cadeia: foi mexido diretamente no banco." }
+    }
+  }
+
+  // Registro sem selo e velho demais para ser selado: a selagem está falhando ou mexeram no banco.
+  if (!quebra && primeiroId !== null) {
+    const velho = await prisma.auditLog.findFirst({
+      where: { selo: null, criadoEm: { lt: new Date(Date.now() - SEAL_GRACE_MS) } },
+      orderBy: { id: "asc" },
+      select: { id: true },
+    })
+    if (velho) {
+      quebra = {
+        id: velho.id,
+        motivo: `Este registro está sem selo há mais de ${SEAL_GRACE_MS / 60_000} minutos: a selagem está falhando ou o registro foi mexido diretamente no banco.`,
+      }
     }
   }
 

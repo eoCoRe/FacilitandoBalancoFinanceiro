@@ -4,7 +4,7 @@ import { logAuditSafe } from "@/lib/server/audit/audit"
 import { requireUser } from "@/lib/server/auth/authz"
 import { handleRouteError } from "@/lib/server/http"
 import { hashPassword, PASSWORD_MAX_LENGTH, requireValidPassword, verifyPassword } from "@/lib/server/auth/password"
-import { clearFailures, isRateLimited, PASSWORD_CHECK_KEY, recordFailure } from "@/lib/server/auth/rate-limit"
+import { clearFailures, PASSWORD_CHECK_KEY, reserveAttempt } from "@/lib/server/auth/rate-limit"
 import { setSessionCookie, signSessionToken } from "@/lib/server/auth/session"
 import { TooManyRequestsError, ValidationError } from "@/lib/server/validation"
 
@@ -26,11 +26,10 @@ export async function POST(request: Request) {
         throw new ValidationError("Informe a senha atual.")
       }
       const key = PASSWORD_CHECK_KEY(user.id)
-      if (isRateLimited(key)) {
+      if (!reserveAttempt(key)) {
         throw new TooManyRequestsError("Muitas tentativas com a senha atual. Aguarde 15 minutos e tente novamente.")
       }
       if (!(await verifyPassword(atual, usuario.senhaHash))) {
-        recordFailure(key)
         throw new ValidationError("A senha atual está incorreta.")
       }
       clearFailures(key)

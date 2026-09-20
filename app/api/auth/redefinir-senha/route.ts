@@ -34,6 +34,16 @@ export async function POST(request: Request) {
       throw new ValidationError("Link inválido ou expirado. Peça uma nova recuperação de senha.")
     }
 
+    // A regra "senha não pode ser parecida com o e-mail" só dá para conferir depois de saber de quem é o link. Se a
+    // senha não passar, o link é devolvido — senha ruim não queima o único uso.
+    try {
+      const alvo = await prisma.usuario.findUnique({ where: { id: usuarioId }, select: { email: true } })
+      if (alvo) requireValidPassword(novaSenha, "Nova senha", { email: alvo.email })
+    } catch (error) {
+      await releaseResetToken(body.token).catch(() => {})
+      throw error
+    }
+
     let usuario
     try {
       usuario = await prisma.usuario.update({

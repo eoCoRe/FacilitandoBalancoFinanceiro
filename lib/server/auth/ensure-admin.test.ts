@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { ensureAdmin } from "./ensure-admin"
+import { assertAdminEnvValid, ensureAdmin } from "./ensure-admin"
 import { verifyPassword } from "./password"
 
 const prisma = { usuario: { count: vi.fn(), upsert: vi.fn() }, codigoRecuperacao: { deleteMany: vi.fn() } }
@@ -67,3 +67,18 @@ describe("ensureAdmin", () => {
     expect(log.warn.mock.calls[1][0]).toMatch(/nenhum administrador existe/)
   })
 })
+
+describe("assertAdminEnvValid (o seed confere ANTES de apagar os dados)", () => {
+  it("senha aceita ou variáveis ausentes: não lança", () => {
+    expect(() => assertAdminEnvValid({ SEED_ADMIN_EMAIL: "a@b.com", SEED_ADMIN_PASSWORD: "ci-cavalo-bateria-4271" })).not.toThrow()
+    expect(() => assertAdminEnvValid({})).not.toThrow()
+    expect(() => assertAdminEnvValid({ SEED_ADMIN_EMAIL: "a@b.com" })).not.toThrow()
+  })
+
+  it("senha que a política recusa (curta, comum, parecida com o e-mail): lança", () => {
+    expect(() => assertAdminEnvValid({ SEED_ADMIN_EMAIL: "a@b.com", SEED_ADMIN_PASSWORD: "curta" })).toThrow()
+    expect(() => assertAdminEnvValid({ SEED_ADMIN_EMAIL: "a@b.com", SEED_ADMIN_PASSWORD: "1234567890" })).toThrow(/comum ou previsível/)
+    expect(() => assertAdminEnvValid({ SEED_ADMIN_EMAIL: "admin@ci.local", SEED_ADMIN_PASSWORD: "ci-admin-password-123" })).toThrow(/comum ou previsível/)
+  })
+})
+

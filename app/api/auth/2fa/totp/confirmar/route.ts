@@ -4,7 +4,7 @@ import { logAudit } from "@/lib/server/audit/audit"
 import { requireUser } from "@/lib/server/auth/authz"
 import { getDefaultEmpresa } from "@/lib/server/data/empresa"
 import { handleRouteError } from "@/lib/server/http"
-import { clearFailures, isRateLimited, recordFailure } from "@/lib/server/auth/rate-limit"
+import { clearFailures, reserveAttempt } from "@/lib/server/auth/rate-limit"
 import { confirmTotpEnrollment, TOTP_ENROLL_KEY } from "@/lib/server/auth/second-factor"
 import { TooManyRequestsError, ValidationError } from "@/lib/server/validation"
 
@@ -21,11 +21,11 @@ export async function POST(request: Request) {
     if (!usuario.totpSegredo) throw new ValidationError("Comece o cadastro do aplicativo primeiro.")
 
     const key = TOTP_ENROLL_KEY(usuario.id)
-    if (isRateLimited(key)) throw new TooManyRequestsError("Muitas tentativas incorretas. Aguarde 15 minutos.")
+    // Reserva a tentativa antes de conferir (uma rajada paralela não passa toda pela checagem).
+    if (!reserveAttempt(key)) throw new TooManyRequestsError("Muitas tentativas incorretas. Aguarde 15 minutos.")
 
     const codigosRecuperacao = await confirmTotpEnrollment(usuario, body.codigo)
     if (!codigosRecuperacao) {
-      recordFailure(key)
       throw new ValidationError("Código incorreto. Confira a hora do celular e tente o código atual do aplicativo.")
     }
     clearFailures(key)

@@ -147,3 +147,17 @@ describe("POST /api/auth/2fa/verificar com o app autenticador", () => {
     expect(cookies(response)).not.toMatch(/cb_session=[^;]/)
   })
 })
+
+describe("rajada paralela de chutes no código do app", () => {
+  it("só 5 chegam a conferir o código; as demais levam 429 antes de tocar no banco", async () => {
+    sf.checkLoginCode.mockImplementation(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 5)) // a conferência é assíncrona, como no banco de verdade
+      return { ok: false }
+    })
+    const respostas = await Promise.all(Array.from({ length: 40 }, () => verificar("000000")))
+    expect(sf.checkLoginCode).toHaveBeenCalledTimes(5)
+    const status = respostas.map((r) => r.status)
+    expect(status.filter((s) => s === 429)).toHaveLength(35)
+    expect(status.filter((s) => s === 401)).toHaveLength(5)
+  })
+})

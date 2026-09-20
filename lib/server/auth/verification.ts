@@ -1,6 +1,7 @@
-import { createHash, createHmac, randomBytes, randomInt, timingSafeEqual } from "node:crypto"
+import { createHash, createHmac, randomBytes, randomInt } from "node:crypto"
 import type { TokenTipo } from "@prisma/client"
 import { prisma } from "@/lib/db"
+import { safeEqual } from "@/lib/server/auth/safe-equal"
 import { getAuthSecret } from "@/lib/server/auth/session"
 
 // Links de recuperação de senha e códigos de 2 etapas (tabela token_verificacao). Regras que
@@ -17,12 +18,6 @@ const sha256 = (value: string) => createHash("sha256").update(value).digest("hex
 // segundos por quem lesse o banco. O HMAC com AUTH_SECRET exige também o segredo do servidor.
 const hmac = (id: string, code: string) =>
   createHmac("sha256", Buffer.from(getAuthSecret())).update(`${id}:${code}`).digest("hex")
-
-function safeEqual(a: string, b: string): boolean {
-  const x = Buffer.from(a)
-  const y = Buffer.from(b)
-  return x.length === y.length && timingSafeEqual(x, y)
-}
 
 // ---- Link de recuperação de senha ----
 

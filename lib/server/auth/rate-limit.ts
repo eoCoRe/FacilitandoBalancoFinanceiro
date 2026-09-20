@@ -35,6 +35,24 @@ export function recordFailure(key: string, windowMs = LOGIN_WINDOW_MS, now = Dat
   else buckets.set(key, { failures: 1, windowStart: now })
 }
 
+// Reserva UMA tentativa ANTES de a conferência começar. Conferir senha/código é assíncrono (banco, scrypt): se o
+// limite só fosse checado antes e a falha só registrada depois, uma rajada de requisições paralelas passaria
+// TODAS pela checagem antes de a primeira falha ser contada. Como o JavaScript roda esta função sem interrupção,
+// no máximo `max` tentativas (em andamento ou já erradas) passam. Acertou: `clearFailures` zera, ou
+// `releaseAttempt` devolve só esta reserva (quando o contador é compartilhado com outras pessoas, como o do IP).
+export function reserveAttempt(key: string, max = LOGIN_MAX_FAILURES, windowMs = LOGIN_WINDOW_MS, now = Date.now()): boolean {
+  if (isRateLimited(key, max, windowMs, now)) return false
+  recordFailure(key, windowMs, now)
+  return true
+}
+
+export function releaseAttempt(key: string, windowMs = LOGIN_WINDOW_MS, now = Date.now()): void {
+  const bucket = current(key, now, windowMs)
+  if (!bucket) return
+  bucket.failures--
+  if (bucket.failures <= 0) buckets.delete(key)
+}
+
 export function clearFailures(key: string): void {
   buckets.delete(key)
 }

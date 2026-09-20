@@ -84,9 +84,14 @@ describe("POST /api/auth/2fa/totp/iniciar", () => {
     expect(sf.startTotpEnrollment).not.toHaveBeenCalled()
   })
 
-  it("conta sem senha (só Google) não consegue: 400", async () => {
+  it("conta sem senha (só Google): 400 com a orientação de definir uma senha primeiro (não 'senha incorreta')", async () => {
     prisma.usuario.findUnique.mockResolvedValue(await usuario({ senhaHash: null }))
-    expect((await post(iniciar, { senha: SENHA })).status).toBe(400)
+    const response = await post(iniciar, { senha: SENHA })
+    expect(response.status).toBe(400)
+    const { error } = await response.json()
+    expect(error).toMatch(/não tem senha/)
+    expect(error).not.toMatch(/incorreta/)
+    expect(sf.startTotpEnrollment).not.toHaveBeenCalled()
   })
 })
 

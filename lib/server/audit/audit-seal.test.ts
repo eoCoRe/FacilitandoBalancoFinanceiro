@@ -8,11 +8,13 @@ type Row = { id: number; empresaId: number; usuario: string; acao: string; detal
 // Banco de mentira, com estado, só com o que a selagem e a verificação usam.
 const db = vi.hoisted(() => {
   const state = { rows: [] as Row[], nextId: 1 }
-  type Where = { selo?: null | { not: null }; seloSeq?: null | { gt: number } }
+  type Where = { selo?: null | { not: null }; seloSeq?: null | { gt: number }; criadoEm?: { gte?: Date; lt?: Date } }
   type OrderBy = { id?: "asc" | "desc"; seloSeq?: "asc" | "desc" }
   const match = (r: Row, w: Where = {}) =>
     (w.selo === undefined || (w.selo === null ? r.selo === null : r.selo !== null)) &&
-    (w.seloSeq === undefined || (w.seloSeq === null ? r.seloSeq === null : r.seloSeq !== null && r.seloSeq > w.seloSeq.gt))
+    (w.seloSeq === undefined || (w.seloSeq === null ? r.seloSeq === null : r.seloSeq !== null && r.seloSeq > w.seloSeq.gt)) &&
+    (w.criadoEm?.gte === undefined || r.criadoEm >= w.criadoEm.gte) &&
+    (w.criadoEm?.lt === undefined || r.criadoEm < w.criadoEm.lt)
   const sorted = (rows: Row[], orderBy: OrderBy) => {
     const [key, dir] = Object.entries(orderBy)[0] as ["id" | "seloSeq", "asc" | "desc"]
     return [...rows].sort((a, b) => ((a[key] ?? 0) - (b[key] ?? 0)) * (dir === "asc" ? 1 : -1))
@@ -35,7 +37,7 @@ const db = vi.hoisted(() => {
 })
 vi.mock("@/lib/db", () => ({ prisma: db.prisma }))
 
-import { computeSeal, sealPending, verifyAuditIntegrity } from "@/lib/server/audit/audit-seal"
+import { computeSeal, SEAL_GRACE_MS, sealPending, verifyAuditIntegrity } from "@/lib/server/audit/audit-seal"
 
 function add(n = 1, over: Partial<Row> = {}) {
   for (let i = 0; i < n; i++) {
@@ -55,14 +57,22 @@ function add(n = 1, over: Partial<Row> = {}) {
   }
 }
 
+// "Agora" fixo, poucos minutos depois dos registros criados por add(): eles contam como recentes.
+const AGORA = new Date("2026-09-20T10:05:00Z")
+
 beforeEach(() => {
   vi.clearAllMocks()
+  vi.useFakeTimers({ toFake: ["Date"] })
+  vi.setSystemTime(AGORA)
   vi.stubEnv("AUTH_SECRET", "s".repeat(40))
   vi.stubEnv("AUDIT_SEAL_SECRET", "")
   db.state.rows = []
   db.state.nextId = 1
 })
-afterEach(() => vi.unstubAllEnvs())
+afterEach(() => {
+  vi.useRealTimers()
+  vi.unstubAllEnvs()
+})
 
 describe("selagem", () => {
   it("sela em ordem de id, encadeando cada registro ao selo do anterior", async () => {
@@ -136,6 +146,59 @@ describe("selagem", () => {
   it("AUDIT_SEAL_SECRET curta é recusada (falha fechado)", () => {
     vi.stubEnv("AUDIT_SEAL_SECRET", "curta")
     expect(() => computeSeal(null, { id: 1, empresaId: 1, usuario: "a", acao: "b", detalhe: "c", criadoEm: new Date(0) })).toThrow(/AUDIT_SEAL_SECRET/)
+  })
+})
+
+describe("prazo para selar (quem tem só o banco não pode fazer o servidor carimbar uma adulteração)", () => {
+  const passaTempo = (ms: number) => vi.setSystemTime(new Date(Date.now() + ms))
+
+  it("registro SEM selo e velho demais NÃO é selado: a verificação aponta", async () => {
+    add(3)
+    await sealPending()
+    add(1, { criadoEm: new Date(AGORA.getTime() - 2 * 3600_000) }) // criado há 2 h e nunca selado
+    expect(await sealPending()).toBe(0)
+    expect(db.state.rows[3].selo).toBeNull()
+
+    const r = await verifyAuditIntegrity()
+    expect(r.integra).toBe(false)
+    expect(r.quebra).toMatchObject({ id: 4, motivo: expect.stringContaining("sem selo há mais de 15 minutos") })
+  })
+
+  it("ATAQUE: zerar selo/posição do fim da trilha e alterar o conteúdo — depois do prazo não vira 'íntegra'", async () => {
+    add(5)
+    await sealPending()
+    passaTempo(SEAL_GRACE_MS + 60_000)
+    for (const linha of db.state.rows.slice(3)) {
+      linha.selo = null
+      linha.seloAnterior = null
+      linha.seloSeq = null
+      linha.detalhe = "adulterado"
+    }
+    expect(await sealPending()).toBe(0) // o servidor NÃO carimba a adulteração
+    const r = await verifyAuditIntegrity()
+    expect(r.integra).toBe(false)
+    expect(r.quebra?.id).toBe(4)
+  })
+
+  it("registro recente sem selo (acabou de ser gravado) é selado normalmente", async () => {
+    add(2)
+    await sealPending()
+    add(1)
+    expect(await sealPending()).toBe(1)
+  })
+
+  it("trilha SEM NENHUM selo (primeira execução): todo o histórico existente é selado, por mais velho que seja", async () => {
+    add(4, { criadoEm: new Date("2025-01-01T00:00:00Z") })
+    expect(await sealPending()).toBe(4)
+    expect(await verifyAuditIntegrity()).toMatchObject({ integra: true, verificados: 4, naoSelados: 0 })
+  })
+
+  it("vale também para o registro atrasado: se confirmar dentro do prazo, entra na cadeia", async () => {
+    add(3)
+    const atrasado = db.state.rows.splice(1, 1)[0]
+    await sealPending()
+    db.state.rows.splice(1, 0, atrasado)
+    expect(await sealPending()).toBe(1)
   })
 })
 

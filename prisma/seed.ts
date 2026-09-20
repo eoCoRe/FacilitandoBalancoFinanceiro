@@ -13,7 +13,7 @@ import {
   type Account,
 } from "../lib/financial-data"
 import { DEFAULT_SECTOR_ID, sectorLabel } from "../lib/sector-benchmarks"
-import { ensureAdmin } from "../lib/server/auth/ensure-admin"
+import { assertAdminEnvValid, ensureAdmin } from "../lib/server/auth/ensure-admin"
 
 const connectionString = process.env.DATABASE_URL
 if (!connectionString) throw new Error("DATABASE_URL não configurada — veja .env.example")
@@ -65,6 +65,8 @@ function refuseInProduction() {
 
 async function main() {
   refuseInProduction()
+  // Antes de apagar qualquer coisa: uma SEED_ADMIN_PASSWORD que a política recusa não pode derrubar os dados e só então falhar.
+  assertAdminEnvValid()
   console.log("Limpando dados existentes...")
   await prisma.valorExtraido.deleteMany()
   await prisma.extracao.deleteMany()

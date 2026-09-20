@@ -6,7 +6,7 @@ import { handleRouteError } from "@/lib/server/http"
 import { logEvent } from "@/lib/server/log"
 import { issueSession } from "@/lib/server/auth/login-session"
 import { PASSWORD_MAX_LENGTH, verifyAgainstDummy, verifyPassword } from "@/lib/server/auth/password"
-import { clearFailures, isRateLimited, recordFailure } from "@/lib/server/auth/rate-limit"
+import { clearFailures, isRateLimited, recordFailure, releaseAttempt, reserveAttempt } from "@/lib/server/auth/rate-limit"
 import { TOTP_CHALLENGE } from "@/lib/server/auth/second-factor"
 import {
   isTwoFactorRequired,
@@ -39,7 +39,12 @@ export async function POST(request: Request) {
 
     const emailKey = `login:email:${email}`
     const ipKey = `login:ip:${clientIp(request)}`
-    if (isRateLimited(emailKey) || isRateLimited(ipKey, IP_MAX_FAILURES)) {
+    // A tentativa é RESERVADA antes de conferir a senha (assíncrono): uma rajada paralela não passa toda pela
+    // checagem antes de a primeira falha ser contada.
+    const emailReserved = reserveAttempt(emailKey)
+    const ipReserved = emailReserved && reserveAttempt(ipKey, IP_MAX_FAILURES)
+    if (!emailReserved || !ipReserved) {
+      if (emailReserved) releaseAttempt(emailKey)
       logEvent("warn", "auth.login.rate_limited", { email, ip: clientIp(request) })
       throw new TooManyRequestsError("Muitas tentativas de login. Aguarde 15 minutos e tente novamente.")
     }
@@ -50,8 +55,6 @@ export async function POST(request: Request) {
       : await verifyAgainstDummy(senha)
 
     if (!usuario || !usuario.ativo || !senhaConfere) {
-      recordFailure(emailKey)
-      recordFailure(ipKey)
       logEvent("warn", "auth.login.failed", { email, ip: clientIp(request) })
       // Só registra na auditoria tentativa contra e-mail existente: o limite por e-mail já
       // limita isso, e e-mails inventados não devem poder encher a trilha.
@@ -59,7 +62,10 @@ export async function POST(request: Request) {
       throw new UnauthorizedError("E-mail ou senha inválidos.")
     }
 
+    // Acertou: zera as falhas deste e-mail e devolve a reserva do IP (o contador do IP é compartilhado por quem
+    // usa a mesma rede — entradas corretas não devem esgotá-lo).
     clearFailures(emailKey)
+    releaseAttempt(ipKey)
 
     if (await isTwoFactorRequired(usuario)) {
       if (usuario.totpAtivo) {

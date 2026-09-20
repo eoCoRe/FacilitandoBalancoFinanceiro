@@ -21,7 +21,7 @@ export function AppSidebar({ active, onNavigate }: AppSidebarProps) {
   // ⌘K (Mac) / Ctrl+K abre a busca de qualquer lugar do app.
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+      if ((event.metaKey || event.ctrlKey) && typeof event.key === "string" && event.key.toLowerCase() === "k") {
         event.preventDefault()
         setSearchOpen((open) => !open)
       }

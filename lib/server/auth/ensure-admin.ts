@@ -1,6 +1,14 @@
 import type { PrismaClient } from "@prisma/client"
 import { hashPassword, requireValidPassword } from "./password"
 
+// Confere se SEED_ADMIN_PASSWORD (quando informada junto com o e-mail) passa na política de senha. O seed chama isto
+// ANTES de apagar qualquer coisa: uma senha ruim não pode derrubar os dados e só então falhar.
+export function assertAdminEnvValid(env: Record<string, string | undefined> = process.env): void {
+  const email = env.SEED_ADMIN_EMAIL?.trim().toLowerCase()
+  const senha = env.SEED_ADMIN_PASSWORD
+  if (email && senha) requireValidPassword(senha, "SEED_ADMIN_PASSWORD", { email })
+}
+
 // Garante que exista um administrador para o primeiro acesso, a partir do ambiente (SEED_ADMIN_EMAIL /
 // SEED_ADMIN_PASSWORD) — nenhuma senha padrão fica no código. Não mexe em mais nada: usado pelo seed de
 // desenvolvimento e por `pnpm admin:ensure`, o caminho seguro em PRODUÇÃO (o seed apaga os dados de negócio).
@@ -26,7 +34,7 @@ export async function ensureAdmin(
     )
     return null
   }
-  requireValidPassword(senha, "SEED_ADMIN_PASSWORD", { email })
+  assertAdminEnvValid(env)
   const senhaHash = await hashPassword(senha)
   const nome = env.SEED_ADMIN_NAME?.trim() || "Administrador"
   const usuario = await prisma.usuario.upsert({
