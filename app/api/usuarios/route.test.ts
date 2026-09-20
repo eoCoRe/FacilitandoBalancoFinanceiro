@@ -126,6 +126,16 @@ describe("PATCH /api/usuarios/:id", () => {
     expect((await patch(3, { papel: "COORDENADOR" })).status).toBe(200)
   })
 
+  it("admin pode DESLIGAR o 2FA de alguém (perdeu o e-mail), mas não ligar", async () => {
+    prisma.usuario.findUnique.mockResolvedValue(row({ doisFatoresAtivo: true }))
+    prisma.usuario.update.mockResolvedValue(row({ doisFatoresAtivo: false }))
+    expect((await patch(2, { doisFatoresAtivo: false })).status).toBe(200)
+    expect(prisma.usuario.update).toHaveBeenCalledWith({ where: { id: 2 }, data: { doisFatoresAtivo: false } })
+    prisma.usuario.update.mockClear()
+    expect((await patch(2, { doisFatoresAtivo: true })).status).toBe(400)
+    expect(prisma.usuario.update).not.toHaveBeenCalled()
+  })
+
   it("recusa corpo vazio, perfil inválido e usuário inexistente", async () => {
     prisma.usuario.findUnique.mockResolvedValue(row())
     expect((await patch(2, {})).status).toBe(400)

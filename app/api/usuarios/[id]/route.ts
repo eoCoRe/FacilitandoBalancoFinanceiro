@@ -21,9 +21,21 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     const { id } = await params
     const usuarioId = requirePositiveInt(Number(id), "id")
 
-    const body = (await request.json()) as { nome?: unknown; papel?: unknown; ativo?: unknown; senha?: unknown }
-    if (body.nome === undefined && body.papel === undefined && body.ativo === undefined && body.senha === undefined) {
-      throw new ValidationError("Informe nome, papel, ativo e/ou senha.")
+    const body = (await request.json()) as {
+      nome?: unknown
+      papel?: unknown
+      ativo?: unknown
+      senha?: unknown
+      doisFatoresAtivo?: unknown
+    }
+    if (
+      body.nome === undefined &&
+      body.papel === undefined &&
+      body.ativo === undefined &&
+      body.senha === undefined &&
+      body.doisFatoresAtivo === undefined
+    ) {
+      throw new ValidationError("Informe nome, papel, ativo, senha e/ou doisFatoresAtivo.")
     }
 
     const alvo = await prisma.usuario.findUnique({ where: { id: usuarioId } })
@@ -35,6 +47,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       ativo?: boolean
       senhaHash?: string
       sessoesValidasDesde?: Date
+      doisFatoresAtivo?: boolean
     } = {}
     const mudancas: string[] = []
 
@@ -51,6 +64,13 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       if (typeof body.ativo !== "boolean") throw new ValidationError("ativo deve ser verdadeiro ou falso.")
       data.ativo = body.ativo
       mudancas.push(body.ativo ? "reativado" : "desativado")
+    }
+    if (body.doisFatoresAtivo !== undefined) {
+      // Só desligar: ligar exige o código no e-mail do próprio usuário. O caso de uso é a pessoa
+      // ter perdido o acesso à caixa de e-mail e não conseguir mais entrar.
+      if (body.doisFatoresAtivo !== false) throw new ValidationError("O administrador só pode desligar o 2FA de um usuário.")
+      data.doisFatoresAtivo = false
+      mudancas.push("2FA desligado")
     }
     if (body.senha !== undefined) {
       data.senhaHash = await hashPassword(requireValidPassword(body.senha))

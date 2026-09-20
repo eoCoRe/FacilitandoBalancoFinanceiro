@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from "react"
 import { KeyRound, LogOut } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { TwoFactorSection } from "@/components/two-factor-section"
 import { api, errorMessage } from "@/lib/api-client"
 import { PAPEL_LABEL } from "@/lib/permissions"
 import { useFinancialStore } from "@/lib/store"
@@ -62,6 +63,8 @@ export function AccountMenu() {
           <p className="truncate text-xs text-muted-foreground">{PAPEL_LABEL[user.papel]}</p>
         </div>
       </div>
+
+      <TwoFactorSection />
 
       {changing && (
         <form onSubmit={handleChangePassword} className="mt-3 flex flex-col gap-2">

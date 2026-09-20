@@ -10,6 +10,9 @@ export class UnauthorizedError extends Error {}
 // Login válido, mas o perfil não pode fazer isso — 403 (ver lib/server/authz.ts).
 export class ForbiddenError extends Error {}
 
+// Serviço de que a operação depende (ex.: envio de e-mail) indisponível — 503.
+export class ServiceUnavailableError extends Error {}
+
 // Muitas tentativas de login seguidas — 429 (ver lib/server/rate-limit.ts).
 export class TooManyRequestsError extends Error {}
 

@@ -2,9 +2,16 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
 import { logAuditSafe } from "@/lib/server/audit"
 import { handleRouteError } from "@/lib/server/http"
+import { issueSession } from "@/lib/server/login-session"
 import { PASSWORD_MAX_LENGTH, verifyAgainstDummy, verifyPassword } from "@/lib/server/password"
 import { clearFailures, isRateLimited, recordFailure } from "@/lib/server/rate-limit"
-import { setSessionCookie, signSessionToken } from "@/lib/server/session"
+import {
+  isTwoFactorRequired,
+  sendLoginCode,
+  setTwoFactorCookie,
+  signTwoFactorToken,
+  TWO_FACTOR_CHALLENGE_MAX,
+} from "@/lib/server/two-factor"
 import { requireEmail, TooManyRequestsError, UnauthorizedError, ValidationError } from "@/lib/server/validation"
 
 const IP_MAX_FAILURES = 20
@@ -18,6 +25,10 @@ function clientIp(request: Request): string {
 // Login com e-mail e senha. Todas as falhas (e-mail inexistente, senha errada, conta
 // desativada, conta só-Google) devolvem a MESMA mensagem e gastam o mesmo tempo, para a
 // resposta não revelar quais e-mails estão cadastrados.
+//
+// Com verificação em 2 etapas (escolha do usuário ou exigência do perfil), acertar a senha NÃO
+// cria a sessão: responde `{ segundoFator: true }`, envia o código por e-mail e guarda só um
+// cookie temporário; a sessão nasce em /api/auth/2fa/verificar.
 export async function POST(request: Request) {
   try {
     const body = (await request.json()) as { email?: unknown; senha?: unknown }
@@ -48,14 +59,20 @@ export async function POST(request: Request) {
     }
 
     clearFailures(emailKey)
-    await prisma.usuario.update({ where: { id: usuario.id }, data: { ultimoLoginEm: new Date() } })
-    await logAuditSafe("Login realizado", "Entrada com e-mail e senha.", usuario.email)
 
-    const response = NextResponse.json({
-      user: { id: usuario.id, nome: usuario.nome, email: usuario.email, papel: usuario.papel },
-    })
-    setSessionCookie(response, await signSessionToken(usuario.id))
-    return response
+    if (await isTwoFactorRequired(usuario)) {
+      const challengeKey = `2fa:login:${usuario.id}`
+      if (isRateLimited(challengeKey, TWO_FACTOR_CHALLENGE_MAX)) {
+        throw new TooManyRequestsError("Muitos códigos solicitados. Aguarde 15 minutos e tente novamente.")
+      }
+      recordFailure(challengeKey)
+      const challengeId = await sendLoginCode(usuario)
+      const response = NextResponse.json({ segundoFator: true })
+      setTwoFactorCookie(response, await signTwoFactorToken(usuario.id, challengeId))
+      return response
+    }
+
+    return await issueSession(usuario, "Entrada com e-mail e senha.")
   } catch (error) {
     return handleRouteError(error)
   }

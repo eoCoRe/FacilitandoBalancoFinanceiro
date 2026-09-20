@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "node:crypto"
 import { createRemoteJWKSet, jwtVerify, SignJWT } from "jose"
+import { appOrigin } from "./app-url"
 import { getAuthSecret } from "./session"
 
 // Login com Google (OpenID Connect, fluxo authorization code + PKCE). Não há auto-cadastro:
@@ -21,11 +22,7 @@ export function googleConfig(): { clientId: string; clientSecret: string } | nul
   return clientId && clientSecret ? { clientId, clientSecret } : null
 }
 
-// O redirect_uri enviado ao Google precisa ser idêntico ao cadastrado no console deles, então
-// vem de APP_URL (configuração), não do cabeçalho Host da requisição (que o cliente controla).
-export function appOrigin(request: Request): string {
-  return (process.env.APP_URL || new URL(request.url).origin).replace(/\/+$/, "")
-}
+export { appOrigin }
 
 export function googleRedirectUri(request: Request): string {
   return `${appOrigin(request)}/api/auth/google/callback`

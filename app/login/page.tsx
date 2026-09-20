@@ -1,6 +1,7 @@
 import type { Metadata } from "next"
 import { LoginForm } from "@/components/login-form"
 import { googleConfig } from "@/lib/server/google"
+import { mailAvailable } from "@/lib/server/mail"
 
 export const metadata: Metadata = { title: "Entrar · Central de Balanços" }
 
@@ -20,5 +21,11 @@ const ERROS: Record<string, string> = {
 
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ erro?: string }> }) {
   const { erro } = await searchParams
-  return <LoginForm googleEnabled={googleConfig() !== null} initialError={erro ? (ERROS[erro] ?? null) : null} />
+  return (
+    <LoginForm
+      googleEnabled={googleConfig() !== null}
+      recoveryEnabled={mailAvailable()}
+      initialError={erro ? (ERROS[erro] ?? null) : null}
+    />
+  )
 }

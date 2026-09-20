@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { ForbiddenError, TooManyRequestsError, UnauthorizedError, ValidationError } from "./validation"
+import { ForbiddenError, ServiceUnavailableError, TooManyRequestsError, UnauthorizedError, ValidationError } from "./validation"
 
 // Converte ValidationError em 400 com a mensagem já pronta para o cliente. JSON
 // malformado no corpo (SyntaxError de `request.json()`) também é entrada inválida do
@@ -19,6 +19,9 @@ export function handleRouteError(error: unknown): NextResponse {
   }
   if (error instanceof TooManyRequestsError) {
     return NextResponse.json({ error: error.message }, { status: 429 })
+  }
+  if (error instanceof ServiceUnavailableError) {
+    return NextResponse.json({ error: error.message }, { status: 503 })
   }
   if (error instanceof SyntaxError) {
     return NextResponse.json({ error: "Corpo da requisição inválido (JSON malformado)." }, { status: 400 })

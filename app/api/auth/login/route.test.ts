@@ -1,13 +1,21 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-const { prisma } = vi.hoisted(() => ({
+const { prisma, mail, verification } = vi.hoisted(() => ({
   prisma: {
     usuario: { findUnique: vi.fn(), update: vi.fn() },
+    politicaSeguranca: { findUnique: vi.fn() },
     empresa: { findFirst: vi.fn() },
     auditLog: { create: vi.fn() },
   },
+  mail: { sendMail: vi.fn(), mailAvailable: vi.fn() },
+  verification: { createCodeChallenge: vi.fn() },
 }))
 vi.mock("@/lib/db", () => ({ prisma }))
+vi.mock("@/lib/server/mail", () => ({ sendMail: mail.sendMail, mailAvailable: mail.mailAvailable }))
+vi.mock("@/lib/server/verification", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/server/verification")>()),
+  createCodeChallenge: verification.createCodeChallenge,
+}))
 
 import { hashPassword } from "@/lib/server/password"
 import { resetRateLimits } from "@/lib/server/rate-limit"
@@ -43,6 +51,10 @@ beforeEach(() => {
   resetRateLimits()
   vi.stubEnv("AUTH_SECRET", "l".repeat(40))
   prisma.empresa.findFirst.mockResolvedValue({ id: 1 })
+  prisma.politicaSeguranca.findUnique.mockResolvedValue(null)
+  mail.mailAvailable.mockReturnValue(true)
+  mail.sendMail.mockResolvedValue(undefined)
+  verification.createCodeChallenge.mockResolvedValue({ id: "desafio-1", code: "123456" })
 })
 afterEach(() => vi.unstubAllEnvs())
 
@@ -139,5 +151,74 @@ describe("POST /api/auth/login", () => {
     prisma.usuario.findUnique.mockResolvedValue(await usuario())
     prisma.auditLog.create.mockRejectedValue(new Error("banco fora"))
     expect((await login({ email: "ana@teste.com", senha: SENHA })).status).toBe(200)
+  })
+})
+
+describe("POST /api/auth/login com verificação em 2 etapas", () => {
+  const cookies = (response: Response) => response.headers.getSetCookie().join(";")
+
+  it("acertar a senha NÃO cria sessão: envia o código, guarda só o cookie temporário e pede o 2º passo", async () => {
+    prisma.usuario.findUnique.mockResolvedValue(await usuario({ doisFatoresAtivo: true }))
+
+    const response = await login({ email: "ana@teste.com", senha: SENHA })
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ segundoFator: true })
+    expect(cookies(response)).not.toMatch(/cb_session=[^;]/)
+    expect(cookies(response)).toMatch(/cb_2fa=[^;]+/)
+    expect(cookies(response)).toMatch(/HttpOnly/i)
+    expect(cookies(response)).toMatch(/SameSite=strict/i)
+    expect(mail.sendMail).toHaveBeenCalledWith(
+      expect.objectContaining({ to: "ana@teste.com", text: expect.stringContaining("123456") }),
+    )
+    // ainda não é um login: nada de "último acesso" nem de "Login realizado" na auditoria
+    expect(prisma.usuario.update).not.toHaveBeenCalled()
+    expect(prisma.auditLog.create).not.toHaveBeenCalled()
+  })
+
+  it("perfil com 2FA obrigatório exige o código mesmo que o usuário não tenha ligado", async () => {
+    prisma.usuario.findUnique.mockResolvedValue(await usuario({ doisFatoresAtivo: false }))
+    prisma.politicaSeguranca.findUnique.mockResolvedValue({ papel: "ANALISTA", doisFatoresObrigatorio: true })
+
+    const response = await login({ email: "ana@teste.com", senha: SENHA })
+
+    expect(await response.json()).toEqual({ segundoFator: true })
+    expect(prisma.politicaSeguranca.findUnique).toHaveBeenCalledWith({ where: { papel: "ANALISTA" } })
+  })
+
+  it("senha errada continua barrando ANTES do código: nenhum e-mail é enviado", async () => {
+    prisma.usuario.findUnique.mockResolvedValue(await usuario({ doisFatoresAtivo: true }))
+    const response = await login({ email: "ana@teste.com", senha: "senha-errada-123" })
+    expect(response.status).toBe(401)
+    expect(mail.sendMail).not.toHaveBeenCalled()
+  })
+
+  it("falha FECHADO: se o e-mail não puder ser enviado, o login não conclui (503, sem sessão)", async () => {
+    prisma.usuario.findUnique.mockResolvedValue(await usuario({ doisFatoresAtivo: true }))
+    mail.sendMail.mockRejectedValue(new Error("SMTP fora"))
+    vi.spyOn(console, "error").mockImplementation(() => {})
+
+    const response = await login({ email: "ana@teste.com", senha: SENHA })
+
+    expect(response.status).toBe(503)
+    expect(cookies(response)).not.toMatch(/cb_session=[^;]/)
+    expect(cookies(response)).not.toMatch(/cb_2fa=[^;]/)
+  })
+
+  it("sem e-mail configurado o 2FA também não é contornado: 503", async () => {
+    prisma.usuario.findUnique.mockResolvedValue(await usuario({ doisFatoresAtivo: true }))
+    mail.mailAvailable.mockReturnValue(false)
+    const response = await login({ email: "ana@teste.com", senha: SENHA })
+    expect(response.status).toBe(503)
+    expect(cookies(response)).not.toMatch(/cb_session=[^;]/)
+  })
+
+  it("quem sabe a senha não pode pedir códigos sem fim: a partir do 6º desafio, 429", async () => {
+    prisma.usuario.findUnique.mockResolvedValue(await usuario({ doisFatoresAtivo: true }))
+    for (let i = 0; i < 5; i++) expect((await login({ email: "ana@teste.com", senha: SENHA })).status).toBe(200)
+    mail.sendMail.mockClear()
+    const response = await login({ email: "ana@teste.com", senha: SENHA })
+    expect(response.status).toBe(429)
+    expect(mail.sendMail).not.toHaveBeenCalled()
   })
 })

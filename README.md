@@ -51,6 +51,10 @@ scripts/
 
 Login com e-mail/senha e, opcionalmente, com Google (defina `GOOGLE_CLIENT_ID`,
 `GOOGLE_CLIENT_SECRET` e `APP_URL`; só entra quem um administrador já cadastrou).
+Recuperação de senha ("Esqueci minha senha") e verificação em 2 etapas por código enviado ao
+e-mail — opcional por usuário, com opção de o administrador exigir por perfil. Precisam de
+SMTP (`SMTP_*` no `.env`); sem ele, em desenvolvimento o e-mail aparece no console do
+servidor e em produção esses recursos ficam desligados.
 Três perfis, cumulativos: **analista** (consulta e lança valores/extrações), **coordenador**
 (+ Plano de Contas e cadastro da empresa) e **administrador** (+ usuários e LGPD). A regra
 está em `lib/permissions.ts` e é imposta no servidor em toda rota de `app/api/`; detalhes e

@@ -24,6 +24,10 @@ import * as lgpdExportacao from "./lgpd/exportacao/route"
 import * as lgpdEliminacao from "./lgpd/eliminacao/route"
 import * as me from "./auth/me/route"
 import * as senha from "./auth/senha/route"
+import * as tfaAtivar from "./auth/2fa/ativar/route"
+import * as tfaConfirmar from "./auth/2fa/confirmar/route"
+import * as tfaDesativar from "./auth/2fa/desativar/route"
+import * as seguranca from "./seguranca/route"
 
 const json = (method: string, body: unknown = {}) =>
   new Request("http://localhost/api/x", { method, body: JSON.stringify(body) })
@@ -53,6 +57,11 @@ const ROTAS: { nome: string; min: Papel; chamar: () => Promise<Response> }[] = [
   { nome: "DELETE /api/lgpd/eliminacao", min: "ADMINISTRADOR", chamar: () => lgpdEliminacao.DELETE(json("DELETE")) },
   { nome: "GET /api/auth/me", min: "ANALISTA", chamar: () => me.GET() },
   { nome: "POST /api/auth/senha", min: "ANALISTA", chamar: () => senha.POST(json("POST", {})) },
+  { nome: "POST /api/auth/2fa/ativar", min: "ANALISTA", chamar: () => tfaAtivar.POST() },
+  { nome: "POST /api/auth/2fa/confirmar", min: "ANALISTA", chamar: () => tfaConfirmar.POST(json("POST", {})) },
+  { nome: "POST /api/auth/2fa/desativar", min: "ANALISTA", chamar: () => tfaDesativar.POST(json("POST", {})) },
+  { nome: "GET /api/seguranca", min: "ADMINISTRADOR", chamar: () => seguranca.GET() },
+  { nome: "PUT /api/seguranca", min: "ADMINISTRADOR", chamar: () => seguranca.PUT(json("PUT", { papel: "ANALISTA", doisFatoresObrigatorio: true })) },
 ]
 
 const usuarioComPapel = (papel: Papel) => ({ id: 9, email: `${papel.toLowerCase()}@teste.com`, nome: papel, papel })
@@ -87,6 +96,10 @@ describe("toda rota de API exige login ou está na lista de rotas públicas", ()
     "auth/logout/route.ts": "sair já estando fora não é erro",
     "auth/google/route.ts": "início do login com Google",
     "auth/google/callback/route.ts": "retorno do login com Google (valida state/PKCE e cadastro)",
+    "auth/recuperar-senha/route.ts": "quem esqueceu a senha não tem sessão; resposta idêntica exista a conta ou não, com limite de pedidos",
+    "auth/redefinir-senha/route.ts": "quem tem o link de uso único recebido por e-mail; sem ele nada acontece",
+    "auth/2fa/verificar/route.ts": "2º passo do login: exige o cookie assinado do passo 1 e o código do e-mail",
+    "auth/2fa/reenviar/route.ts": "reenvio do código: exige o cookie assinado do passo 1",
   }
 
   function listarRotas(dir: string): string[] {

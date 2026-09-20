@@ -17,11 +17,17 @@ interface Usuario {
   ativo: boolean
   temSenha: boolean
   temGoogle: boolean
+  doisFatoresAtivo: boolean
   ultimoLoginEm: string | null
 }
 
 function formatDate(iso: string | null): string {
   return iso ? new Date(iso).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : "Nunca"
+}
+
+interface Politica {
+  papel: Papel
+  doisFatoresObrigatorio: boolean
 }
 
 const inputClass =
@@ -34,6 +40,8 @@ export function UsuariosScreen() {
   const [creating, setCreating] = useState(false)
   const [form, setForm] = useState({ nome: "", email: "", papel: "ANALISTA" as Papel, senha: "" })
   const [busy, setBusy] = useState(false)
+  const [politicas, setPoliticas] = useState<Politica[]>([])
+  const [emailDisponivel, setEmailDisponivel] = useState(true)
 
   const load = useCallback(async () => {
     try {
@@ -57,6 +65,32 @@ export function UsuariosScreen() {
       cancelled = true
     }
   }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    api<{ politicas: Politica[]; emailDisponivel: boolean }>("/api/seguranca")
+      .then((data) => {
+        if (cancelled) return
+        setPoliticas(data.politicas)
+        setEmailDisponivel(data.emailDisponivel)
+      })
+      .catch(() => {
+        // o painel de política some; a lista de usuários segue funcionando.
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  async function togglePolicy(papel: Papel, doisFatoresObrigatorio: boolean) {
+    setError(null)
+    try {
+      await api("/api/seguranca", { method: "PUT", body: { papel, doisFatoresObrigatorio } })
+      setPoliticas((prev) => prev.map((p) => (p.papel === papel ? { ...p, doisFatoresObrigatorio } : p)))
+    } catch (err) {
+      setError(errorMessage(err))
+    }
+  }
 
   // Todas as alterações passam pelo servidor, que é quem valida (não rebaixar a si mesmo,
   // não remover o último administrador...). A tela só mostra o motivo da recusa.
@@ -121,6 +155,30 @@ export function UsuariosScreen() {
           </div>
         )}
 
+        {politicas.length > 0 && (
+          <section className="rounded-md border border-border bg-card p-4">
+            <h2 className="text-sm font-medium text-foreground">Verificação em 2 etapas (código por e-mail)</h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Cada usuário pode ligar por conta própria. Aqui você pode EXIGIR para todos de um perfil: no próximo login
+              essas pessoas passam a receber o código.
+              {!emailDisponivel && " O envio de e-mail (SMTP) não está configurado, então não é possível exigir."}
+            </p>
+            <div className="mt-3 flex flex-wrap gap-x-6 gap-y-2">
+              {politicas.map((p) => (
+                <label key={p.papel} className="flex items-center gap-2 text-sm text-foreground">
+                  <input
+                    type="checkbox"
+                    checked={p.doisFatoresObrigatorio}
+                    disabled={!emailDisponivel && !p.doisFatoresObrigatorio}
+                    onChange={(e) => void togglePolicy(p.papel, e.target.checked)}
+                  />
+                  Exigir para {PAPEL_LABEL[p.papel]}
+                </label>
+              ))}
+            </div>
+          </section>
+        )}
+
         {creating && (
           <form onSubmit={handleCreate} className="grid gap-3 rounded-md border border-border bg-card p-4 md:grid-cols-4">
             <input
@@ -183,6 +241,7 @@ export function UsuariosScreen() {
                   <th className="px-4 py-3">Usuário</th>
                   <th className="px-4 py-3">Perfil</th>
                   <th className="px-4 py-3">Acesso</th>
+                  <th className="px-4 py-3">2 etapas</th>
                   <th className="px-4 py-3">Último login</th>
                   <th className="px-4 py-3">Situação</th>
                   <th className="px-4 py-3 text-right">Ações</th>
@@ -218,6 +277,20 @@ export function UsuariosScreen() {
                       </td>
                       <td className="px-4 py-3 text-xs text-muted-foreground">
                         {[u.temSenha && "Senha", u.temGoogle && "Google"].filter(Boolean).join(" · ") || "Nenhum ainda"}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-muted-foreground">
+                        {u.doisFatoresAtivo ? (
+                          <button
+                            type="button"
+                            className="text-primary hover:underline"
+                            title="Desligar o 2FA desta pessoa (ex.: perdeu o acesso ao e-mail)"
+                            onClick={() => void update(u.id, { doisFatoresAtivo: false })}
+                          >
+                            Ligada · desligar
+                          </button>
+                        ) : (
+                          "Desligada"
+                        )}
                       </td>
                       <td className="px-4 py-3 text-xs text-muted-foreground">{formatDate(u.ultimoLoginEm)}</td>
                       <td className="px-4 py-3">

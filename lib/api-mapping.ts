@@ -31,6 +31,8 @@ export interface AuthUser {
   nome: string
   email: string
   papel: Papel
+  doisFatoresAtivo: boolean
+  doisFatoresObrigatorio: boolean
 }
 
 export interface EmpresaPayload {

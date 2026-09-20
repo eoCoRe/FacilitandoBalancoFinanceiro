@@ -27,6 +27,12 @@ enum Papel {
   ADMINISTRADOR
 }
 
+enum TokenTipo {
+  RECUPERACAO_SENHA // link enviado por e-mail para definir uma nova senha
+  LOGIN_2FA // código do segundo fator ao entrar
+  ATIVACAO_2FA // código que confirma que o e-mail recebe mensagens, ao ligar o 2FA
+}
+
 enum ExtracaoStatus {
   PENDENTE
   CONCLUIDA
@@ -45,13 +51,13 @@ model Empresa {
 }
 
 model Exercicio {
-  id         Int        @id @default(autoincrement())
-  empresaId  Int        @map("empresa_id")
-  empresa    Empresa    @relation(fields: [empresaId], references: [id], onDelete: Cascade)
-  periodo    String
-  auditado   Boolean    @default(false)
-  valores    Valor[]
-  extracoes  Extracao[]
+  id        Int        @id @default(autoincrement())
+  empresaId Int        @map("empresa_id")
+  empresa   Empresa    @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  periodo   String
+  auditado  Boolean    @default(false)
+  valores   Valor[]
+  extracoes Extracao[]
 
   @@unique([empresaId, periodo])
   @@map("exercicio")
@@ -156,18 +162,48 @@ model LgpdErasureLog {
 // primeiro login Google). Usuário nunca é apagado, só desativado, para que a trilha de
 // auditoria continue apontando para alguém que existiu.
 model Usuario {
-  id                  Int       @id @default(autoincrement())
-  email               String    @unique
+  id                  Int                @id @default(autoincrement())
+  email               String             @unique
   nome                String
-  senhaHash           String?   @map("senha_hash")
-  googleSub           String?   @unique @map("google_sub")
-  papel               Papel     @default(ANALISTA)
-  ativo               Boolean   @default(true)
-  criadoEm            DateTime  @default(now()) @map("criado_em")
-  ultimoLoginEm       DateTime? @map("ultimo_login_em")
+  senhaHash           String?            @map("senha_hash")
+  googleSub           String?            @unique @map("google_sub")
+  papel               Papel              @default(ANALISTA)
+  ativo               Boolean            @default(true)
+  criadoEm            DateTime           @default(now()) @map("criado_em")
+  ultimoLoginEm       DateTime?          @map("ultimo_login_em")
   // Sessões emitidas antes deste instante são recusadas — atualizado ao trocar/redefinir a
   // senha, para encerrar logins abertos em outros lugares.
-  sessoesValidasDesde DateTime  @default(now()) @map("sessoes_validas_desde")
+  sessoesValidasDesde DateTime           @default(now()) @map("sessoes_validas_desde")
+  // Verificação em 2 etapas por código enviado ao e-mail. Além da escolha do usuário, um
+  // administrador pode exigi-la por perfil (PoliticaSeguranca).
+  doisFatoresAtivo    Boolean            @default(false) @map("dois_fatores_ativo")
+  tokens              TokenVerificacao[]
 
   @@map("usuario")
+}
+
+// Links de recuperação de senha e códigos de 2 etapas. Guarda só o que não permite refazer o
+// segredo: o hash do trecho secreto do link, ou o HMAC do código (com AUTH_SECRET). Uso único,
+// com validade curta e limite de tentativas para códigos.
+model TokenVerificacao {
+  id          String    @id // aleatório, parte pública do link/desafio
+  usuarioId   Int       @map("usuario_id")
+  usuario     Usuario   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  tipo        TokenTipo
+  segredoHash String    @map("segredo_hash")
+  tentativas  Int       @default(0)
+  expiraEm    DateTime  @map("expira_em")
+  usadoEm     DateTime? @map("usado_em")
+  criadoEm    DateTime  @default(now()) @map("criado_em")
+
+  @@index([usuarioId, tipo])
+  @@map("token_verificacao")
+}
+
+// Exigência de 2 etapas por perfil, definida por um administrador. Sem linha = não exige.
+model PoliticaSeguranca {
+  papel                  Papel   @id
+  doisFatoresObrigatorio Boolean @default(false) @map("dois_fatores_obrigatorio")
+
+  @@map("politica_seguranca")
 }

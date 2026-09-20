@@ -11,6 +11,7 @@ export function toUsuarioDto(usuario: Usuario) {
     ativo: usuario.ativo,
     temSenha: usuario.senhaHash !== null,
     temGoogle: usuario.googleSub !== null,
+    doisFatoresAtivo: usuario.doisFatoresAtivo,
     ultimoLoginEm: usuario.ultimoLoginEm,
     criadoEm: usuario.criadoEm,
   }
