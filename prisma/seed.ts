@@ -13,7 +13,7 @@ import {
   type Account,
 } from "../lib/financial-data"
 import { DEFAULT_SECTOR_ID, sectorLabel } from "../lib/sector-benchmarks"
-import { hashPassword, requireValidPassword } from "../lib/server/auth/password"
+import { ensureAdmin } from "../lib/server/auth/ensure-admin"
 
 const connectionString = process.env.DATABASE_URL
 if (!connectionString) throw new Error("DATABASE_URL não configurada — veja .env.example")
@@ -51,33 +51,20 @@ async function seedContaTree(accounts: Account[], parentId: number | null, exerc
   }
 }
 
-// O seed apaga os dados de negócio mas NÃO os usuários (quem já foi cadastrado continua). Só
-// garante que exista um administrador para o primeiro acesso, a partir do ambiente — nenhuma
-// senha padrão fica no código.
-async function seedAdmin() {
-  const email = process.env.SEED_ADMIN_EMAIL?.trim().toLowerCase()
-  const senha = process.env.SEED_ADMIN_PASSWORD
-  if (!email || !senha) {
-    const existing = await prisma.usuario.count({ where: { papel: "ADMINISTRADOR", ativo: true } })
-    console.warn(
-      existing > 0
-        ? "SEED_ADMIN_EMAIL/SEED_ADMIN_PASSWORD não definidos — mantendo os administradores existentes."
-        : "ATENÇÃO: nenhum administrador existe e SEED_ADMIN_EMAIL/SEED_ADMIN_PASSWORD não foram definidos — ninguém conseguirá entrar. Veja .env.example.",
+// O seed é para DESENVOLVIMENTO e demonstração: apaga empresa, plano de contas, valores, extrações e a
+// auditoria (os usuários ficam). Em produção isso destruiria dados reais, então ele se recusa a rodar lá
+// sem confirmação explícita. Para só criar/restabelecer o administrador, use `pnpm admin:ensure`.
+function refuseInProduction() {
+  if (process.env.NODE_ENV === "production" && process.env.SEED_CONFIRM_WIPE !== "sim") {
+    throw new Error(
+      "O seed APAGA os dados de negócio (empresa, plano de contas, valores, extrações e auditoria) e está em NODE_ENV=production. " +
+        "Para só criar o administrador, rode `pnpm admin:ensure`. Se realmente quer apagar tudo, defina SEED_CONFIRM_WIPE=sim.",
     )
-    return
   }
-  requireValidPassword(senha, "SEED_ADMIN_PASSWORD")
-  const senhaHash = await hashPassword(senha)
-  const nome = process.env.SEED_ADMIN_NAME?.trim() || "Administrador"
-  await prisma.usuario.upsert({
-    where: { email },
-    update: { papel: "ADMINISTRADOR", ativo: true, senhaHash, sessoesValidasDesde: new Date() },
-    create: { email, nome, senhaHash, papel: "ADMINISTRADOR" },
-  })
-  console.log(`Administrador garantido: ${email}`)
 }
 
 async function main() {
+  refuseInProduction()
   console.log("Limpando dados existentes...")
   await prisma.valorExtraido.deleteMany()
   await prisma.extracao.deleteMany()
@@ -152,7 +139,7 @@ async function main() {
     },
   })
 
-  await seedAdmin()
+  await ensureAdmin(prisma)
 
   console.log("Seed concluído.")
 }

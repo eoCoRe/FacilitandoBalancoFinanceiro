@@ -67,6 +67,12 @@ vitest.setup.ts               # testes de rota: usuário logado padrão (adminis
 .github/workflows/            # CI (tipos, lint, testes, build + teste de fumaça com Postgres real) e CodeQL
 ```
 
+## Documentação
+
+- [`docs/OPERACAO.md`](docs/OPERACAO.md) — colocar no ar e manter: variáveis, checklist de publicação, backup, troca de segredos, emergências.
+- [`SECURITY.md`](SECURITY.md) — o que o sistema protege (e o que não), mapeado ao RNF02/RNF03 e à LGPD.
+- [`.env.example`](.env.example) — todas as variáveis de ambiente, comentadas.
+
 ## Comandos
 
 | Comando | O que faz |
@@ -78,6 +84,7 @@ vitest.setup.ts               # testes de rota: usuário logado padrão (adminis
 | `pnpm smoke` | teste de fumaça contra o app RODANDO (`pnpm build && pnpm start`) e um Postgres real: login, permissões, leitura e escrita por HTTP (`scripts/smoke.mjs`). O CI roda isso em um banco vazio |
 | `npx tsc --noEmit` | checagem de tipos (o build do Next não a exige) |
 | `pnpm purge:data` | expurgo de AuditLog/Extracao antigos (ver SECURITY.md) |
+| `pnpm admin:ensure` | cria/restabelece o administrador (`SEED_ADMIN_*`) **sem apagar dados** — o caminho em produção; o `prisma db seed` é só para desenvolvimento e apaga os dados de negócio |
 
 ## Acesso e perfis
 

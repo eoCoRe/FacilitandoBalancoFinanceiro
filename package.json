@@ -12,6 +12,7 @@
     "test:watch": "vitest",
     "postinstall": "prisma generate",
     "purge:data": "tsx scripts/purge-expired-data.ts",
+    "admin:ensure": "tsx scripts/ensure-admin.ts",
     "smoke": "node scripts/smoke.mjs"
   },
   "dependencies": {
