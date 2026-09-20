@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { describeError, logEvent } from "./log"
 import { ForbiddenError, ServiceUnavailableError, TooManyRequestsError, UnauthorizedError, ValidationError } from "./validation"
 
 // Converte ValidationError em 400 com a mensagem já pronta para o cliente. JSON
@@ -26,5 +27,8 @@ export function handleRouteError(error: unknown): NextResponse {
   if (error instanceof SyntaxError) {
     return NextResponse.json({ error: "Corpo da requisição inválido (JSON malformado)." }, { status: 400 })
   }
+  // Erro inesperado (bug, banco fora...): fica no log estruturado só com nome e código — a mensagem pode
+  // conter valores de consulta — e segue para o tratamento padrão do Next (500).
+  logEvent("error", "http.unhandled_error", describeError(error))
   throw error
 }

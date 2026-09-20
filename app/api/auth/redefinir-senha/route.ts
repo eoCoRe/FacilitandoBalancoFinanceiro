@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db"
 import { logAuditSafe } from "@/lib/server/audit"
 import { clientIp } from "@/lib/server/client-ip"
 import { handleRouteError } from "@/lib/server/http"
+import { logEvent } from "@/lib/server/log"
 import { hashPassword, requireValidPassword } from "@/lib/server/password"
 import { isRateLimited, recordFailure } from "@/lib/server/rate-limit"
 import { TooManyRequestsError, ValidationError } from "@/lib/server/validation"
@@ -45,6 +46,7 @@ export async function POST(request: Request) {
       throw error
     }
     await logAuditSafe("Senha redefinida por e-mail", "Nova senha definida pelo link de recuperação.", usuario.email)
+    logEvent("info", "auth.reset.completed", { email: usuario.email })
 
     return NextResponse.json({ ok: true })
   } catch (error) {

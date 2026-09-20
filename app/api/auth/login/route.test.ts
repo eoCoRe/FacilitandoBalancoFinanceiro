@@ -221,4 +221,30 @@ describe("POST /api/auth/login com verificação em 2 etapas", () => {
     expect(response.status).toBe(429)
     expect(mail.sendMail).not.toHaveBeenCalled()
   })
+
+  it("login recusado vai para o log estruturado com e-mail MASCARADO e nunca a senha", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+    prisma.usuario.findUnique.mockResolvedValue(await usuario())
+
+    await login({ email: "ana@teste.com", senha: "senha-errada-secreta-9" })
+
+    const linhas = warn.mock.calls.map((c) => c[0] as string)
+    const evento = JSON.parse(linhas.find((l) => l.includes("auth.login.failed"))!)
+    expect(evento).toMatchObject({ level: "warn", event: "auth.login.failed", email: "a**@teste.com", ip: "1.1.1.1" })
+    expect(linhas.join("\n")).not.toContain("senha-errada-secreta-9")
+    expect(linhas.join("\n")).not.toContain("ana@teste.com")
+    warn.mockRestore()
+  })
+
+  it("bloqueio por tentativas também é registrado (para quem opera o sistema notar um ataque)", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+    prisma.usuario.findUnique.mockResolvedValue(await usuario())
+    for (let i = 0; i < 5; i++) await login({ email: "ana@teste.com", senha: "errada-errada-1" }, `9.9.9.${i}`)
+    warn.mockClear()
+
+    await login({ email: "ana@teste.com", senha: SENHA }, "8.8.8.8")
+
+    expect(warn.mock.calls.map((c) => c[0] as string).some((l) => l.includes("auth.login.rate_limited"))).toBe(true)
+    warn.mockRestore()
+  })
 })

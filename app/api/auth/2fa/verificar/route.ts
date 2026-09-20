@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db"
 import { logAuditSafe } from "@/lib/server/audit"
 import { codeCheckMessage } from "@/lib/server/code-messages"
 import { handleRouteError } from "@/lib/server/http"
+import { logEvent } from "@/lib/server/log"
 import { issueSession } from "@/lib/server/login-session"
 import { clearFailures } from "@/lib/server/rate-limit"
 import { clearTwoFactorCookie, TWO_FACTOR_CHALLENGE_KEY, TWO_FACTOR_COOKIE, verifyTwoFactorToken } from "@/lib/server/two-factor"
@@ -25,6 +26,7 @@ export async function POST(request: NextRequest) {
       const usuario = await prisma.usuario.findUnique({ where: { id: pending.userId } })
       if (resultado === "bloqueado" && usuario) {
         await logAuditSafe("Verificação em 2 etapas bloqueada", "Tentativas de código esgotadas.", usuario.email)
+        logEvent("warn", "auth.2fa.blocked", { email: usuario.email })
       }
       // Bloqueado: o desafio não serve mais, então o cookie também é descartado.
       const response = NextResponse.json({ error: codeCheckMessage(resultado, "login") }, { status: 401 })

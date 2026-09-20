@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db"
 import { logAuditSafe } from "@/lib/server/audit"
 import { clientIp } from "@/lib/server/client-ip"
 import { handleRouteError } from "@/lib/server/http"
+import { logEvent } from "@/lib/server/log"
 import { issueSession } from "@/lib/server/login-session"
 import { PASSWORD_MAX_LENGTH, verifyAgainstDummy, verifyPassword } from "@/lib/server/password"
 import { clearFailures, isRateLimited, recordFailure } from "@/lib/server/rate-limit"
@@ -37,6 +38,7 @@ export async function POST(request: Request) {
     const emailKey = `login:email:${email}`
     const ipKey = `login:ip:${clientIp(request)}`
     if (isRateLimited(emailKey) || isRateLimited(ipKey, IP_MAX_FAILURES)) {
+      logEvent("warn", "auth.login.rate_limited", { email, ip: clientIp(request) })
       throw new TooManyRequestsError("Muitas tentativas de login. Aguarde 15 minutos e tente novamente.")
     }
 
@@ -48,6 +50,7 @@ export async function POST(request: Request) {
     if (!usuario || !usuario.ativo || !senhaConfere) {
       recordFailure(emailKey)
       recordFailure(ipKey)
+      logEvent("warn", "auth.login.failed", { email, ip: clientIp(request) })
       // Só registra na auditoria tentativa contra e-mail existente: o limite por e-mail já
       // limita isso, e e-mails inventados não devem poder encher a trilha.
       if (usuario) await logAuditSafe("Login recusado", "Senha incorreta ou conta desativada.", usuario.email)
