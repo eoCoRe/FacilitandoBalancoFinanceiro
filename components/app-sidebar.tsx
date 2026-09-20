@@ -1,7 +1,9 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import { Search } from "lucide-react"
 import { AccountMenu } from "@/components/auth/account-menu"
+import { CommandPalette } from "@/components/command-palette"
 import { can } from "@/lib/permissions"
 import { useFinancialStore } from "@/lib/store"
 import { INICIO_NAV, ANALISE_NAV, DETALHADO_NAV, ADMIN_NAV, type NavItem, type ScreenId } from "@/lib/navigation"
@@ -14,6 +16,20 @@ interface AppSidebarProps {
 
 export function AppSidebar({ active, onNavigate }: AppSidebarProps) {
   const { companyName, cnpj, user } = useFinancialStore()
+  const [searchOpen, setSearchOpen] = useState(false)
+
+  // ⌘K (Mac) / Ctrl+K abre a busca de qualquer lugar do app.
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault()
+        setSearchOpen((open) => !open)
+      }
+    }
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [])
+
   return (
     <aside className="flex h-dvh w-60 shrink-0 flex-col border-r border-border bg-sidebar">
       {/* Marca */}
@@ -28,6 +44,9 @@ export function AppSidebar({ active, onNavigate }: AppSidebarProps) {
       <div className="px-3 pb-3">
         <button
           type="button"
+          aria-label="Buscar (atalho: Ctrl ou Cmd + K)"
+          aria-haspopup="dialog"
+          onClick={() => setSearchOpen(true)}
           className="flex w-full items-center gap-2 rounded-md border border-border bg-background px-2.5 py-2 text-left text-sm text-muted-foreground transition-all duration-150 hover:border-ring/50 hover:shadow-sm hover:shadow-primary/10"
         >
           <Search className="size-3.5" />
@@ -96,6 +115,7 @@ export function AppSidebar({ active, onNavigate }: AppSidebarProps) {
       </nav>
 
       <AccountMenu />
+      <CommandPalette open={searchOpen} onOpenChange={setSearchOpen} onNavigate={onNavigate} />
     </aside>
   )
 }

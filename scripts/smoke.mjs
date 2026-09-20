@@ -147,6 +147,7 @@ try {
 
   let contaId
   let exercicioId
+  let valorOriginal // o teste altera um valor de verdade: guarda o original para devolvê-lo (rodar contra um banco de desenvolvimento não pode deixar lixo)
   await check("leitura: empresa, plano de contas, DRE e DFC vindos do banco (seed)", async () => {
     const empresa = await admin.call("GET", "/api/empresa")
     assert.equal(empresa.status, 200)
@@ -180,6 +181,7 @@ try {
     }
     const periodo = (await admin.call("GET", "/api/empresa")).json.exercicios.at(-1).periodo
     const original = achar(antes.contas).valores[periodo]
+    valorOriginal = original
     const put = await admin.call("PUT", "/api/valores", { contaId, exercicioId, valor: 4242 })
     assert.equal(put.status, 200, JSON.stringify(put.json))
     const depois = achar((await admin.call("GET", "/api/plano-de-contas")).json.contas).valores[periodo]
@@ -204,6 +206,7 @@ try {
     const login = await analista.call("POST", "/api/auth/login", { email: analistaCreds.email, senha: analistaCreds.senha })
     assert.equal(login.status, 200)
     assert.equal((await analista.call("PUT", "/api/valores", { contaId, exercicioId, valor: 1 })).status, 200)
+    await admin.call("PUT", "/api/valores", { contaId, exercicioId, valor: valorOriginal ?? null }) // devolve o valor original
     assert.equal((await analista.call("POST", "/api/plano-de-contas", { parentId: null, nome: "X" })).status, 403)
     assert.equal((await analista.call("GET", "/api/usuarios")).status, 403)
     assert.equal((await analista.call("GET", "/api/lgpd/exportacao")).status, 403)
