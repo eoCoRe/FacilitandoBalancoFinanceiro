@@ -77,6 +77,7 @@ vitest.setup.ts               # testes de rota: usuário logado padrão (adminis
 
 Login com e-mail/senha e, opcionalmente, com Google (defina `GOOGLE_CLIENT_ID`,
 `GOOGLE_CLIENT_SECRET` e `APP_URL`; só entra quem um administrador já cadastrou).
+Sessão de 8 h renovada enquanto se usa (teto de 24 h) e botão "Encerrar outras sessões" no menu da conta.
 Recuperação de senha ("Esqueci minha senha") e verificação em 2 etapas por código enviado ao
 e-mail — opcional por usuário, com opção de o administrador exigir por perfil. Precisam de
 SMTP (`SMTP_*` no `.env`); sem ele, em desenvolvimento o e-mail aparece no console do

@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState, type FormEvent } from "react"
-import { KeyRound, LogOut } from "lucide-react"
+import { KeyRound, LogOut, MonitorX } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { TwoFactorSection } from "@/components/two-factor-section"
 import { api, errorMessage } from "@/lib/api-client"
@@ -36,6 +36,22 @@ export function AccountMenu() {
       // Navegação completa de propósito: descarta o estado em memória (dados do usuário).
       // eslint-disable-next-line @next/next/no-location-assign-relative-destination
       window.location.assign("/login")
+    }
+  }
+
+  // "Sair dos outros dispositivos": encerra as sessões abertas em outros lugares e mantém esta.
+  async function handleEndOtherSessions() {
+    if (busy) return
+    if (!window.confirm("Encerrar a sessão em todos os OUTROS dispositivos? Esta aqui continua aberta.")) return
+    setBusy(true)
+    setMessage(null)
+    try {
+      await api("/api/auth/sessoes/encerrar-outras", { method: "POST", redirectOn401: false })
+      setMessage({ ok: true, text: "Sessões dos outros dispositivos encerradas." })
+    } catch (error) {
+      setMessage({ ok: false, text: errorMessage(error) })
+    } finally {
+      setBusy(false)
     }
   }
 
@@ -108,6 +124,20 @@ export function AccountMenu() {
         <p role="status" className={message.ok ? "mt-2 text-xs text-ok" : "mt-2 text-xs text-destructive"}>
           {message.text}
         </p>
+      )}
+
+      {!changing && (
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          disabled={busy}
+          className="mt-1 w-full justify-start"
+          onClick={() => void handleEndOtherSessions()}
+        >
+          <MonitorX />
+          Encerrar outras sessões
+        </Button>
       )}
 
       {!changing && (

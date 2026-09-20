@@ -90,4 +90,13 @@ describe("cookie de sessão", () => {
     clearSessionCookie(response)
     expect(response.cookies.get(SESSION_COOKIE)).toMatchObject({ value: "", maxAge: 0 })
   })
+
+  it("guarda o momento do login original (authTime) e o preserva quando informado", async () => {
+    const antes = Math.floor(Date.now() / 1000)
+    expect((await verifySessionToken(await signSessionToken(1)))!.authTime).toBeGreaterThanOrEqual(antes)
+    const original = antes - 5 * 3600
+    const renovado = await verifySessionToken(await signSessionToken(1, original))
+    expect(renovado!.authTime).toBe(original)
+    expect(renovado!.issuedAt).toBeGreaterThanOrEqual(antes) // emitido agora, login de 5 h atrás
+  })
 })
