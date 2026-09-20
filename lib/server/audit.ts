@@ -1,10 +1,20 @@
 import { prisma } from "@/lib/db"
+import { sealPending } from "./audit-seal"
+import { describeError, logEvent } from "./log"
 
 // RNF03 (Auditabilidade). `usuario` é o e-mail de quem agiu (o da sessão); "Sistema" fica só
 // para o que não tem pessoa por trás (seed, rotinas). Guardamos o texto e não uma FK para
 // que a trilha sobreviva mesmo se o cadastro do usuário mudar.
 export async function logAudit(empresaId: number, acao: string, detalhe: string, usuario = "Sistema") {
-  return prisma.auditLog.create({ data: { empresaId, usuario, acao, detalhe } })
+  const row = await prisma.auditLog.create({ data: { empresaId, usuario, acao, detalhe } })
+  // Sela o registro novo (integridade, ver audit-seal.ts). Se falhar, o registro JÁ está gravado: fica sem
+  // selo e é selado na próxima gravação ou na próxima verificação — nunca se perde nem se recusa a ação.
+  try {
+    await sealPending()
+  } catch (error) {
+    logEvent("warn", "audit.seal.failed", describeError(error))
+  }
+  return row
 }
 
 // Para eventos que acontecem ANTES de haver sessão (login, login recusado): falhar em

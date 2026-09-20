@@ -134,13 +134,18 @@ model ValorExtraido {
 // Fora do DER original — persiste a trilha de auditoria (RF08) já usada nas
 // telas de Plano de Contas e Tabulação.
 model AuditLog {
-  id        Int      @id @default(autoincrement())
-  empresaId Int      @map("empresa_id")
-  empresa   Empresa  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
-  usuario   String
-  acao      String
-  detalhe   String
-  criadoEm  DateTime @default(now()) @map("criado_em")
+  id           Int      @id @default(autoincrement())
+  empresaId    Int      @map("empresa_id")
+  empresa      Empresa  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  usuario      String
+  acao         String
+  detalhe      String
+  criadoEm     DateTime @default(now()) @map("criado_em")
+  // Selo de integridade (RNF03): HMAC do registro encadeado ao selo do anterior. Editar um registro ou
+  // apagar um do meio quebra o encadeamento e a verificação aponta onde. Preenchido logo após a
+  // gravação (ver lib/server/audit-seal.ts); nulo enquanto o registro ainda não foi selado.
+  selo         String?
+  seloAnterior String?  @map("selo_anterior")
 
   @@map("audit_log")
 }

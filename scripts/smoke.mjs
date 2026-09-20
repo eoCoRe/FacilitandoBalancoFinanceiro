@@ -7,6 +7,7 @@
 // Variáveis: SMOKE_BASE_URL (padrão http://localhost:3000), SMOKE_ADMIN_EMAIL e
 // SMOKE_ADMIN_PASSWORD (padrão: SEED_ADMIN_EMAIL / SEED_ADMIN_PASSWORD do ambiente).
 import assert from "node:assert/strict"
+import { createHmac } from "node:crypto"
 
 const BASE = (process.env.SMOKE_BASE_URL || "http://localhost:3000").replace(/\/+$/, "")
 const ADMIN_EMAIL = process.env.SMOKE_ADMIN_EMAIL || process.env.SEED_ADMIN_EMAIL
@@ -45,6 +46,19 @@ function client() {
       return { status: res.status, json, headers: res.headers }
     },
   }
+}
+
+// TOTP (RFC 6238) escrito de novo aqui, de propósito: não reaproveita o código do app, então um erro nele aparece.
+function totp(base32, step) {
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
+  const bits = [...base32.replace(/\s/g, "").toUpperCase()].map((c) => alphabet.indexOf(c).toString(2).padStart(5, "0")).join("")
+  const key = Buffer.from(bits.match(/.{8}/g).map((b) => parseInt(b, 2)))
+  const counter = Buffer.alloc(8)
+  counter.writeUInt32BE(Math.floor(step / 2 ** 32), 0)
+  counter.writeUInt32BE(step >>> 0, 4)
+  const h = createHmac("sha1", key).update(counter).digest()
+  const o = h[19] & 15
+  return String((((h[o] & 127) << 24) | (h[o + 1] << 16) | (h[o + 2] << 8) | h[o + 3]) % 1_000_000).padStart(6, "0")
 }
 
 let passed = 0
@@ -178,6 +192,49 @@ try {
     assert.equal((await analista.call("POST", "/api/plano-de-contas", { parentId: null, nome: "X" })).status, 403)
     assert.equal((await analista.call("GET", "/api/usuarios")).status, 403)
     assert.equal((await analista.call("GET", "/api/lgpd/exportacao")).status, 403)
+  })
+
+  await check("a trilha de auditoria está selada e íntegra (selagem e transação no Postgres de verdade)", async () => {
+    const r = await admin.call("GET", "/api/auditoria/integridade")
+    assert.equal(r.status, 200, JSON.stringify(r.json))
+    assert.equal(r.json.integra, true, JSON.stringify(r.json))
+    assert.ok(r.json.verificados > 0)
+    assert.equal(r.json.naoSelados, 0)
+    assert.equal((await analista.call("GET", "/api/auditoria/integridade")).status, 403)
+  })
+
+  await check("2FA por app autenticador: ligar, entrar com o código do app e com um código de recuperação", async () => {
+    const senha = analistaCreds.senha
+    const iniciar = await analista.call("POST", "/api/auth/2fa/totp/iniciar", { senha })
+    assert.equal(iniciar.status, 200, JSON.stringify(iniciar.json))
+    const chave = iniciar.json.segredo
+    const passo = Math.floor(Date.now() / 30000)
+    const confirmar = await analista.call("POST", "/api/auth/2fa/totp/confirmar", { codigo: totp(chave, passo) })
+    assert.equal(confirmar.status, 200, JSON.stringify(confirmar.json))
+    assert.equal(confirmar.json.codigosRecuperacao.length, 8)
+
+    // um novo "navegador": senha certa NÃO basta, pede o segundo passo
+    const outro = client()
+    const passo1 = await outro.call("POST", "/api/auth/login", { email: analistaCreds.email, senha })
+    assert.equal(passo1.json.segundoFator, true)
+    assert.equal(passo1.json.metodo, "app")
+    assert.equal((await outro.call("GET", "/api/empresa")).status, 401)
+    // não há como trocar para o código por e-mail
+    assert.equal((await outro.call("POST", "/api/auth/2fa/reenviar")).status, 400)
+    // o código usado no cadastro não vale de novo (anti-replay); o do passo seguinte vale
+    assert.equal((await outro.call("POST", "/api/auth/2fa/verificar", { codigo: totp(chave, passo) })).status, 401)
+    const entrou = await outro.call("POST", "/api/auth/2fa/verificar", { codigo: totp(chave, passo + 1) })
+    assert.equal(entrou.status, 200, JSON.stringify(entrou.json))
+    assert.equal((await outro.call("GET", "/api/empresa")).status, 200)
+
+    // código de recuperação: uma vez só
+    const [recuperacao] = confirmar.json.codigosRecuperacao
+    const terceiro = client()
+    await terceiro.call("POST", "/api/auth/login", { email: analistaCreds.email, senha })
+    assert.equal((await terceiro.call("POST", "/api/auth/2fa/verificar", { codigo: recuperacao })).status, 200)
+    const quarto = client()
+    await quarto.call("POST", "/api/auth/login", { email: analistaCreds.email, senha })
+    assert.equal((await quarto.call("POST", "/api/auth/2fa/verificar", { codigo: recuperacao })).status, 401)
   })
 
   await check("desativar o analista derruba o acesso na hora", async () => {

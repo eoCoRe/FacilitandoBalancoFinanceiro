@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState, type FormEvent } from "react"
-import { AlertTriangle, Download, Loader2, Search } from "lucide-react"
+import { AlertTriangle, CheckCircle2, Download, Loader2, Search, ShieldCheck } from "lucide-react"
 import { PageHeader } from "@/components/page-header"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { api, errorMessage } from "@/lib/api-client"
@@ -21,6 +21,15 @@ interface Pagina {
   logs: Registro[]
   proximoCursor: number | null
   acoes?: string[]
+}
+
+interface Integridade {
+  integra: boolean
+  verificados: number
+  naoSelados: number
+  primeiroId: number | null
+  ultimoId: number | null
+  quebra: { id: number; motivo: string } | null
 }
 
 interface Filtros {
@@ -59,6 +68,8 @@ export function AuditoriaScreen() {
   const [acoes, setAcoes] = useState<string[]>([])
   const [carregando, setCarregando] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [integridade, setIntegridade] = useState<Integridade | null>(null)
+  const [verificando, setVerificando] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -117,6 +128,22 @@ export function AuditoriaScreen() {
 
   const podeExportar = can(user.papel, "exportar-auditoria")
 
+  // Confere o selo de cada registro (nenhum alterado, apagado no meio ou inserido). O servidor também sela
+  // o que ainda faltar e registra a própria verificação na trilha.
+  async function verificarIntegridade() {
+    if (verificando) return
+    setVerificando(true)
+    setError(null)
+    try {
+      setIntegridade(await api<Integridade>("/api/auditoria/integridade"))
+    } catch (err) {
+      setIntegridade(null)
+      setError(errorMessage(err))
+    } finally {
+      setVerificando(false)
+    }
+  }
+
   return (
     <div className="flex flex-col">
       <PageHeader
@@ -125,14 +152,20 @@ export function AuditoriaScreen() {
         subtitle="Quem fez o quê e quando: lançamentos, alterações no plano de contas, acessos e ações administrativas."
         actions={
           podeExportar ? (
-            // Download por navegação: o cookie de sessão vai junto e o servidor confere a permissão.
-            <a
-              href={`/api/auditoria/exportar?${toQuery(aplicados)}`}
-              className={cn(buttonVariants({ variant: "outline", size: "sm" }), "h-8 gap-1.5")}
-            >
-              <Download className="size-3.5" />
-              Exportar CSV
-            </a>
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" size="sm" className="h-8 gap-1.5" disabled={verificando} onClick={() => void verificarIntegridade()}>
+                {verificando ? <Loader2 className="size-3.5 animate-spin" /> : <ShieldCheck className="size-3.5" />}
+                Verificar integridade
+              </Button>
+              {/* Download por navegação: o cookie de sessão vai junto e o servidor confere a permissão. */}
+              <a
+                href={`/api/auditoria/exportar?${toQuery(aplicados)}`}
+                className={cn(buttonVariants({ variant: "outline", size: "sm" }), "h-8 gap-1.5")}
+              >
+                <Download className="size-3.5" />
+                Exportar CSV
+              </a>
+            </div>
           ) : undefined
         }
       />
@@ -200,6 +233,26 @@ export function AuditoriaScreen() {
             <span>{error}</span>
           </div>
         )}
+
+        {integridade &&
+          (integridade.integra ? (
+            <div role="status" className="flex items-start gap-2 rounded-md border border-ok/30 bg-ok/5 px-3 py-2 text-sm text-ok">
+              <CheckCircle2 className="mt-0.5 size-4 shrink-0" />
+              <span>
+                Trilha íntegra: {integridade.verificados} registro(s) conferidos
+                {integridade.primeiroId !== null && ` (do #${integridade.primeiroId} ao #${integridade.ultimoId})`}. Nenhum foi alterado,
+                apagado no meio ou inserido depois de gravado.
+                {integridade.naoSelados > 0 && ` ${integridade.naoSelados} registro(s) ainda sem selo.`}
+              </span>
+            </div>
+          ) : (
+            <div role="alert" className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+              <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+              <span>
+                <strong>A trilha foi adulterada.</strong> Problema no registro #{integridade.quebra?.id}: {integridade.quebra?.motivo}
+              </span>
+            </div>
+          ))}
 
         {registros === null && !error ? (
           <div className="flex items-center gap-2 text-sm text-muted-foreground" role="status">

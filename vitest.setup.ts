@@ -8,6 +8,14 @@ import { getCurrentUser } from "@/lib/server/current-user"
 // A regra de permissão em si (authz.ts / permissions.ts) NÃO é mockada: roda de verdade.
 vi.mock("@/lib/server/current-user", () => ({ getCurrentUser: vi.fn() }))
 
+// Gravar auditoria também SELA o registro (audit-seal.ts), o que exige uma transação no banco. Nos testes de
+// rota isso só atrapalharia (os mocks de prisma não têm transação), então a selagem vira "nada a selar". Os
+// testes do próprio audit-seal.ts usam vi.unmock para exercitar o código de verdade.
+vi.mock("@/lib/server/audit-seal", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/server/audit-seal")>()),
+  sealPending: vi.fn().mockResolvedValue(0),
+}))
+
 beforeEach(() => {
   vi.mocked(getCurrentUser).mockResolvedValue({
     id: 1,

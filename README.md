@@ -111,4 +111,6 @@ retenção (`AUDIT_LOG_RETENTION_DAYS`/`EXTRACAO_RETENTION_DAYS`) roda com
 `pnpm purge:data` — ver `SECURITY.md` para detalhes e para o motivo de não ser uma
 rota HTTP.
 
+A trilha de auditoria é **selada** (cada registro encadeado ao anterior por HMAC) e o botão "Verificar integridade"
+da tela Auditoria aponta qualquer registro alterado ou apagado no meio (ver `SECURITY.md` para os limites).
 Cada usuário, de qualquer perfil, baixa os próprios dados pessoais em **Privacidade e segurança → Baixar meus dados** (`GET /api/auth/meus-dados`).
