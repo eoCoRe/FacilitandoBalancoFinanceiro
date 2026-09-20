@@ -4,6 +4,7 @@ const { prisma } = vi.hoisted(() => ({
   prisma: {
     auditLog: { deleteMany: vi.fn() },
     extracao: { deleteMany: vi.fn() },
+    tokenVerificacao: { deleteMany: vi.fn() },
   },
 }))
 
@@ -17,6 +18,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   prisma.auditLog.deleteMany.mockResolvedValue({ count: 0 })
   prisma.extracao.deleteMany.mockResolvedValue({ count: 0 })
+  prisma.tokenVerificacao.deleteMany.mockResolvedValue({ count: 0 })
 })
 
 afterEach(() => {
@@ -63,9 +65,17 @@ describe("purgeExpiredData", () => {
   it("devolve a contagem de registros apagados", async () => {
     prisma.auditLog.deleteMany.mockResolvedValue({ count: 12 })
     prisma.extracao.deleteMany.mockResolvedValue({ count: 3 })
+    prisma.tokenVerificacao.deleteMany.mockResolvedValue({ count: 7 })
 
     const result = await purgeExpiredData(NOW)
 
-    expect(result).toEqual({ auditLogsApagados: 12, extracoesApagadas: 3 })
+    expect(result).toEqual({ auditLogsApagados: 12, extracoesApagadas: 3, tokensApagados: 7 })
+  })
+
+  it("apaga só os tokens JÁ vencidos (expiraEm < agora), nunca um link/código ainda válido", async () => {
+    await purgeExpiredData(NOW)
+
+    expect(prisma.tokenVerificacao.deleteMany).toHaveBeenCalledTimes(1)
+    expect(prisma.tokenVerificacao.deleteMany).toHaveBeenCalledWith({ where: { expiraEm: { lt: NOW } } })
   })
 })

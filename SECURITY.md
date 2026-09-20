@@ -19,7 +19,7 @@ LGPD se aplica integralmente.
   citado no RFC, que oferece criptografia em repouso na camada de infraestrutura; nada no schema faz
   criptografia de campo adicional).
 - **Retenção/descarte**: `lib/server/retention.ts` + `pnpm purge:data` apagam AuditLog e
-  Extracao/ValorExtraido mais antigos que o prazo configurado (padrão: 730 e 180 dias —
+  Extracao/ValorExtraido mais antigos que o prazo configurado (e, por higiene, os links de recuperação de senha e códigos de 2 etapas já vencidos) (padrão: 730 e 180 dias —
   ver detalhe na tabela abaixo). Prazo em si ainda é decisão de negócio pendente de
   confirmação; o mecanismo já está pronto.
 - **Direitos do titular** (confirmação, acesso, correção, eliminação): `GET

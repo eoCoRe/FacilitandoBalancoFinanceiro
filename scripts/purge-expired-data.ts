@@ -4,12 +4,12 @@ import { purgeExpiredData } from "@/lib/server/retention"
 
 // Rotina de expurgo (LGPD Art. 15/16) — pensada para rodar via agendador externo (cron,
 // GitHub Actions scheduled workflow, Vercel Cron, etc.), nunca como rota HTTP: é uma
-// operação destrutiva e o sistema ainda não tem autenticação (RNF02) para protegê-la
-// adequadamente se exposta pela web. Ver README/SECURITY.md para como agendar.
+// operação destrutiva; como script de linha de comando ela não passa pelas rotas de API e, portanto,
+// não pode ser acionada por quem não tem acesso ao servidor. Ver README/SECURITY.md para como agendar.
 async function main() {
   const resultado = await purgeExpiredData()
   console.log(
-    `Expurgo concluído: ${resultado.auditLogsApagados} log(s) de auditoria e ${resultado.extracoesApagadas} extração(ões) de IA apagados.`,
+    `Expurgo concluído: ${resultado.auditLogsApagados} log(s) de auditoria, ${resultado.extracoesApagadas} extração(ões) e ${resultado.tokensApagados} token(s) vencido(s) apagados.`,
   )
 }
 
