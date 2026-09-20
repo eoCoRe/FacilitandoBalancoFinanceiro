@@ -1,9 +1,9 @@
 "use client"
 
-import { useState, type FormEvent } from "react"
+import { useRef, useState, type FormEvent } from "react"
 import Link from "next/link"
 import { Loader2 } from "lucide-react"
-import { AuthMessage, AuthShell, authInputClass } from "@/components/auth-shell"
+import { AuthMessage, AuthShell, authInputClass, authLinkClass } from "@/components/auth-shell"
 import { Button } from "@/components/ui/button"
 import { api, errorMessage } from "@/lib/api-client"
 
@@ -12,6 +12,7 @@ export function ForgotPasswordForm() {
   const [error, setError] = useState<string | null>(null)
   const [sent, setSent] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const emailRef = useRef<HTMLInputElement>(null)
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
@@ -27,6 +28,7 @@ export function ForgotPasswordForm() {
       setSent(result.mensagem)
     } catch (err) {
       setError(errorMessage(err))
+      setTimeout(() => emailRef.current?.focus(), 0) // o botão desabilitado tirou o foco
     } finally {
       setSubmitting(false)
     }
@@ -46,6 +48,7 @@ export function ForgotPasswordForm() {
               autoComplete="username"
               required
               autoFocus
+              ref={emailRef}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className={authInputClass}
@@ -57,7 +60,7 @@ export function ForgotPasswordForm() {
           </Button>
         </form>
       )}
-      <Link href="/login" className="text-center text-sm text-primary hover:underline">
+      <Link href="/login" className={authLinkClass}>
         Voltar para o login
       </Link>
     </AuthShell>

@@ -1,9 +1,9 @@
 "use client"
 
-import { useState, type FormEvent } from "react"
+import { useRef, useState, type FormEvent } from "react"
 import Link from "next/link"
 import { Loader2 } from "lucide-react"
-import { AuthMessage, AuthShell, authInputClass } from "@/components/auth-shell"
+import { AuthMessage, AuthShell, authInputClass, authLinkClass } from "@/components/auth-shell"
 import { Button } from "@/components/ui/button"
 import { api, errorMessage } from "@/lib/api-client"
 
@@ -13,12 +13,14 @@ export function ResetPasswordForm({ token }: { token: string | null }) {
   const [error, setError] = useState<string | null>(null)
   const [done, setDone] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const senhaRef = useRef<HTMLInputElement>(null)
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
     if (submitting) return
     if (novaSenha !== confirmacao) {
       setError("As senhas não conferem.")
+      senhaRef.current?.focus()
       return
     }
     setSubmitting(true)
@@ -28,6 +30,7 @@ export function ResetPasswordForm({ token }: { token: string | null }) {
       setDone(true)
     } catch (err) {
       setError(errorMessage(err))
+      setTimeout(() => senhaRef.current?.focus(), 0) // o botão desabilitado tirou o foco
     } finally {
       setSubmitting(false)
     }
@@ -50,6 +53,7 @@ export function ResetPasswordForm({ token }: { token: string | null }) {
               required
               minLength={10}
               autoFocus
+              ref={senhaRef}
               value={novaSenha}
               onChange={(e) => setNovaSenha(e.target.value)}
               className={authInputClass}
@@ -75,11 +79,11 @@ export function ResetPasswordForm({ token }: { token: string | null }) {
       )}
       {/* Link vencido, usado ou ausente: o caminho natural é pedir outro. */}
       {(!token || error?.startsWith("Link inválido")) && (
-        <Link href="/esqueci-senha" className="text-center text-sm font-medium text-primary hover:underline">
+        <Link href="/esqueci-senha" className={authLinkClass}>
           Pedir um novo link
         </Link>
       )}
-      <Link href="/login" className="text-center text-sm text-muted-foreground hover:underline">
+      <Link href="/login" className={authLinkClass}>
         Ir para o login
       </Link>
     </AuthShell>

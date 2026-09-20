@@ -1,9 +1,9 @@
 "use client"
 
-import { useState, type FormEvent } from "react"
+import { useRef, useState, type FormEvent } from "react"
 import Link from "next/link"
 import { Loader2 } from "lucide-react"
-import { AuthMessage, AuthShell, authInputClass } from "@/components/auth-shell"
+import { AuthMessage, AuthShell, authInputClass, authLinkClass } from "@/components/auth-shell"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { api, errorMessage } from "@/lib/api-client"
 import { cn } from "@/lib/utils"
@@ -28,8 +28,12 @@ export function LoginForm({ googleEnabled, recoveryEnabled, initialError }: Logi
   const [error, setError] = useState<string | null>(initialError)
   const [info, setInfo] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const senhaRef = useRef<HTMLInputElement>(null)
+  const codigoRef = useRef<HTMLInputElement>(null)
 
-  async function run(action: () => Promise<void>) {
+  // `onError` devolve o foco a um campo: o botão de enviar fica desabilitado durante a requisição e, ao
+  // perder o foco, quem navega só pelo teclado voltaria ao início da página depois de um erro.
+  async function run(action: () => Promise<void>, focusOnError?: () => HTMLInputElement | null) {
     if (submitting) return
     setSubmitting(true)
     setError(null)
@@ -38,6 +42,7 @@ export function LoginForm({ googleEnabled, recoveryEnabled, initialError }: Logi
       await action()
     } catch (err) {
       setError(errorMessage(err))
+      setTimeout(() => focusOnError?.()?.focus(), 0)
     } finally {
       setSubmitting(false)
     }
@@ -58,7 +63,7 @@ export function LoginForm({ googleEnabled, recoveryEnabled, initialError }: Logi
       } else {
         goHome()
       }
-    })
+    }, () => senhaRef.current)
   }
 
   function handleCode(event: FormEvent) {
@@ -66,7 +71,7 @@ export function LoginForm({ googleEnabled, recoveryEnabled, initialError }: Logi
     void run(async () => {
       await api("/api/auth/2fa/verificar", { method: "POST", body: { codigo }, redirectOn401: false })
       goHome()
-    })
+    }, () => codigoRef.current)
   }
 
   function handleResend() {
@@ -74,7 +79,7 @@ export function LoginForm({ googleEnabled, recoveryEnabled, initialError }: Logi
       await api("/api/auth/2fa/reenviar", { method: "POST", redirectOn401: false })
       setCodigo("")
       setInfo("Enviamos um novo código. O anterior deixou de valer.")
-    })
+    }, () => codigoRef.current)
   }
 
   if (step === "codigo") {
@@ -93,6 +98,7 @@ export function LoginForm({ googleEnabled, recoveryEnabled, initialError }: Logi
               maxLength={7}
               required
               autoFocus
+              ref={codigoRef}
               value={codigo}
               onChange={(e) => setCodigo(e.target.value)}
               className={cn(authInputClass, "text-center font-mono text-lg tracking-[0.4em]")}
@@ -105,7 +111,7 @@ export function LoginForm({ googleEnabled, recoveryEnabled, initialError }: Logi
           </Button>
 
           <div className="flex justify-between text-sm">
-            <button type="button" onClick={handleResend} disabled={submitting} className="text-primary hover:underline">
+            <button type="button" onClick={handleResend} disabled={submitting} className={authLinkClass}>
               Reenviar código
             </button>
             <button
@@ -117,7 +123,7 @@ export function LoginForm({ googleEnabled, recoveryEnabled, initialError }: Logi
                 setError(null)
                 setInfo(null)
               }}
-              className="text-muted-foreground hover:underline"
+              className={authLinkClass}
             >
               Voltar
             </button>
@@ -151,6 +157,7 @@ export function LoginForm({ googleEnabled, recoveryEnabled, initialError }: Logi
             type="password"
             autoComplete="current-password"
             required
+            ref={senhaRef}
             value={senha}
             onChange={(e) => setSenha(e.target.value)}
             className={authInputClass}
@@ -163,7 +170,7 @@ export function LoginForm({ googleEnabled, recoveryEnabled, initialError }: Logi
         </Button>
 
         {recoveryEnabled && (
-          <Link href="/esqueci-senha" className="text-center text-sm text-primary hover:underline">
+          <Link href="/esqueci-senha" className={authLinkClass}>
             Esqueci minha senha
           </Link>
         )}

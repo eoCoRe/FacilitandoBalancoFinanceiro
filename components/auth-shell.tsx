@@ -33,7 +33,7 @@ export function AuthMessage({ kind, children }: { kind: "error" | "success"; chi
       role={isError ? "alert" : "status"}
       className={
         isError
-          ? "flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+          ? "flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive"
           : "flex items-start gap-2 rounded-md border border-ok/30 bg-ok-muted px-3 py-2 text-sm text-ok"
       }
     >
@@ -42,6 +42,12 @@ export function AuthMessage({ kind, children }: { kind: "error" | "success"; chi
     </div>
   )
 }
+
+// Link avulso nas telas de acesso: texto na cor normal (a cor da marca sobre o fundo claro dá só 3,7:1,
+// abaixo dos 4,5:1 da WCAG AA), sublinhado para ser reconhecível sem depender da cor, e altura de
+// toque de 28px (mínimo de 24px da WCAG 2.2).
+export const authLinkClass =
+  "inline-flex min-h-7 items-center justify-center text-center text-sm text-foreground underline underline-offset-4 hover:decoration-2"
 
 export const authInputClass =
   "rounded-md border border-border bg-background px-3 py-2 text-sm font-normal text-foreground outline-none focus:border-ring"
