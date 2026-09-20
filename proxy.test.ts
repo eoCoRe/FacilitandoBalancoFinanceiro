@@ -31,6 +31,13 @@ describe("proxy: /api (só recusa mutação de outra origem, não olha a sessão
     expect((await proxy(req("/api/empresa", { headers: { "sec-fetch-site": "cross-site" } }))).headers.get("x-middleware-next")).toBe("1")
   })
 
+  it("GET de exportação (grava na auditoria) vindo de outro site: 403", async () => {
+    expect((await proxy(req("/api/auditoria/exportar", { headers: { "sec-fetch-site": "cross-site" } }))).status).toBe(403)
+    expect((await proxy(req("/api/auth/meus-dados", { headers: { "sec-fetch-site": "cross-site" } }))).status).toBe(403)
+    // ...mas o clique num link do próprio app passa
+    expect((await proxy(req("/api/auditoria/exportar", { headers: { "sec-fetch-site": "same-origin" } }))).headers.get("x-middleware-next")).toBe("1")
+  })
+
   it("curl/teste de fumaça (sem cabeçalhos de navegador) passa", async () => {
     expect((await proxy(req("/api/auth/login", { method: "POST" }))).headers.get("x-middleware-next")).toBe("1")
   })

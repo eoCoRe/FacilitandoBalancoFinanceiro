@@ -2,13 +2,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { ensureAdmin } from "./ensure-admin"
 import { verifyPassword } from "./password"
 
-const prisma = { usuario: { count: vi.fn(), upsert: vi.fn() } }
+const prisma = { usuario: { count: vi.fn(), upsert: vi.fn() }, codigoRecuperacao: { deleteMany: vi.fn() } }
 const log = { log: vi.fn(), warn: vi.fn() }
 const run = (env: Record<string, string | undefined>) => ensureAdmin(prisma as never, env, log as never)
 
 beforeEach(() => {
   vi.clearAllMocks()
   prisma.usuario.count.mockResolvedValue(1)
+  prisma.usuario.upsert.mockResolvedValue({ id: 7 })
 })
 
 describe("ensureAdmin", () => {
@@ -24,6 +25,17 @@ describe("ensureAdmin", () => {
     // já existia: vira administrador ativo, com a senha nova, e as sessões abertas dele caem
     expect(update).toMatchObject({ papel: "ADMINISTRADOR", ativo: true, senhaHash: create.senhaHash })
     expect(update.sessoesValidasDesde).toBeInstanceOf(Date)
+  })
+
+  it("é a ferramenta de recuperação: desliga TODOS os fatores de 2 etapas do administrador e apaga os códigos de recuperação", async () => {
+    await run({ SEED_ADMIN_EMAIL: "a@b.com", SEED_ADMIN_PASSWORD: "uma-senha-forte-123" })
+    expect(prisma.usuario.upsert.mock.calls[0][0].update).toMatchObject({
+      doisFatoresAtivo: false,
+      totpAtivo: false,
+      totpSegredo: null,
+      totpUltimoPasso: null,
+    })
+    expect(prisma.codigoRecuperacao.deleteMany).toHaveBeenCalledWith({ where: { usuarioId: 7 } })
   })
 
   it("nome padrão quando não informado", async () => {

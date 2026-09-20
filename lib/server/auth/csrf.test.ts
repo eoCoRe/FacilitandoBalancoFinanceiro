@@ -41,6 +41,21 @@ describe("isCrossOriginMutation", () => {
     })
   })
 
+  describe("leituras com efeito (exportações que gravam na auditoria)", () => {
+    it.each(["/api/auditoria/exportar", "/api/auth/meus-dados", "/api/lgpd/exportacao"])("GET %s vindo de outro site é barrado", (caminho) => {
+      expect(isCrossOriginMutation("GET", h({ "sec-fetch-site": "cross-site" }), caminho)).toBe(true)
+      expect(isCrossOriginMutation("GET", h({ "sec-fetch-site": "same-site" }), caminho)).toBe(true)
+    })
+    it.each(["/api/auditoria/exportar", "/api/auth/meus-dados", "/api/lgpd/exportacao"])("GET %s do próprio app ou digitado na barra de endereço passa", (caminho) => {
+      expect(isCrossOriginMutation("GET", h({ "sec-fetch-site": "same-origin" }), caminho)).toBe(false)
+      expect(isCrossOriginMutation("GET", h({ "sec-fetch-site": "none" }), caminho)).toBe(false)
+    })
+    it("as outras leituras continuam livres (a rota exige a sessão de qualquer jeito)", () => {
+      expect(isCrossOriginMutation("GET", h({ "sec-fetch-site": "cross-site" }), "/api/empresa")).toBe(false)
+      expect(isCrossOriginMutation("GET", h({ "sec-fetch-site": "cross-site" }), "/api/auditoria")).toBe(false)
+    })
+  })
+
   it("sem nenhum dos dois cabeçalhos (curl, teste de fumaça, scripts) passa: não é um navegador sendo enganado", () => {
     expect(isCrossOriginMutation("POST", h({}))).toBe(false)
   })

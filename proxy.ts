@@ -16,7 +16,7 @@ export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
 
   if (pathname.startsWith("/api/")) {
-    if (isCrossOriginMutation(request.method, request.headers)) {
+    if (isCrossOriginMutation(request.method, request.headers, pathname)) {
       return NextResponse.json(
         { error: "Requisição de outra origem recusada." },
         { status: 403, headers: { "Cache-Control": "no-store" } },

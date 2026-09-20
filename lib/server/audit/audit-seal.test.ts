@@ -3,20 +3,28 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 // Aqui a selagem roda de verdade (o setup global a troca por um no-op nos outros testes).
 vi.unmock("@/lib/server/audit/audit-seal")
 
-type Row = { id: number; empresaId: number; usuario: string; acao: string; detalhe: string; criadoEm: Date; selo: string | null; seloAnterior: string | null }
+type Row = { id: number; empresaId: number; usuario: string; acao: string; detalhe: string; criadoEm: Date; selo: string | null; seloAnterior: string | null; seloSeq: number | null }
 
 // Banco de mentira, com estado, só com o que a selagem e a verificação usam.
 const db = vi.hoisted(() => {
   const state = { rows: [] as Row[], nextId: 1 }
-  type Where = { selo?: null | { not: null }; id?: { gt: number } }
+  type Where = { selo?: null | { not: null }; seloSeq?: null | { gt: number } }
+  type OrderBy = { id?: "asc" | "desc"; seloSeq?: "asc" | "desc" }
   const match = (r: Row, w: Where = {}) =>
-    (w.selo === undefined || (w.selo === null ? r.selo === null : r.selo !== null)) && (w.id === undefined || r.id > w.id.gt)
+    (w.selo === undefined || (w.selo === null ? r.selo === null : r.selo !== null)) &&
+    (w.seloSeq === undefined || (w.seloSeq === null ? r.seloSeq === null : r.seloSeq !== null && r.seloSeq > w.seloSeq.gt))
+  const sorted = (rows: Row[], orderBy: OrderBy) => {
+    const [key, dir] = Object.entries(orderBy)[0] as ["id" | "seloSeq", "asc" | "desc"]
+    return [...rows].sort((a, b) => ((a[key] ?? 0) - (b[key] ?? 0)) * (dir === "asc" ? 1 : -1))
+  }
   const prisma = {
     $transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => fn(prisma)),
     $queryRaw: vi.fn(async () => []),
     auditLog: {
-      findFirst: vi.fn(async ({ where }: { where: Where }) => [...state.rows].reverse().find((r) => match(r, where)) ?? null),
-      findMany: vi.fn(async ({ where, take }: { where: Where; take: number }) => state.rows.filter((r) => match(r, where)).slice(0, take)),
+      findFirst: vi.fn(async ({ where, orderBy }: { where: Where; orderBy: OrderBy }) => sorted(state.rows.filter((r) => match(r, where)), orderBy)[0] ?? null),
+      findMany: vi.fn(async ({ where, orderBy, take }: { where: Where; orderBy: OrderBy; take: number }) =>
+        sorted(state.rows.filter((r) => match(r, where)), orderBy).slice(0, take),
+      ),
       update: vi.fn(async ({ where, data }: { where: { id: number }; data: Partial<Row> }) => {
         Object.assign(state.rows.find((r) => r.id === where.id)!, data)
       }),
@@ -41,6 +49,7 @@ function add(n = 1, over: Partial<Row> = {}) {
       criadoEm: new Date(Date.UTC(2026, 8, 20, 10, 0, id)),
       selo: null,
       seloAnterior: null,
+      seloSeq: null,
       ...over,
     })
   }
@@ -63,6 +72,7 @@ describe("selagem", () => {
     expect(a.seloAnterior).toBeNull()
     expect(b.seloAnterior).toBe(a.selo)
     expect(c.seloAnterior).toBe(b.selo)
+    expect([a.seloSeq, b.seloSeq, c.seloSeq]).toEqual([1, 2, 3])
     expect(a.selo).toBe(computeSeal(null, a))
     expect(new Set(db.state.rows.map((r) => r.selo)).size).toBe(3)
   })
@@ -84,11 +94,26 @@ describe("selagem", () => {
     expect(db.prisma.$queryRaw).toHaveBeenCalled()
   })
 
-  it("um histórico grande é selado em lotes", async () => {
+  it("um histórico grande é selado em lotes, cada um com tempo folgado (o padrão de 5 s abortaria num banco lento)", async () => {
     add(450)
     expect(await sealPending()).toBe(450)
     expect(db.prisma.$transaction.mock.calls.length).toBeGreaterThanOrEqual(3)
     expect(db.state.rows.every((r) => r.selo !== null)).toBe(true)
+    for (const call of db.prisma.$transaction.mock.calls as unknown[][]) {
+      expect((call[1] as { timeout: number }).timeout).toBeGreaterThanOrEqual(20_000)
+    }
+  })
+
+  it("registro confirmado ATRASADO (id menor, mas só apareceu depois de um mais novo já selado) também é selado, no fim da cadeia", async () => {
+    add(6)
+    const atrasado = db.state.rows.splice(3, 1)[0] // o #4 ainda não foi confirmado quando #5 e #6 foram selados
+    expect(await sealPending()).toBe(5)
+    db.state.rows.splice(3, 0, atrasado) // agora ele aparece
+    expect(await sealPending()).toBe(1)
+
+    const [ultimoSeq] = [...db.state.rows].map((r) => r.seloSeq!).sort((a, b) => b - a)
+    expect(atrasado.seloSeq).toBe(ultimoSeq) // entrou no fim
+    expect(await verifyAuditIntegrity()).toMatchObject({ integra: true, verificados: 6, naoSelados: 0 })
   })
 
   it("o selo depende de TODOS os campos e do selo anterior", () => {
@@ -154,6 +179,22 @@ describe("verificação", () => {
     await sealPending()
     db.state.rows.splice(2, 0, { ...db.state.rows[1], id: 99, selo: "0".repeat(64) })
     expect((await verifyAuditIntegrity()).integra).toBe(false)
+  })
+
+  it("tirar só a POSIÇÃO de um registro selado não o esconde da verificação", async () => {
+    add(4)
+    await sealPending()
+    db.state.rows[3].seloSeq = null // o último: sumiria da leitura por posição, mas continua com selo
+    const r = await verifyAuditIntegrity()
+    expect(r.integra).toBe(false)
+    expect(r.quebra).toMatchObject({ id: 4, motivo: expect.stringContaining("posição") })
+  })
+
+  it("tirar a posição de um registro do MEIO quebra o encadeamento no seguinte", async () => {
+    add(4)
+    await sealPending()
+    db.state.rows[1].seloSeq = null
+    expect(await verifyAuditIntegrity()).toMatchObject({ integra: false, quebra: { id: 3 } })
   })
 
   it("trocar o selo por um inventado não passa (sem a chave não dá para calcular)", async () => {

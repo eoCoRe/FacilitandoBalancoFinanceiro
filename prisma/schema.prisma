@@ -145,7 +145,11 @@ model AuditLog {
   // gravação (ver lib/server/audit-seal.ts); nulo enquanto o registro ainda não foi selado.
   selo         String?
   seloAnterior String?  @map("selo_anterior")
+  // Posição na cadeia, na ordem em que os selos foram gerados. Não é o id: um registro gravado "atrasado" (id menor,
+  // mas confirmado depois de outro mais novo já selado) entra no fim da cadeia em vez de ficar sem selo.
+  seloSeq      Int?     @map("selo_seq")
 
+  @@index([seloSeq])
   @@map("audit_log")
 }
 

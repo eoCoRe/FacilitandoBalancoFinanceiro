@@ -15,7 +15,10 @@ import { getAuthSecret } from "@/lib/server/auth/session"
 
 // Trava que serializa a selagem entre requisições simultâneas (dois selando ao mesmo tempo bifurcariam a cadeia).
 const SEAL_LOCK_KEY = 7_310_442
-const SEAL_BATCH = 200
+const SEAL_BATCH = 100
+// Cada lote é uma transação interativa (padrão do Prisma: 5 s). O tempo folgado evita que um banco lento ou remoto
+// aborte o lote no meio e o refaça para sempre; a trava só é mantida enquanto o lote roda.
+const SEAL_TX_OPTIONS = { timeout: 30_000, maxWait: 10_000 }
 // Limite de lotes por chamada: quem grava um evento não deve ficar preso selando um histórico enorme.
 const SEAL_MAX_BATCHES = 25
 
@@ -40,7 +43,9 @@ function sameSeal(a: string | null, b: string): boolean {
   return timingSafeEqual(Buffer.from(a), Buffer.from(b))
 }
 
-// Sela, em ordem de id, os registros que ainda não têm selo e vêm depois do último selado. Devolve quantos selou.
+// Sela os registros que ainda não têm selo e devolve quantos selou. A cadeia segue a ORDEM EM QUE OS SELOS SÃO GERADOS
+// (selo_seq), não o id: se um registro de id menor só for confirmado depois de outro mais novo já selado (duas
+// requisições simultâneas), ele entra no fim da cadeia no próximo lote — nunca fica sem selo.
 export async function sealPending(): Promise<number> {
   let sealed = 0
   for (let batch = 0; batch < SEAL_MAX_BATCHES; batch++) {
@@ -49,22 +54,20 @@ export async function sealPending(): Promise<number> {
       await tx.$queryRaw`SELECT pg_advisory_xact_lock(${SEAL_LOCK_KEY})::text`
       const last = await tx.auditLog.findFirst({
         where: { selo: { not: null } },
-        orderBy: { id: "desc" },
-        select: { id: true, selo: true },
+        orderBy: { seloSeq: "desc" },
+        select: { selo: true, seloSeq: true },
       })
-      const pending = await tx.auditLog.findMany({
-        where: { selo: null, ...(last ? { id: { gt: last.id } } : {}) },
-        orderBy: { id: "asc" },
-        take: SEAL_BATCH,
-      })
+      const pending = await tx.auditLog.findMany({ where: { selo: null }, orderBy: { id: "asc" }, take: SEAL_BATCH })
       let previous = last?.selo ?? null
+      let seq = last?.seloSeq ?? 0
       for (const row of pending) {
         const selo = computeSeal(previous, row)
-        await tx.auditLog.update({ where: { id: row.id }, data: { selo, seloAnterior: previous } })
+        seq += 1
+        await tx.auditLog.update({ where: { id: row.id }, data: { selo, seloAnterior: previous, seloSeq: seq } })
         previous = selo
       }
       return pending.length
-    })
+    }, SEAL_TX_OPTIONS)
     sealed += count
     if (count < SEAL_BATCH) break
   }
@@ -75,7 +78,7 @@ export interface IntegrityReport {
   integra: boolean
   // Registros com selo conferidos (do primeiro ao último selado).
   verificados: number
-  // Registros sem selo (ex.: gravados fora da ordem, depois de um mais novo já selado).
+  // Registros ainda sem selo (gravados neste instante, por exemplo).
   naoSelados: number
   primeiroId: number | null
   ultimoId: number | null
@@ -93,13 +96,13 @@ export async function verifyAuditIntegrity(): Promise<IntegrityReport> {
   let primeiroId: number | null = null
   let ultimoId: number | null = null
   let anterior: string | null = null
-  let cursor = 0
+  let cursor = 0 // posição (selo_seq) do último registro conferido
   let quebra: IntegrityReport["quebra"] = null
 
   while (!quebra) {
     const rows = await prisma.auditLog.findMany({
-      where: { selo: { not: null }, id: { gt: cursor } },
-      orderBy: { id: "asc" },
+      where: { selo: { not: null }, seloSeq: { gt: cursor } },
+      orderBy: { seloSeq: "asc" },
       take: VERIFY_PAGE,
     })
     if (rows.length === 0) break
@@ -121,7 +124,20 @@ export async function verifyAuditIntegrity(): Promise<IntegrityReport> {
       ultimoId = row.id
       verificados++
     }
-    cursor = rows[rows.length - 1].id
+    cursor = rows[rows.length - 1].seloSeq ?? cursor
+  }
+
+  // Registro com selo mas SEM posição na cadeia: a leitura acima anda por posição e o ignoraria — apagar só a
+  // posição não pode servir para esconder um registro mexido.
+  if (!quebra) {
+    const semPosicao = await prisma.auditLog.findFirst({
+      where: { selo: { not: null }, seloSeq: null },
+      orderBy: { id: "asc" },
+      select: { id: true },
+    })
+    if (semPosicao) {
+      quebra = { id: semPosicao.id, motivo: "Este registro tem selo mas não tem posição na cadeia: foi mexido diretamente no banco." }
+    }
   }
 
   const naoSelados = await prisma.auditLog.count({ where: { selo: null } })

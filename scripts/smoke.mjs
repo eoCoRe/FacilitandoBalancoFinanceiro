@@ -213,12 +213,12 @@ try {
   })
 
   await check("a trilha de auditoria está selada e íntegra (selagem e transação no Postgres de verdade)", async () => {
-    const r = await admin.call("GET", "/api/auditoria/integridade")
+    const r = await admin.call("POST", "/api/auditoria/integridade")
     assert.equal(r.status, 200, JSON.stringify(r.json))
     assert.equal(r.json.integra, true, JSON.stringify(r.json))
     assert.ok(r.json.verificados > 0)
     assert.equal(r.json.naoSelados, 0)
-    assert.equal((await analista.call("GET", "/api/auditoria/integridade")).status, 403)
+    assert.equal((await analista.call("POST", "/api/auditoria/integridade")).status, 403)
   })
 
   await check("2FA por app autenticador: ligar, entrar com o código do app e com um código de recuperação", async () => {

@@ -60,7 +60,7 @@ const ROTAS: { nome: string; min: Papel; chamar: () => Promise<Response> }[] = [
   { nome: "GET /api/indices", min: "ANALISTA", chamar: () => indices.GET(new Request("http://localhost/api/indices")) },
   { nome: "GET /api/auditoria", min: "ANALISTA", chamar: () => auditoria.GET(new Request("http://localhost/api/auditoria")) },
   { nome: "GET /api/auditoria/exportar", min: "COORDENADOR", chamar: () => auditoriaExportar.GET(new Request("http://localhost/api/auditoria/exportar")) },
-  { nome: "GET /api/auditoria/integridade", min: "COORDENADOR", chamar: () => auditoriaIntegridade.GET() },
+  { nome: "POST /api/auditoria/integridade", min: "COORDENADOR", chamar: () => auditoriaIntegridade.POST() },
   { nome: "GET /api/extracoes", min: "ANALISTA", chamar: () => extracoes.GET() },
   { nome: "GET /api/extracoes/:id", min: "ANALISTA", chamar: () => extracoesId.GET(new Request("http://localhost/api/extracoes/1"), params) },
   { nome: "POST /api/extracoes", min: "ANALISTA", chamar: () => extracoes.POST(json("POST", {})) },

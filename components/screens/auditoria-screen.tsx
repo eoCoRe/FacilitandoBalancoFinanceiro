@@ -135,7 +135,7 @@ export function AuditoriaScreen() {
     setVerificando(true)
     setError(null)
     try {
-      setIntegridade(await api<Integridade>("/api/auditoria/integridade"))
+      setIntegridade(await api<Integridade>("/api/auditoria/integridade", { method: "POST" }))
     } catch (err) {
       setIntegridade(null)
       setError(errorMessage(err))

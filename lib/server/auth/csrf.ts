@@ -9,8 +9,14 @@
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"])
 
-export function isCrossOriginMutation(method: string, headers: Pick<Headers, "get">): boolean {
-  if (SAFE_METHODS.has(method.toUpperCase())) return false
+// Leituras (GET) que TÊM efeito ou são pesadas — gravam na trilha de auditoria ou despejam dados em massa. Um GET
+// cross-site de navegação leva o cookie Lax, então uma página de fora poderia dispará-las à vontade (spam na
+// auditoria, carga no banco, download forçado). Recebem o mesmo tratamento de uma mutação. São todas acionadas por
+// link/botão do próprio app (same-origin), então nada legítimo é barrado.
+const GUARDED_GET_PATHS = new Set(["/api/auditoria/exportar", "/api/auth/meus-dados", "/api/lgpd/exportacao"])
+
+export function isCrossOriginMutation(method: string, headers: Pick<Headers, "get">, pathname = ""): boolean {
+  if (SAFE_METHODS.has(method.toUpperCase()) && !GUARDED_GET_PATHS.has(pathname)) return false
 
   const fetchSite = headers.get("sec-fetch-site")
   if (fetchSite) return fetchSite !== "same-origin" && fetchSite !== "none"

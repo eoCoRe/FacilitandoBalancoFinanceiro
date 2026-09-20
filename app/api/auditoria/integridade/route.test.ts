@@ -11,7 +11,7 @@ vi.mock("@/lib/server/audit/audit-seal", async (importOriginal) => ({
 }))
 
 import { getCurrentUser } from "@/lib/server/auth/current-user"
-import { GET } from "./route"
+import { POST } from "./route"
 
 const OK = { integra: true, verificados: 12, naoSelados: 0, primeiroId: 1, ultimoId: 12, quebra: null }
 
@@ -22,9 +22,9 @@ beforeEach(() => {
   seal.verifyAuditIntegrity.mockResolvedValue(OK)
 })
 
-describe("GET /api/auditoria/integridade", () => {
+describe("POST /api/auditoria/integridade", () => {
   it("devolve o relatório e registra a verificação na trilha", async () => {
-    const response = await GET()
+    const response = await POST()
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual(OK)
     expect(prisma.auditLog.create).toHaveBeenCalledWith({
@@ -42,7 +42,7 @@ describe("GET /api/auditoria/integridade", () => {
       integra: false,
       quebra: { id: 7, motivo: "O conteúdo deste registro não confere com o selo: foi alterado depois de gravado." },
     })
-    const corpo = await (await GET()).json()
+    const corpo = await (await POST()).json()
     expect(corpo.integra).toBe(false)
     expect(corpo.quebra.id).toBe(7)
     expect(prisma.auditLog.create.mock.calls[0][0].data.detalhe).toMatch(/PROBLEMA no registro #7/)
@@ -50,13 +50,13 @@ describe("GET /api/auditoria/integridade", () => {
 
   it("analista não pode (só coordenador ou acima): 403, nada é lido", async () => {
     vi.mocked(getCurrentUser).mockResolvedValue({ id: 3, email: "a@teste.com", nome: "A", papel: "ANALISTA" })
-    expect((await GET()).status).toBe(403)
+    expect((await POST()).status).toBe(403)
     expect(seal.verifyAuditIntegrity).not.toHaveBeenCalled()
   })
 
   it("sem login: 401", async () => {
     vi.mocked(getCurrentUser).mockResolvedValue(null)
-    expect((await GET()).status).toBe(401)
+    expect((await POST()).status).toBe(401)
     expect(seal.verifyAuditIntegrity).not.toHaveBeenCalled()
   })
 })
