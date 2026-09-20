@@ -9,13 +9,19 @@ import { DemonstracoesScreen } from "@/components/screens/demonstracoes-screen"
 import { IndicesScreen } from "@/components/screens/indices-screen"
 import { OpiniaoDeVendaScreen } from "@/components/screens/opiniao-de-venda-screen"
 import { ExtracaoIaScreen } from "@/components/screens/extracao-ia-screen"
+import { MutationErrorBanner, StoreLoadGate } from "@/components/store-status"
 import type { ScreenId } from "@/lib/navigation"
+import { useFinancialStore } from "@/lib/store"
 
 export default function Page() {
   const [screen, setScreen] = useState<ScreenId>("opiniao-de-venda")
+  const { status } = useFinancialStore()
+
+  if (status !== "ready") return <StoreLoadGate />
 
   return (
     <div className="flex min-h-dvh bg-background">
+      <MutationErrorBanner />
       <div className="sticky top-0 h-dvh">
         <AppSidebar active={screen} onNavigate={setScreen} />
       </div>

@@ -49,6 +49,7 @@ export function ExtracaoIaScreen({ onNavigate }: { onNavigate: (id: "tabulacao")
   const [exercicioId, setExercicioId] = useState<string>("")
   const [confirmedCount, setConfirmedCount] = useState(0)
   const [uploadError, setUploadError] = useState<string | null>(null)
+  const [confirming, setConfirming] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const leafOptions = flattenAccounts(store.accounts).filter((r) => !r.account.children)
@@ -110,12 +111,16 @@ export function ExtracaoIaScreen({ onNavigate }: { onNavigate: (id: "tabulacao")
     setRows((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)))
   }
 
-  function handleConfirm() {
+  async function handleConfirm() {
     const entries = rows
       .filter((r) => r.mappedCode)
-      .map((r) => ({ code: r.mappedCode as string, value: r.confirmedValue }))
-    if (entries.length === 0 || !exercicioId || !fileName) return
-    store.confirmExtraction(exercicioId, entries, fileName)
+      .map((r) => ({ code: r.mappedCode as string, value: r.confirmedValue, confidence: r.confidence, page: r.page }))
+    if (entries.length === 0 || !exercicioId || !fileName || confirming) return
+    setConfirming(true)
+    const saved = await store.confirmExtraction(exercicioId, entries, fileName)
+    setConfirming(false)
+    // Se o servidor recusou, o motivo aparece no aviso global e a revisão continua aberta.
+    if (!saved) return
     setConfirmedCount(entries.length)
     setStage("done")
   }
@@ -364,7 +369,7 @@ export function ExtracaoIaScreen({ onNavigate }: { onNavigate: (id: "tabulacao")
                   <X className="size-3.5" />
                   Cancelar
                 </Button>
-                <Button size="sm" disabled={mappedCount === 0 || !exercicioId} onClick={handleConfirm}>
+                <Button size="sm" disabled={mappedCount === 0 || !exercicioId || confirming} onClick={handleConfirm}>
                   <Check className="size-3.5" />
                   Confirmar {mappedCount} valor(es) para {exercicioId || "—"}
                 </Button>
