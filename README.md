@@ -52,9 +52,10 @@ prisma/
 ├── migrations/               # histórico versionado do banco
 └── seed.ts                   # dados de exemplo + primeiro administrador (SEED_ADMIN_*)
 scripts/
-└── purge-expired-data.ts     # expurgo por retenção (LGPD) — roda via cron externo, não HTTP
+├── purge-expired-data.ts     # expurgo por retenção (LGPD) — roda via cron externo, não HTTP
+└── smoke.mjs                 # teste de fumaça (HTTP, sem mocks), usado pelo job "integration" do CI
 vitest.setup.ts               # testes de rota: usuário logado padrão (administrador) e getCurrentUser simulado
-.github/workflows/            # CI (tipos, lint, testes, build) e CodeQL
+.github/workflows/            # CI (tipos, lint, testes, build + teste de fumaça com Postgres real) e CodeQL
 ```
 
 ## Comandos
@@ -65,6 +66,7 @@ vitest.setup.ts               # testes de rota: usuário logado padrão (adminis
 | `pnpm build` / `pnpm start` | build e execução de produção |
 | `pnpm test` / `pnpm test:watch` | testes (Vitest; Prisma simulado, não precisam do banco) |
 | `pnpm lint` | ESLint |
+| `pnpm smoke` | teste de fumaça contra o app RODANDO (`pnpm build && pnpm start`) e um Postgres real: login, permissões, leitura e escrita por HTTP (`scripts/smoke.mjs`). O CI roda isso em um banco vazio |
 | `npx tsc --noEmit` | checagem de tipos (o build do Next não a exige) |
 | `pnpm purge:data` | expurgo de AuditLog/Extracao antigos (ver SECURITY.md) |
 
