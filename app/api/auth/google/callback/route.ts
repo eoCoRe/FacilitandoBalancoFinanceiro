@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
-import { logAuditSafe } from "@/lib/server/audit"
 import {
   appOrigin,
   exchangeCodeForIdToken,
@@ -11,7 +10,7 @@ import {
   verifyGoogleIdToken,
   verifyOAuthFlow,
 } from "@/lib/server/google"
-import { setSessionCookie, signSessionToken } from "@/lib/server/session"
+import { issueSession } from "@/lib/server/login-session"
 
 // Todo desfecho é um redirecionamento (a tela de login mostra o motivo pelo código `erro`);
 // o corpo da falha nunca vaza para a URL.
@@ -64,14 +63,10 @@ export async function GET(request: NextRequest) {
   // Mesmo e-mail, mas já vinculado a OUTRA conta Google: não sobrescreve o vínculo.
   if (usuario.googleSub && usuario.googleSub !== profile.sub) return failure(request, "google_falhou")
 
-  await prisma.usuario.update({
-    where: { id: usuario.id },
-    data: { googleSub: profile.sub, ultimoLoginEm: new Date() },
+  const response = await issueSession(usuario, "Entrada com conta Google.", {
+    response: NextResponse.redirect(`${appOrigin(request)}/`),
+    data: { googleSub: profile.sub },
   })
-  await logAuditSafe("Login realizado", "Entrada com conta Google.", usuario.email)
-
-  const response = NextResponse.redirect(`${appOrigin(request)}/`)
-  setSessionCookie(response, await signSessionToken(usuario.id))
   response.cookies.set(OAUTH_COOKIE, "", { path: OAUTH_COOKIE_PATH, maxAge: 0 })
   return response
 }

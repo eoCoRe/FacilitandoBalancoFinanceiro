@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
 import { logAuditSafe } from "@/lib/server/audit"
+import { codeCheckMessage } from "@/lib/server/code-messages"
 import { handleRouteError } from "@/lib/server/http"
 import { issueSession } from "@/lib/server/login-session"
 import { clearTwoFactorCookie, TWO_FACTOR_COOKIE, verifyTwoFactorToken } from "@/lib/server/two-factor"
@@ -24,14 +25,8 @@ export async function POST(request: NextRequest) {
       if (resultado === "bloqueado" && usuario) {
         await logAuditSafe("Verificação em 2 etapas bloqueada", "Tentativas de código esgotadas.", usuario.email)
       }
-      const mensagem =
-        resultado === "expirado"
-          ? "O código expirou. Peça um novo."
-          : resultado === "bloqueado"
-            ? "Muitas tentativas incorretas. Entre novamente com a sua senha."
-            : "Código incorreto."
-      // Bloqueado/expirado: o desafio não serve mais, então o cookie também é descartado.
-      const response = NextResponse.json({ error: mensagem }, { status: 401 })
+      // Bloqueado: o desafio não serve mais, então o cookie também é descartado.
+      const response = NextResponse.json({ error: codeCheckMessage(resultado, "login") }, { status: 401 })
       if (resultado === "bloqueado") clearTwoFactorCookie(response)
       return response
     }

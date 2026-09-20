@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
 import { logAuditSafe } from "@/lib/server/audit"
+import { clientIp } from "@/lib/server/client-ip"
 import { handleRouteError } from "@/lib/server/http"
 import { hashPassword, requireValidPassword } from "@/lib/server/password"
 import { isRateLimited, recordFailure } from "@/lib/server/rate-limit"
@@ -14,8 +15,7 @@ const IP_MAX = 10
 // vencido ou já usado devolvem a mesma mensagem.
 export async function POST(request: Request) {
   try {
-    const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "desconhecido"
-    const ipKey = `reset-confirm:ip:${ip}`
+    const ipKey = `reset-confirm:ip:${clientIp(request)}`
     if (isRateLimited(ipKey, IP_MAX)) {
       throw new TooManyRequestsError("Muitas tentativas. Aguarde 15 minutos e tente novamente.")
     }

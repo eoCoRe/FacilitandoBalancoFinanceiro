@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db"
 import { logAudit } from "@/lib/server/audit"
 import { requireUser } from "@/lib/server/authz"
 import { getDefaultEmpresa } from "@/lib/server/empresa"
+import { codeCheckMessage } from "@/lib/server/code-messages"
 import { handleRouteError } from "@/lib/server/http"
 import { ValidationError } from "@/lib/server/validation"
 import { checkCode, latestPendingChallengeId } from "@/lib/server/verification"
@@ -17,9 +18,7 @@ export async function POST(request: Request) {
     if (!challengeId) throw new ValidationError("Nenhum código pendente. Peça um novo.")
 
     const resultado = await checkCode(challengeId, user.id, "ATIVACAO_2FA", body.codigo)
-    if (resultado === "expirado") throw new ValidationError("O código expirou. Peça um novo.")
-    if (resultado === "bloqueado") throw new ValidationError("Muitas tentativas incorretas. Peça um novo código.")
-    if (resultado !== "ok") throw new ValidationError("Código incorreto.")
+    if (resultado !== "ok") throw new ValidationError(codeCheckMessage(resultado, "ativacao"))
 
     await prisma.usuario.update({ where: { id: user.id }, data: { doisFatoresAtivo: true } })
     const empresa = await getDefaultEmpresa()

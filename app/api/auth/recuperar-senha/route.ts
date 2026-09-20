@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db"
 import { logAuditSafe } from "@/lib/server/audit"
 import { afterResponse } from "@/lib/server/after-response"
 import { appOrigin } from "@/lib/server/app-url"
+import { clientIp } from "@/lib/server/client-ip"
 import { handleRouteError } from "@/lib/server/http"
 import { mailAvailable, sendMail } from "@/lib/server/mail"
 import { resetPasswordMail } from "@/lib/server/mail-templates"
@@ -25,9 +26,8 @@ export async function POST(request: Request) {
     const body = (await request.json()) as { email?: unknown }
     const email = requireEmail(body.email)
 
-    const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "desconhecido"
     const emailKey = `reset:email:${email}`
-    const ipKey = `reset:ip:${ip}`
+    const ipKey = `reset:ip:${clientIp(request)}`
     if (isRateLimited(emailKey, EMAIL_MAX) || isRateLimited(ipKey, IP_MAX)) {
       throw new TooManyRequestsError("Muitos pedidos de recuperação. Aguarde 15 minutos e tente novamente.")
     }

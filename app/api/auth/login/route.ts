@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
 import { logAuditSafe } from "@/lib/server/audit"
+import { clientIp } from "@/lib/server/client-ip"
 import { handleRouteError } from "@/lib/server/http"
 import { issueSession } from "@/lib/server/login-session"
 import { PASSWORD_MAX_LENGTH, verifyAgainstDummy, verifyPassword } from "@/lib/server/password"
@@ -15,12 +16,6 @@ import {
 import { requireEmail, TooManyRequestsError, UnauthorizedError, ValidationError } from "@/lib/server/validation"
 
 const IP_MAX_FAILURES = 20
-
-// Sem proxy reverso confiável o cabeçalho pode ser forjado; por isso o limite por e-mail é o
-// que de fato protege uma conta, e o por IP é só uma segunda camada contra varredura de e-mails.
-function clientIp(request: Request): string {
-  return request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "desconhecido"
-}
 
 // Login com e-mail e senha. Todas as falhas (e-mail inexistente, senha errada, conta
 // desativada, conta só-Google) devolvem a MESMA mensagem e gastam o mesmo tempo, para a
