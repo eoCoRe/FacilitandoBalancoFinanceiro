@@ -142,10 +142,17 @@ export function TwoFactorSection() {
   function finishSaving() {
     setCodigosRecuperacao([])
     setStep("idle")
-    setMessage({ ok: true, text: "Aplicativo autenticador ligado." })
+    // A mensagem depende de como se chegou aqui: ligar o app ou só gerar códigos novos (o app já estava ligado).
+    setMessage({ ok: true, text: appAcao === "codigos" ? "Novos códigos de recuperação guardados." : "Aplicativo autenticador ligado." })
   }
 
   function copyCodes() {
+    // `navigator.clipboard` não existe em página sem HTTPS (ex.: endereço interno em http): sem esta guarda o clique falharia
+    // em silêncio.
+    if (!navigator.clipboard?.writeText) {
+      setMessage({ ok: false, text: "Este navegador não permite copiar aqui. Use “Baixar”." })
+      return
+    }
     void navigator.clipboard
       .writeText(codigosRecuperacao.join("\n"))
       .then(() => setMessage({ ok: true, text: "Códigos copiados." }))

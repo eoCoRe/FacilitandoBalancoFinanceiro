@@ -135,6 +135,11 @@ describe("indicesCsv", () => {
 })
 
 describe("exportFileName", () => {
+  it("usa o dia LOCAL, não o UTC (às 22h30 no fuso local o arquivo ainda leva a data de hoje)", () => {
+    expect(exportFileName("balanco", "Empresa X", new Date(2026, 8, 20, 22, 30))).toBe("empresa-x-balanco-2026-09-20.csv")
+    expect(exportFileName("balanco", "Empresa X", new Date(2026, 0, 5, 0, 10))).toBe("empresa-x-balanco-2026-01-05.csv")
+  })
+
   it("normaliza o nome da empresa (sem acento, minúsculas, hífens) e põe a data", () => {
     expect(exportFileName("balanco", "Farmácia Bem-Estar Ltda", new Date("2026-09-20T12:00:00Z"))).toBe(
       "farmacia-bem-estar-ltda-balanco-2026-09-20.csv",

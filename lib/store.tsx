@@ -146,7 +146,14 @@ export function FinancialDataProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (status !== "ready") return
     const recheck = () => {
-      if (document.visibilityState === "visible") api("/api/auth/me").catch(() => {})
+      if (document.visibilityState !== "visible") return
+      api<{ user: AuthUser }>("/api/auth/me")
+        .then(({ user }) => {
+          // Perfil rebaixado (ou 2 etapas ligadas/desligadas) noutro lugar: a tela passa a esconder o que a pessoa não
+          // pode mais fazer, sem esperar um 403 numa gravação. Mantém o mesmo objeto se nada mudou.
+          setData((prev) => (JSON.stringify(prev.user) === JSON.stringify(user) ? prev : { ...prev, user }))
+        })
+        .catch(() => {}) // um 401 já leva ao login (api-client); outros erros passageiros ficam para a próxima conferência
     }
     const timer = setInterval(recheck, SESSION_RECHECK_MS)
     document.addEventListener("visibilitychange", recheck)

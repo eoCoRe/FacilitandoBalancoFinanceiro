@@ -90,5 +90,7 @@ export function exportFileName(kind: string, companyName: string, now: Date = ne
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-+|-+$/g, "") || "empresa"
-  return `${slug}-${kind}-${now.toISOString().slice(0, 10)}.csv`
+  // Dia LOCAL (não o UTC): às 22h em Brasília o UTC já é o dia seguinte, e o arquivo sairia com a data de amanhã.
+  const dia = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`
+  return `${slug}-${kind}-${dia}.csv`
 }

@@ -3,11 +3,11 @@
 import { useEffect, useRef, useState, type FormEvent } from "react"
 import { AlertTriangle, CheckCircle2, Download, Loader2, Search, ShieldCheck } from "lucide-react"
 import { PageHeader } from "@/components/page-header"
-import { Button, buttonVariants } from "@/components/ui/button"
+import { Button } from "@/components/ui/button"
 import { api, errorMessage } from "@/lib/api-client"
+import { downloadFromApi } from "@/lib/download"
 import { can } from "@/lib/permissions"
 import { useFinancialStore } from "@/lib/store"
-import { cn } from "@/lib/utils"
 
 interface Registro {
   id: number
@@ -42,14 +42,22 @@ interface Filtros {
 
 const SEM_FILTROS: Filtros = { usuario: "", acao: "", de: "", ate: "", q: "" }
 
+// Dia (yyyy-mm-dd) do campo de data -> instante ISO. Um ano absurdo que o navegador aceita (ex.: 275760) vira data inválida:
+// devolve uma mensagem clara em vez do "Invalid time value" do JavaScript.
+function toIsoDay(day: string, time: string): string {
+  const date = new Date(`${day}${time}`)
+  if (Number.isNaN(date.getTime())) throw new Error("Data inválida nos filtros. Confira o dia informado.")
+  return date.toISOString()
+}
+
 // Filtros -> query string. As datas são dias no fuso do usuário: início do dia inicial e fim do dia final.
 function toQuery(f: Filtros, extra: Record<string, string> = {}): string {
   const p = new URLSearchParams()
   if (f.usuario.trim()) p.set("usuario", f.usuario.trim())
   if (f.acao) p.set("acao", f.acao)
   if (f.q.trim()) p.set("q", f.q.trim())
-  if (f.de) p.set("de", new Date(`${f.de}T00:00:00`).toISOString())
-  if (f.ate) p.set("ate", new Date(`${f.ate}T23:59:59.999`).toISOString())
+  if (f.de) p.set("de", toIsoDay(f.de, "T00:00:00"))
+  if (f.ate) p.set("ate", toIsoDay(f.ate, "T23:59:59.999"))
   for (const [k, v] of Object.entries(extra)) p.set(k, v)
   return p.toString()
 }
@@ -71,6 +79,7 @@ export function AuditoriaScreen() {
   const [integridade, setIntegridade] = useState<Integridade | null>(null)
   const [verificando, setVerificando] = useState(false)
   const [selando, setSelando] = useState(false)
+  const [exportando, setExportando] = useState(false)
   // Numera as buscas de página inicial/filtro: só a MAIS RECENTE pode preencher a tela. Sem isso, a carga inicial
   // (lenta) chegaria depois de um filtro já aplicado e sobrescreveria a tabela com dados sem filtro.
   const buscaAtual = useRef(0)
@@ -93,17 +102,21 @@ export function AuditoriaScreen() {
     }
   }, [])
 
-  async function filtrar(event: FormEvent) {
+  function filtrar(event: FormEvent) {
     event.preventDefault()
+    void aplicar(filtros)
+  }
+
+  async function aplicar(novos: Filtros) {
     if (carregando) return
     setCarregando(true)
     setError(null)
     const busca = ++buscaAtual.current
     try {
       // Pede também as ações existentes: podem ter surgido novas (ex.: "Auditoria exportada") desde a abertura.
-      const pagina = await fetchPage(filtros, { opcoes: "1" })
+      const pagina = await fetchPage(novos, { opcoes: "1" })
       if (busca !== buscaAtual.current) return // outra busca (mais nova) já assumiu a tela
-      setAplicados(filtros)
+      setAplicados(novos)
       setRegistros(pagina.logs)
       setCursor(pagina.proximoCursor)
       if (pagina.acoes) setAcoes(pagina.acoes)
@@ -129,8 +142,24 @@ export function AuditoriaScreen() {
     }
   }
 
+  // "Limpar" também refaz a busca: senão os campos ficariam vazios com a tabela (e a exportação) ainda filtradas.
   function limpar() {
     setFiltros(SEM_FILTROS)
+    void aplicar(SEM_FILTROS)
+  }
+
+  // A exportação leva os filtros APLICADOS (o que está na tabela), não o que está só digitado nos campos.
+  async function exportar() {
+    if (exportando) return
+    setExportando(true)
+    setError(null)
+    try {
+      await downloadFromApi(`/api/auditoria/exportar?${toQuery(aplicados)}`, "auditoria.csv")
+    } catch (err) {
+      setError(errorMessage(err))
+    } finally {
+      setExportando(false)
+    }
   }
 
   const podeExportar = can(user.papel, "exportar-auditoria")
@@ -188,14 +217,20 @@ export function AuditoriaScreen() {
                 {verificando ? <Loader2 className="size-3.5 animate-spin" /> : <ShieldCheck className="size-3.5" />}
                 Verificar integridade
               </Button>
-              {/* Download por navegação: o cookie de sessão vai junto e o servidor confere a permissão. */}
-              <a
-                href={`/api/auditoria/exportar?${toQuery(aplicados)}`}
-                className={cn(buttonVariants({ variant: "outline", size: "sm" }), "h-8 gap-1.5")}
+              {/* Por fetch: um erro (sessão expirada, limite) vira mensagem aqui, sem trocar o app por um JSON cru. O servidor
+                  confere a permissão. */}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 gap-1.5"
+                disabled={exportando}
+                title="Exporta o que está na tabela (com os filtros aplicados)"
+                onClick={() => void exportar()}
               >
-                <Download className="size-3.5" />
+                {exportando ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
                 Exportar CSV
-              </a>
+              </Button>
             </div>
           ) : undefined
         }

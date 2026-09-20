@@ -2,12 +2,12 @@
 
 import { useEffect, useState, type FormEvent } from "react"
 import { FileDown, KeyRound, LogOut, MonitorX } from "lucide-react"
-import { Button, buttonVariants } from "@/components/ui/button"
+import { Button } from "@/components/ui/button"
 import { TwoFactorSection } from "@/components/auth/two-factor-section"
 import { api, errorMessage } from "@/lib/api-client"
+import { downloadFromApi } from "@/lib/download"
 import { PAPEL_LABEL } from "@/lib/permissions"
 import { useFinancialStore } from "@/lib/store"
-import { cn } from "@/lib/utils"
 
 function initials(nome: string): string {
   const parts = nome.trim().split(/\s+/).filter(Boolean)
@@ -56,6 +56,21 @@ export function AccountMenu() {
     }
   }
 
+  // Baixa os próprios dados (LGPD, direito de acesso). Por fetch, para um erro (sessão expirada, limite) virar mensagem aqui
+  // e não uma página de JSON no lugar do app.
+  async function handleDownloadMyData() {
+    if (busy) return
+    setBusy(true)
+    setMessage(null)
+    try {
+      await downloadFromApi("/api/auth/meus-dados", "meus-dados.json")
+    } catch (error) {
+      setMessage({ ok: false, text: errorMessage(error) })
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function handleChangePassword(event: FormEvent) {
     event.preventDefault()
     if (busy) return
@@ -75,7 +90,9 @@ export function AccountMenu() {
   }
 
   return (
-    <div className="mt-auto border-t border-border p-3">
+    // max-h + overflow: com o painel de segurança aberto (chave, códigos de recuperação) o rodapé pode passar da altura da
+    // tela; assim ele rola em vez de empurrar "Confirmar", "Já guardei" e "Sair" para fora.
+    <div className="mt-auto max-h-[70dvh] overflow-y-auto border-t border-border p-3">
       <div className="flex items-center gap-2.5">
         <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/90 text-xs font-medium text-primary-foreground">
           {initials(user.nome)}
@@ -93,7 +110,9 @@ export function AccountMenu() {
           <input
             type="password"
             autoComplete="current-password"
+            aria-label="Senha atual"
             placeholder="Senha atual"
+            autoFocus
             value={senhaAtual}
             onChange={(e) => setSenhaAtual(e.target.value)}
             className="rounded-md border border-border bg-background px-2 py-1.5 text-xs text-foreground outline-none focus:border-ring"
@@ -101,6 +120,7 @@ export function AccountMenu() {
           <input
             type="password"
             autoComplete="new-password"
+            aria-label="Nova senha (mínimo de 10 caracteres)"
             placeholder="Nova senha (mín. 10 caracteres)"
             required
             minLength={10}
@@ -125,32 +145,32 @@ export function AccountMenu() {
         </p>
       )}
 
-      {!changing && (
-        <details className="mt-1 text-sm">
-          <summary className="flex min-h-7 cursor-pointer items-center px-2.5 text-xs text-muted-foreground hover:text-foreground">
-            Privacidade e segurança
-          </summary>
-          <div className="mt-1 flex flex-col gap-0.5">
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              disabled={busy}
-              className="w-full justify-start"
-              onClick={() => void handleEndOtherSessions()}
-            >
-              <MonitorX />
-              Encerrar outras sessões
-            </Button>
-            {/* Direito de acesso (LGPD): o arquivo com os dados que o sistema guarda sobre esta pessoa. */}
-            <a href="/api/auth/meus-dados" className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "w-full justify-start")}>
-              <FileDown />
-              Baixar meus dados
-            </a>
-          </div>
-          <TwoFactorSection />
-        </details>
-      )}
+      {/* Sempre montado (só escondido ao trocar a senha): desmontar perderia o estado do painel de segurança — os códigos
+          de recuperação, mostrados uma única vez, e a chave de um cadastro em andamento. */}
+      <details className={changing ? "hidden" : "mt-1 text-sm"}>
+        <summary className="flex min-h-7 cursor-pointer items-center px-2.5 text-xs text-muted-foreground hover:text-foreground">
+          Privacidade e segurança
+        </summary>
+        <div className="mt-1 flex flex-col gap-0.5">
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            disabled={busy}
+            className="w-full justify-start"
+            onClick={() => void handleEndOtherSessions()}
+          >
+            <MonitorX />
+            Encerrar outras sessões
+          </Button>
+          {/* Direito de acesso (LGPD): o arquivo com os dados que o sistema guarda sobre esta pessoa. */}
+          <Button type="button" size="sm" variant="ghost" disabled={busy} className="w-full justify-start" onClick={() => void handleDownloadMyData()}>
+            <FileDown />
+            Baixar meus dados
+          </Button>
+        </div>
+        <TwoFactorSection />
+      </details>
 
       {!changing && (
         <div className="mt-3 flex gap-1.5">

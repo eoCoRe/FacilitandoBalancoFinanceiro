@@ -65,6 +65,7 @@ function PaletteBody({ onChoose }: { onChoose: (entry: SearchEntry) => void }) {
       event.preventDefault()
       if (results.length) move((activeIndex - 1 + results.length) % results.length)
     } else if (event.key === "Enter") {
+      if (event.nativeEvent.isComposing) return // Enter que só confirma uma letra composta (IME/acento) não navega
       event.preventDefault()
       const entry = results[activeIndex]
       if (entry) onChoose(entry)
@@ -78,7 +79,7 @@ function PaletteBody({ onChoose }: { onChoose: (entry: SearchEntry) => void }) {
         <input
           role="combobox"
           aria-expanded
-          aria-controls="busca-lista"
+          aria-controls={results.length > 0 ? "busca-lista" : undefined}
           aria-activedescendant={results[activeIndex] ? `busca-opcao-${activeIndex}` : undefined}
           aria-label="Buscar telas, índices e contas"
           placeholder="Buscar telas, índices e contas…"
