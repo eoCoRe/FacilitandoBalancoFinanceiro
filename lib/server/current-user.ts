@@ -1,14 +1,9 @@
 import { cookies } from "next/headers"
 import { prisma } from "@/lib/db"
-import type { Papel } from "@/lib/permissions"
+import type { UserIdentity } from "@/lib/permissions"
 import { SESSION_COOKIE, verifySessionToken } from "./session"
 
-export interface SessionUser {
-  id: number
-  email: string
-  nome: string
-  papel: Papel
-}
+export type SessionUser = UserIdentity
 
 // Quem está logado NESTA requisição, ou null. É a checagem "segura" (consulta o banco), ao
 // contrário do proxy.ts, que só olha a assinatura do cookie. Separado de authz.ts para que

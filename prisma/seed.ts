@@ -30,9 +30,9 @@ function slugify(label: string): string {
     .replace(/^-+|-+$/g, "")
 }
 
-// Espelha lib/store.tsx::seedData() — mesma empresa, exercícios e Plano de Contas
-// que o frontend usa como dados de demonstração, só que persistidos no Postgres
-// em vez de localStorage.
+// Grava no Postgres a empresa, os exercícios e o Plano de Contas de demonstração de
+// lib/financial-data.ts (createSeed*). Só o seed e os testes usam esses dados de exemplo;
+// a interface lê tudo do banco pelas rotas de API.
 async function seedContaTree(accounts: Account[], parentId: number | null, exercicioIdByPeriodo: Map<string, number>) {
   for (const account of accounts) {
     const conta = await prisma.conta.create({

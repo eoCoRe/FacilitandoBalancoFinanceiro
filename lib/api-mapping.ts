@@ -8,7 +8,7 @@ import {
   type DreValues,
   type StaticLine,
 } from "./financial-data"
-import type { Papel } from "./permissions"
+import type { UserIdentity } from "./permissions"
 import { DEFAULT_SECTOR_ID, SECTORS } from "./sector-benchmarks"
 
 export interface Exercicio {
@@ -26,11 +26,7 @@ export interface AuditEntry {
 
 // ---- Formatos das respostas (espelham app/api/*) ----
 
-export interface AuthUser {
-  id: number
-  nome: string
-  email: string
-  papel: Papel
+export interface AuthUser extends UserIdentity {
   doisFatoresAtivo: boolean
   doisFatoresObrigatorio: boolean
 }

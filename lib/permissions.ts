@@ -4,6 +4,14 @@
 export const PAPEIS = ["ANALISTA", "COORDENADOR", "ADMINISTRADOR"] as const
 export type Papel = (typeof PAPEIS)[number]
 
+// Quem é o usuário logado, no formato comum ao servidor (sessão) e à tela (/api/auth/me).
+export interface UserIdentity {
+  id: number
+  nome: string
+  email: string
+  papel: Papel
+}
+
 export const PAPEL_LABEL: Record<Papel, string> = {
   ANALISTA: "Analista de Crédito",
   COORDENADOR: "Coordenador",

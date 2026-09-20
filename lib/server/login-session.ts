@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
-import type { Papel } from "@/lib/permissions"
+import type { UserIdentity } from "@/lib/permissions"
 import { logAuditSafe } from "./audit"
 import { setSessionCookie, signSessionToken } from "./session"
 
@@ -15,7 +15,7 @@ interface IssueSessionOptions {
 // Passo final de todo login (senha direta, senha + código ou Google): marca o último acesso,
 // registra na auditoria e devolve a resposta com o cookie de sessão.
 export async function issueSession(
-  usuario: { id: number; nome: string; email: string; papel: Papel },
+  usuario: UserIdentity,
   detalhe: string,
   options: IssueSessionOptions = {},
 ): Promise<NextResponse> {
