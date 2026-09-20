@@ -18,6 +18,7 @@ interface ExtracaoItemInput {
   valor: number
   confianca: number
   paginaOrigem?: number
+  rotulo?: string
 }
 
 const MAX_ITENS = 200
@@ -34,7 +35,11 @@ function parseItem(raw: unknown, index: number): ExtracaoItemInput {
     item.paginaOrigem === undefined || item.paginaOrigem === null
       ? undefined
       : requirePositiveInt(item.paginaOrigem, `itens[${index}].paginaOrigem`)
-  return { contaId, valor, confianca, paginaOrigem }
+  const rotulo =
+    item.rotulo === undefined || item.rotulo === null || item.rotulo === ""
+      ? undefined
+      : requireNonEmptyString(item.rotulo, `itens[${index}].rotulo`, 200)
+  return { contaId, valor, confianca, paginaOrigem, rotulo }
 }
 
 // Registra o resultado de uma extração (Extração via IA) já revisada e
@@ -78,6 +83,7 @@ export async function POST(request: Request) {
         valor: item.valor,
         paginaOrigem: item.paginaOrigem,
         confianca: item.confianca,
+        rotuloOrigem: item.rotulo,
       })),
     })
 
@@ -111,16 +117,32 @@ export async function GET() {
       include: { _count: { select: { valoresExtraidos: true } }, exercicio: true },
     })
 
+    // Quantos itens de cada extração viraram valor (têm conta) e quantos ficaram sem conta.
+    const ids = extracoes.map((e) => e.id)
+    const comConta = ids.length
+      ? await prisma.valorExtraido.groupBy({
+          by: ["extracaoId"],
+          where: { extracaoId: { in: ids }, contaId: { not: null } },
+          _count: { _all: true },
+        })
+      : []
+    const mapeadosPorExtracao = new Map(comConta.map((g) => [g.extracaoId, g._count._all]))
+
     return NextResponse.json({
-      extracoes: extracoes.map((e) => ({
-        id: e.id,
-        arquivoOrigem: e.arquivoOrigem,
-        modeloLlm: e.modeloLlm,
-        status: e.status,
-        criadoEm: e.criadoEm,
-        exercicio: e.exercicio.periodo,
-        totalItens: e._count.valoresExtraidos,
-      })),
+      extracoes: extracoes.map((e) => {
+        const mapeados = mapeadosPorExtracao.get(e.id) ?? 0
+        return {
+          id: e.id,
+          arquivoOrigem: e.arquivoOrigem,
+          modeloLlm: e.modeloLlm,
+          status: e.status,
+          criadoEm: e.criadoEm,
+          exercicio: e.exercicio.periodo,
+          totalItens: e._count.valoresExtraidos,
+          mapeados,
+          naoMapeados: e._count.valoresExtraidos - mapeados,
+        }
+      }),
     })
   } catch (error) {
     return handleRouteError(error)

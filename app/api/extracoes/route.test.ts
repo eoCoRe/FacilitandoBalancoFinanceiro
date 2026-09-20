@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 const { prisma } = vi.hoisted(() => ({
   prisma: {
     extracao: { create: vi.fn(), findMany: vi.fn() },
-    valorExtraido: { createMany: vi.fn() },
+    valorExtraido: { createMany: vi.fn(), groupBy: vi.fn() },
     valor: { upsert: vi.fn(), deleteMany: vi.fn() },
     empresa: { findFirst: vi.fn() },
     auditLog: { create: vi.fn() },
@@ -133,6 +133,56 @@ describe("POST /api/extracoes", () => {
   })
 })
 
+describe("POST /api/extracoes: rótulo de origem (rastreabilidade)", () => {
+  const corpo = (itens: unknown[]) => ({ exercicioId: 1, arquivoOrigem: "a.pdf", itens })
+
+  beforeEach(() => {
+    prisma.extracao.create.mockResolvedValue({ id: 50 })
+    prisma.valorExtraido.createMany.mockResolvedValue({ count: 1 })
+  })
+
+  it("grava o texto lido no documento, para linhas mapeadas e não mapeadas", async () => {
+    const response = await POST(
+      buildRequest(
+        corpo([
+          { contaId: 10, valor: 945, confianca: 97, paginaOrigem: 1, rotulo: "Disponibilidades" },
+          { contaId: null, valor: 640, confianca: 60, paginaOrigem: 2, rotulo: "Diversos a classificar" },
+        ]),
+      ),
+    )
+    expect(response.status).toBe(201)
+    expect(prisma.valorExtraido.createMany).toHaveBeenCalledWith({
+      data: [
+        expect.objectContaining({ contaId: 10, rotuloOrigem: "Disponibilidades" }),
+        expect.objectContaining({ contaId: null, rotuloOrigem: "Diversos a classificar" }),
+      ],
+    })
+  })
+
+  it("só as linhas COM conta viram valor; as sem conta ficam apenas no histórico", async () => {
+    await POST(
+      buildRequest(
+        corpo([
+          { contaId: 10, valor: 945, confianca: 97, rotulo: "Disponibilidades" },
+          { contaId: null, valor: 640, confianca: 60, rotulo: "Diversos" },
+        ]),
+      ),
+    )
+    expect(prisma.valor.upsert).toHaveBeenCalledTimes(1)
+    expect(prisma.valor.upsert).toHaveBeenCalledWith(expect.objectContaining({ create: expect.objectContaining({ contaId: 10 }) }))
+  })
+
+  it("rótulo é opcional (extrações antigas não tinham)", async () => {
+    expect((await POST(buildRequest(corpo([{ contaId: 10, valor: 1, confianca: 90 }])))).status).toBe(201)
+  })
+
+  it("recusa rótulo com mais de 200 caracteres", async () => {
+    const response = await POST(buildRequest(corpo([{ contaId: 10, valor: 1, confianca: 90, rotulo: "x".repeat(201) }])))
+    expect(response.status).toBe(400)
+    expect(prisma.extracao.create).not.toHaveBeenCalled()
+  })
+})
+
 describe("GET /api/extracoes", () => {
   it("lista as extrações mais recentes primeiro", async () => {
     prisma.extracao.findMany.mockResolvedValue([
@@ -147,11 +197,16 @@ describe("GET /api/extracoes", () => {
       },
     ])
 
+    prisma.valorExtraido.groupBy.mockResolvedValue([{ extracaoId: 2, _count: { _all: 2 } }])
+
     const response = await GET()
     const body = await response.json()
 
     expect(body.extracoes).toHaveLength(1)
-    expect(body.extracoes[0]).toMatchObject({ id: 2, totalItens: 3, exercicio: "1T2026" })
+    expect(body.extracoes[0]).toMatchObject({ id: 2, totalItens: 3, exercicio: "1T2026", mapeados: 2, naoMapeados: 1 })
+    expect(prisma.valorExtraido.groupBy).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { extracaoId: { in: [2] }, contaId: { not: null } } }),
+    )
   })
 
   it("retorna lista vazia quando não há extrações", async () => {
@@ -159,5 +214,15 @@ describe("GET /api/extracoes", () => {
     const response = await GET()
     const body = await response.json()
     expect(body.extracoes).toEqual([])
+    expect(prisma.valorExtraido.groupBy).not.toHaveBeenCalled() // sem extrações, nem consulta as contagens
+  })
+
+  it("extração cujos itens ficaram todos sem conta: mapeados 0", async () => {
+    prisma.extracao.findMany.mockResolvedValue([
+      { id: 5, arquivoOrigem: "c.pdf", modeloLlm: "x", status: "CONCLUIDA", criadoEm: new Date(), exercicio: { periodo: "1T2026" }, _count: { valoresExtraidos: 4 } },
+    ])
+    prisma.valorExtraido.groupBy.mockResolvedValue([])
+    const body = await (await GET()).json()
+    expect(body.extracoes[0]).toMatchObject({ mapeados: 0, naoMapeados: 4 })
   })
 })

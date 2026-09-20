@@ -124,6 +124,9 @@ model ValorExtraido {
   valor        Decimal  @db.Decimal(18, 2)
   paginaOrigem Int?     @map("pagina_origem")
   confianca    Float
+  // Texto exato que o leitor viu no documento (ex.: "Disponibilidades"): a rastreabilidade do RF06 precisa
+  // dele tanto para a linha mapeada quanto para a que ficou sem conta.
+  rotuloOrigem String?  @map("rotulo_origem")
 
   @@map("valor_extraido")
 }

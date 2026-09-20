@@ -30,10 +30,13 @@ export type { AuditEntry, Exercicio }
 type Status = "loading" | "ready" | "error"
 
 export interface ExtractionEntry {
-  code: string
+  // null = o leitor viu a linha mas ela não foi ligada a nenhuma conta: só rastreabilidade, não lança valor.
+  code: string | null
   value: number
   confidence: number
   page?: number
+  // Texto exato lido no documento (guardado como origem do valor).
+  label?: string
 }
 
 interface StoreApi extends FinancialSnapshot {
@@ -385,9 +388,15 @@ export function FinancialDataProvider({ children }: { children: ReactNode }) {
         const exercicioDbId = ids.current.exercicioIdByPeriodo[exercicioId]
         if (!exercicioDbId) throw new ApiError(`Exercício ${exercicioId} não encontrado.`)
         const itens = entries.map((entry) => {
-          const contaId = ids.current.contaIdByCode[entry.code]
-          if (!contaId) throw new ApiError(`Conta ${entry.code} não encontrada.`)
-          return { contaId, valor: entry.value, confianca: entry.confidence, paginaOrigem: entry.page }
+          const contaId = entry.code === null ? null : ids.current.contaIdByCode[entry.code]
+          if (entry.code !== null && !contaId) throw new ApiError(`Conta ${entry.code} não encontrada.`)
+          return {
+            contaId,
+            valor: entry.value,
+            confianca: entry.confidence,
+            paginaOrigem: entry.page,
+            rotulo: entry.label?.slice(0, 200),
+          }
         })
         await api("/api/extracoes", {
           method: "POST",

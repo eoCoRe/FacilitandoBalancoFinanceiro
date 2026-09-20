@@ -20,6 +20,7 @@ import * as indices from "./indices/route"
 import * as auditoria from "./auditoria/route"
 import * as auditoriaExportar from "./auditoria/exportar/route"
 import * as extracoes from "./extracoes/route"
+import * as extracoesId from "./extracoes/[id]/route"
 import * as usuarios from "./usuarios/route"
 import * as usuariosId from "./usuarios/[id]/route"
 import * as lgpdExportacao from "./lgpd/exportacao/route"
@@ -53,6 +54,7 @@ const ROTAS: { nome: string; min: Papel; chamar: () => Promise<Response> }[] = [
   { nome: "GET /api/auditoria", min: "ANALISTA", chamar: () => auditoria.GET(new Request("http://localhost/api/auditoria")) },
   { nome: "GET /api/auditoria/exportar", min: "COORDENADOR", chamar: () => auditoriaExportar.GET(new Request("http://localhost/api/auditoria/exportar")) },
   { nome: "GET /api/extracoes", min: "ANALISTA", chamar: () => extracoes.GET() },
+  { nome: "GET /api/extracoes/:id", min: "ANALISTA", chamar: () => extracoesId.GET(new Request("http://localhost/api/extracoes/1"), params) },
   { nome: "POST /api/extracoes", min: "ANALISTA", chamar: () => extracoes.POST(json("POST", {})) },
   { nome: "GET /api/usuarios", min: "ADMINISTRADOR", chamar: () => usuarios.GET() },
   { nome: "POST /api/usuarios", min: "ADMINISTRADOR", chamar: () => usuarios.POST(json("POST", {})) },

@@ -11,6 +11,8 @@ export interface ExtractedRow {
   id: string
   code: string | null
   suggestedName: string
+  // Texto exato lido no documento (antes do casamento com o Plano de Contas): é a origem do valor (RF06).
+  sourceLabel: string
   value: number
   confidence: number
   page: number
@@ -36,6 +38,7 @@ export function extractRowsFromLines(lines: { text: string; page: number }[], ac
       id: `pdf-${line.page}-${i}`,
       code,
       suggestedName: account && code ? account.name : parsed.label,
+      sourceLabel: parsed.label,
       value: parsed.value,
       confidence,
       page: line.page,
