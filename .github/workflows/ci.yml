@@ -10,6 +10,10 @@ env:
   # Só usado por `prisma generate` (não conecta de verdade) — CI não tem banco.
   DATABASE_URL: "postgresql://ci:ci@localhost:5432/ci"
 
+# O CI só lê o repositório: sem este bloco o GITHUB_TOKEN recebe as permissões padrão do repositório (que podem ser de escrita).
+permissions:
+  contents: read
+
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
@@ -43,3 +47,80 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+  # Teste de fumaça com Postgres de verdade: migra um banco VAZIO, roda o seed, sobe o app em modo
+  # produção e exercita login, permissões, leitura e escrita por HTTP (scripts/smoke.mjs). Os testes do
+  # job acima simulam o Prisma; este confere que as peças funcionam juntas.
+  integration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # Valores só deste job (banco descartável): não são segredos de verdade.
+      DATABASE_URL: "postgresql://ci:ci@localhost:5432/ci"
+      AUTH_SECRET: "ci-only-secret-not-used-anywhere-else-0123456789"
+      APP_URL: "http://localhost:3000"
+      SEED_ADMIN_EMAIL: "admin@ci.local"
+      # Sem "admin" nem o trecho do e-mail: a política de senha recusa senha parecida com o e-mail.
+      SEED_ADMIN_PASSWORD: "ci-cavalo-bateria-4271"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Apply migrations to an empty database
+        run: npx prisma migrate deploy
+
+      - name: Seed
+        run: npx prisma db seed
+
+      # O caminho de produção para criar/restabelecer o administrador (não apaga nada) roda no Postgres de verdade, duas
+      # vezes (precisa ser idempotente) — e o seed, que apaga dados de negócio, tem de se RECUSAR a rodar em produção.
+      - name: admin:ensure is idempotent
+        run: pnpm admin:ensure && pnpm admin:ensure
+
+      - name: Seed refuses to wipe data in production
+        run: |
+          if NODE_ENV=production npx prisma db seed; then
+            echo "O seed deveria ter recusado rodar com NODE_ENV=production"
+            exit 1
+          fi
+
+      - name: Build
+        run: pnpm build
+
+      - name: Start the app
+        run: |
+          pnpm start > app.log 2>&1 &
+          echo "started"
+
+      - name: Smoke test
+        run: pnpm smoke
+
+      - name: Show the app log on failure
+        if: failure()
+        run: cat app.log
+

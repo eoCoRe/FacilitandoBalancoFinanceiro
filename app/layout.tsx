@@ -1,7 +1,6 @@
 import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
 import { Manrope, Space_Grotesk, Space_Mono } from 'next/font/google'
-import { FinancialDataProvider } from '@/lib/store'
 import './globals.css'
 
 // Manrope (texto/UI) + Space Grotesk (títulos e números de destaque) + Space Mono
@@ -70,8 +69,9 @@ export default function RootLayout({
       className={`${manrope.variable} ${spaceGrotesk.variable} ${spaceMono.variable} bg-background`}
     >
       <body className="font-sans antialiased">
-        <FinancialDataProvider>{children}</FinancialDataProvider>
-        {process.env.NODE_ENV === 'production' && <Analytics />}
+        {children}
+        {/* O script existe só na Vercel; fora dela daria 404 a cada página. */}
+        {process.env.VERCEL && <Analytics />}
       </body>
     </html>
   )

@@ -8,11 +8,13 @@ import {
   type DreValues,
   type StaticLine,
 } from "./financial-data"
+import type { UserIdentity } from "./permissions"
 import { DEFAULT_SECTOR_ID, SECTORS } from "./sector-benchmarks"
 
 export interface Exercicio {
   id: string
   label: string
+  auditado: boolean
 }
 
 export interface AuditEntry {
@@ -24,6 +26,12 @@ export interface AuditEntry {
 }
 
 // ---- Formatos das respostas (espelham app/api/*) ----
+
+export interface AuthUser extends UserIdentity {
+  doisFatoresAtivo: boolean
+  totpAtivo: boolean
+  doisFatoresObrigatorio: boolean
+}
 
 export interface EmpresaPayload {
   id: number
@@ -58,6 +66,7 @@ export interface AuditoriaPayload {
 // ---- Snapshot que alimenta o store ----
 
 export interface FinancialSnapshot {
+  user: AuthUser
   companyName: string
   cnpj: string
   sectorId: string
@@ -148,6 +157,7 @@ export function sectorIdFromLabel(label: string | null): string {
 }
 
 export function mapSnapshot(payloads: {
+  me: { user: AuthUser }
   empresa: EmpresaPayload
   contas: { contas: ContaNodePayload[] }
   dre: DrePayload
@@ -163,10 +173,11 @@ export function mapSnapshot(payloads: {
 
   return {
     snapshot: {
+      user: payloads.me.user,
       companyName: empresa.razaoSocial,
       cnpj: empresa.cnpj,
       sectorId: sectorIdFromLabel(empresa.setor),
-      exercicios: empresa.exercicios.map((ex) => ({ id: ex.periodo, label: ex.periodo })),
+      exercicios: empresa.exercicios.map((ex) => ({ id: ex.periodo, label: ex.periodo, auditado: ex.auditado })),
       accounts,
       dreByExercicio,
       dfc: mapDfc(payloads.dfc),

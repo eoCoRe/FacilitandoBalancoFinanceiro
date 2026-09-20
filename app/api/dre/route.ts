@@ -1,11 +1,22 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
+import { requirePermission } from "@/lib/server/auth/authz"
+import { handleRouteError } from "@/lib/server/http"
 import { computeDre, DRE_LINES, DRE_MEMO_LINE, type DreValues } from "@/lib/financial-data"
 
 // Linhas de DRE (Conta tipo DRE, só as de entrada) + valores lançados, com os
 // totalizadores calculados pelo mesmo motor puro do frontend (computeDre) —
 // nada de lógica de negócio duplicada entre cliente e servidor.
 export async function GET() {
+  try {
+    await requirePermission("consultar")
+    return await buildDre()
+  } catch (error) {
+    return handleRouteError(error)
+  }
+}
+
+async function buildDre() {
   const contas = await prisma.conta.findMany({
     where: { tipo: "DRE" },
     include: { valores: { include: { exercicio: true } } },

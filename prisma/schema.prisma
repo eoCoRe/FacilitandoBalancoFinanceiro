@@ -1,6 +1,5 @@
 // Schema fiel ao DER do TCC (§5.2 em diagramas_modelo_proprio.md), com um adicional:
-// AuditLog, para persistir a trilha de auditoria (RF08) que hoje só existe no
-// localStorage do frontend. CONTA cobre Balanço, DRE e DFC — o campo `tipo`
+// AuditLog, para persistir a trilha de auditoria (RF08). CONTA cobre Balanço, DRE e DFC — o campo `tipo`
 // distingue qual demonstração cada conta pertence, como o DER especifica.
 
 generator client {
@@ -18,6 +17,19 @@ enum ContaTipo {
   BP // Balanço Patrimonial
   DRE
   DFC
+}
+
+// Perfis do RFC (RNF02). A hierarquia (quem pode o quê) mora em lib/permissions.ts.
+enum Papel {
+  ANALISTA
+  COORDENADOR
+  ADMINISTRADOR
+}
+
+enum TokenTipo {
+  RECUPERACAO_SENHA // link enviado por e-mail para definir uma nova senha
+  LOGIN_2FA // código do segundo fator ao entrar
+  ATIVACAO_2FA // código que confirma que o e-mail recebe mensagens, ao ligar o 2FA
 }
 
 enum ExtracaoStatus {
@@ -38,13 +50,13 @@ model Empresa {
 }
 
 model Exercicio {
-  id         Int        @id @default(autoincrement())
-  empresaId  Int        @map("empresa_id")
-  empresa    Empresa    @relation(fields: [empresaId], references: [id], onDelete: Cascade)
-  periodo    String
-  auditado   Boolean    @default(false)
-  valores    Valor[]
-  extracoes  Extracao[]
+  id        Int        @id @default(autoincrement())
+  empresaId Int        @map("empresa_id")
+  empresa   Empresa    @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  periodo   String
+  auditado  Boolean    @default(false)
+  valores   Valor[]
+  extracoes Extracao[]
 
   @@unique([empresaId, periodo])
   @@map("exercicio")
@@ -111,6 +123,9 @@ model ValorExtraido {
   valor        Decimal  @db.Decimal(18, 2)
   paginaOrigem Int?     @map("pagina_origem")
   confianca    Float
+  // Texto exato que o leitor viu no documento (ex.: "Disponibilidades"): a rastreabilidade do RF06 precisa
+  // dele tanto para a linha mapeada quanto para a que ficou sem conta.
+  rotuloOrigem String?  @map("rotulo_origem")
 
   @@map("valor_extraido")
 }
@@ -118,14 +133,23 @@ model ValorExtraido {
 // Fora do DER original — persiste a trilha de auditoria (RF08) já usada nas
 // telas de Plano de Contas e Tabulação.
 model AuditLog {
-  id        Int      @id @default(autoincrement())
-  empresaId Int      @map("empresa_id")
-  empresa   Empresa  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
-  usuario   String
-  acao      String
-  detalhe   String
-  criadoEm  DateTime @default(now()) @map("criado_em")
+  id           Int      @id @default(autoincrement())
+  empresaId    Int      @map("empresa_id")
+  empresa      Empresa  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  usuario      String
+  acao         String
+  detalhe      String
+  criadoEm     DateTime @default(now()) @map("criado_em")
+  // Selo de integridade (RNF03): HMAC do registro encadeado ao selo do anterior. Editar um registro ou
+  // apagar um do meio quebra o encadeamento e a verificação aponta onde. Preenchido logo após a
+  // gravação (ver lib/server/audit/audit-seal.ts); nulo enquanto o registro ainda não foi selado.
+  selo         String?
+  seloAnterior String?  @map("selo_anterior")
+  // Posição na cadeia, na ordem em que os selos foram gerados. Não é o id: um registro gravado "atrasado" (id menor,
+  // mas confirmado depois de outro mais novo já selado) entra no fim da cadeia em vez de ficar sem selo.
+  seloSeq      Int?     @map("selo_seq")
 
+  @@index([seloSeq])
   @@map("audit_log")
 }
 
@@ -142,4 +166,76 @@ model LgpdErasureLog {
   criadoEm          DateTime @default(now()) @map("criado_em")
 
   @@map("lgpd_erasure_log")
+}
+
+// Quem usa o sistema (RNF02). Não há auto-cadastro: um administrador cria o usuário, que
+// entra com senha e/ou com a conta Google do mesmo e-mail (googleSub é preenchido no
+// primeiro login Google). Usuário nunca é apagado, só desativado, para que a trilha de
+// auditoria continue apontando para alguém que existiu.
+model Usuario {
+  id                  Int                 @id @default(autoincrement())
+  email               String              @unique
+  nome                String
+  senhaHash           String?             @map("senha_hash")
+  googleSub           String?             @unique @map("google_sub")
+  papel               Papel               @default(ANALISTA)
+  ativo               Boolean             @default(true)
+  criadoEm            DateTime            @default(now()) @map("criado_em")
+  ultimoLoginEm       DateTime?           @map("ultimo_login_em")
+  // Sessões emitidas antes deste instante são recusadas — atualizado ao trocar/redefinir a
+  // senha, para encerrar logins abertos em outros lugares.
+  sessoesValidasDesde DateTime            @default(now()) @map("sessoes_validas_desde")
+  // Verificação em 2 etapas por código enviado ao e-mail. Além da escolha do usuário, um
+  // administrador pode exigi-la por perfil (PoliticaSeguranca).
+  doisFatoresAtivo    Boolean             @default(false) @map("dois_fatores_ativo")
+  // Segundo fator por app autenticador (TOTP, RFC 6238). O segredo fica CIFRADO (AES-256-GCM, chave
+  // derivada de AUTH_SECRET); só vale depois de confirmado com um código (totpAtivo). O último passo
+  // de 30 s aceito impede reaproveitar o mesmo código. Coexiste com o 2FA por e-mail: se o TOTP está
+  // ativo, é ele que é pedido no login.
+  totpSegredo         String?             @map("totp_segredo")
+  totpAtivo           Boolean             @default(false) @map("totp_ativo")
+  totpUltimoPasso     Int?                @map("totp_ultimo_passo")
+  tokens              TokenVerificacao[]
+  codigosRecuperacao  CodigoRecuperacao[]
+
+  @@map("usuario")
+}
+
+// Links de recuperação de senha e códigos de 2 etapas. Guarda só o que não permite refazer o
+// segredo: o hash do trecho secreto do link, ou o HMAC do código (com AUTH_SECRET). Uso único,
+// com validade curta e limite de tentativas para códigos.
+model TokenVerificacao {
+  id          String    @id // aleatório, parte pública do link/desafio
+  usuarioId   Int       @map("usuario_id")
+  usuario     Usuario   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  tipo        TokenTipo
+  segredoHash String    @map("segredo_hash")
+  tentativas  Int       @default(0)
+  expiraEm    DateTime  @map("expira_em")
+  usadoEm     DateTime? @map("usado_em")
+  criadoEm    DateTime  @default(now()) @map("criado_em")
+
+  @@index([usuarioId, tipo])
+  @@map("token_verificacao")
+}
+
+// Códigos de recuperação do TOTP (para quem perdeu o celular): uso único, guardados só como HMAC.
+model CodigoRecuperacao {
+  id         Int       @id @default(autoincrement())
+  usuarioId  Int       @map("usuario_id")
+  usuario    Usuario   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  codigoHash String    @map("codigo_hash")
+  usadoEm    DateTime? @map("usado_em")
+  criadoEm   DateTime  @default(now()) @map("criado_em")
+
+  @@index([usuarioId])
+  @@map("codigo_recuperacao")
+}
+
+// Exigência de 2 etapas por perfil, definida por um administrador. Sem linha = não exige.
+model PoliticaSeguranca {
+  papel                  Papel   @id
+  doisFatoresObrigatorio Boolean @default(false) @map("dois_fatores_obrigatorio")
+
+  @@map("politica_seguranca")
 }

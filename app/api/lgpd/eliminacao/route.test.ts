@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
+import { getCurrentUser } from "@/lib/server/auth/current-user"
 
 const { prisma } = vi.hoisted(() => ({
   prisma: {
@@ -16,17 +17,15 @@ vi.mock("@/lib/db", () => ({ prisma }))
 
 import { DELETE } from "./route"
 
-function buildRequest(headers: Record<string, string> = {}, body?: unknown) {
+function buildRequest(body?: unknown) {
   return new Request("http://localhost/api/lgpd/eliminacao", {
     method: "DELETE",
-    headers,
     body: body === undefined ? undefined : JSON.stringify(body),
   })
 }
 
 beforeEach(() => {
   vi.clearAllMocks()
-  vi.stubEnv("LGPD_ADMIN_TOKEN", "segredo-123")
   prisma.empresa.findFirst.mockResolvedValue({ id: 1 })
   prisma.$transaction.mockImplementation((ops: Promise<unknown>[]) => Promise.all(ops))
   prisma.exercicio.count.mockResolvedValue(0)
@@ -35,21 +34,25 @@ beforeEach(() => {
   prisma.auditLog.count.mockResolvedValue(0)
 })
 
-afterEach(() => {
-  vi.unstubAllEnvs()
-})
-
 describe("DELETE /api/lgpd/eliminacao", () => {
-  it("rejeita sem o token (401), sem apagar nada", async () => {
+  it("rejeita sem login (401), sem apagar nada", async () => {
+    vi.mocked(getCurrentUser).mockResolvedValue(null)
     const response = await DELETE(buildRequest())
     expect(response.status).toBe(401)
     expect(prisma.empresa.delete).not.toHaveBeenCalled()
   })
 
-  it("com token correto e sem corpo, apaga a empresa e devolve o resumo do que foi apagado", async () => {
+  it("rejeita perfil que não é administrador (403), sem apagar nada", async () => {
+    vi.mocked(getCurrentUser).mockResolvedValue({ id: 3, email: "a@teste.com", nome: "A", papel: "ANALISTA" })
+    const response = await DELETE(buildRequest())
+    expect(response.status).toBe(403)
+    expect(prisma.empresa.delete).not.toHaveBeenCalled()
+  })
+
+  it("como administrador e sem corpo, apaga a empresa e devolve o resumo do que foi apagado", async () => {
     prisma.empresa.findUnique.mockResolvedValue({ id: 1, cnpj: "12.345.678/0001-90", razaoSocial: "Empresa X" })
 
-    const response = await DELETE(buildRequest({ "x-lgpd-token": "segredo-123" }))
+    const response = await DELETE(buildRequest())
     const body = await response.json()
 
     expect(response.status).toBe(200)
@@ -57,13 +60,21 @@ describe("DELETE /api/lgpd/eliminacao", () => {
     expect(prisma.empresa.delete).toHaveBeenCalledWith({ where: { id: 1 } })
   })
 
-  it("aceita solicitadoPor opcional no corpo", async () => {
+  it("registra o administrador que executou como solicitante quando não há corpo", async () => {
+    prisma.empresa.findUnique.mockResolvedValue({ id: 1, cnpj: "12.345.678/0001-90", razaoSocial: "Empresa X" })
+    await DELETE(buildRequest())
+    expect(prisma.lgpdErasureLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ solicitadoPor: "admin@teste.com" }) }),
+    )
+  })
+
+  it("aceita solicitadoPor opcional no corpo e registra também quem executou", async () => {
     prisma.empresa.findUnique.mockResolvedValue({ id: 1, cnpj: "12.345.678/0001-90", razaoSocial: "Empresa X" })
 
-    await DELETE(buildRequest({ "x-lgpd-token": "segredo-123" }, { solicitadoPor: "Titular via e-mail" }))
+    await DELETE(buildRequest({ solicitadoPor: "Titular via e-mail" }))
 
     expect(prisma.lgpdErasureLog.create).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ solicitadoPor: "Titular via e-mail" }) }),
+      expect.objectContaining({ data: expect.objectContaining({ solicitadoPor: "Titular via e-mail (executado por admin@teste.com)" }) }),
     )
   })
 
@@ -71,7 +82,6 @@ describe("DELETE /api/lgpd/eliminacao", () => {
     const response = await DELETE(
       new Request("http://localhost/api/lgpd/eliminacao", {
         method: "DELETE",
-        headers: { "x-lgpd-token": "segredo-123" },
         body: "{ não é json",
       }),
     )

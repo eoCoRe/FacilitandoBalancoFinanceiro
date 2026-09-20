@@ -11,18 +11,31 @@ import { OpiniaoDeVendaScreen } from "@/components/screens/opiniao-de-venda-scre
 import { ExtracaoIaScreen } from "@/components/screens/extracao-ia-screen"
 import { MutationErrorBanner, StoreLoadGate } from "@/components/store-status"
 import type { ScreenId } from "@/lib/navigation"
-import { useFinancialStore } from "@/lib/store"
+import { AuditoriaScreen } from "@/components/screens/auditoria-screen"
+import { UsuariosScreen } from "@/components/screens/usuarios-screen"
+import { can } from "@/lib/permissions"
+import { FinancialDataProvider, useFinancialStore } from "@/lib/store"
 
+// O provider mora aqui (e não no layout) porque carrega os dados da API, que exigem login:
+// no layout ele também rodaria em /login e tomaria 401.
 export default function Page() {
+  return (
+    <FinancialDataProvider>
+      <App />
+    </FinancialDataProvider>
+  )
+}
+
+function App() {
   const [screen, setScreen] = useState<ScreenId>("opiniao-de-venda")
-  const { status } = useFinancialStore()
+  const { status, user } = useFinancialStore()
 
   if (status !== "ready") return <StoreLoadGate />
 
   return (
     <div className="flex min-h-dvh bg-background">
       <MutationErrorBanner />
-      <div className="sticky top-0 h-dvh">
+      <div className="sticky top-0 h-dvh print:hidden">
         <AppSidebar active={screen} onNavigate={setScreen} />
       </div>
 
@@ -34,6 +47,8 @@ export default function Page() {
         {screen === "indices" && <IndicesScreen />}
         {screen === "opiniao-de-venda" && <OpiniaoDeVendaScreen onNavigate={setScreen} />}
         {screen === "extracao-ia" && <ExtracaoIaScreen onNavigate={setScreen} />}
+        {screen === "auditoria" && <AuditoriaScreen />}
+        {screen === "usuarios" && can(user.papel, "gerir-usuarios") && <UsuariosScreen />}
       </main>
     </div>
   )

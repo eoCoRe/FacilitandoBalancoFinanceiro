@@ -8,6 +8,7 @@ import {
   mapSnapshot,
   type AuditEntry,
   type AuditoriaPayload,
+  type AuthUser,
   type ContaNodePayload,
   type DfcPayload,
   type DrePayload,
@@ -29,10 +30,13 @@ export type { AuditEntry, Exercicio }
 type Status = "loading" | "ready" | "error"
 
 export interface ExtractionEntry {
-  code: string
+  // null = o leitor viu a linha mas ela não foi ligada a nenhuma conta: só rastreabilidade, não lança valor.
+  code: string | null
   value: number
   confidence: number
   page?: number
+  // Texto exato lido no documento (guardado como origem do valor).
+  label?: string
 }
 
 interface StoreApi extends FinancialSnapshot {
@@ -44,6 +48,8 @@ interface StoreApi extends FinancialSnapshot {
   setSector: (sectorId: string) => void
   // Devolve o id do exercício criado, ou null se o servidor recusou (ex.: período já existe).
   addExercicio: (label: string) => Promise<string | null>
+  // Marca/desmarca o exercício como auditado (informativo; só coordenador ou acima).
+  setExercicioAuditado: (exercicioId: string, auditado: boolean) => void
   updateAccountValue: (code: string, exercicioId: string, value: number | undefined) => void
   updateDreValue: (exercicioId: string, lineId: string, value: number | undefined) => void
   addAccountNode: (parentCode: string | null, name: string, isGroup: boolean) => Promise<boolean>
@@ -53,6 +59,8 @@ interface StoreApi extends FinancialSnapshot {
 }
 
 const EMPTY: FinancialSnapshot = {
+  // Placeholder de menor privilégio: o app só renderiza depois da carga (StoreLoadGate).
+  user: { id: 0, nome: "", email: "", papel: "ANALISTA", doisFatoresAtivo: false, totpAtivo: false, doisFatoresObrigatorio: false } satisfies AuthUser,
   companyName: "",
   cnpj: "",
   sectorId: "",
@@ -72,15 +80,19 @@ const EXTRACTION_MODEL = "leitor-pdf-local"
 // e uma linha na trilha de auditoria.
 const VALUE_WRITE_DELAY_MS = 600
 
+// A cada quanto tempo (com a aba aberta) a sessão é reconferida no servidor.
+const SESSION_RECHECK_MS = 2 * 60 * 1000
+
 async function fetchSnapshot() {
-  const [empresa, contas, dre, dfc, auditoria] = await Promise.all([
+  const [me, empresa, contas, dre, dfc, auditoria] = await Promise.all([
+    api<{ user: AuthUser }>("/api/auth/me"),
     api<EmpresaPayload>("/api/empresa"),
     api<{ contas: ContaNodePayload[] }>("/api/plano-de-contas"),
     api<DrePayload>("/api/dre"),
     api<DfcPayload>("/api/dfc"),
     api<AuditoriaPayload>("/api/auditoria"),
   ])
-  return mapSnapshot({ empresa, contas, dre, dfc, auditoria })
+  return mapSnapshot({ me, empresa, contas, dre, dfc, auditoria })
 }
 
 function mapAccountTree(accounts: Account[], code: string, fn: (a: Account) => Account): Account[] {
@@ -127,6 +139,29 @@ export function FinancialDataProvider({ children }: { children: ReactNode }) {
       cancelled = true
     }
   }, [applySnapshot])
+
+  // Conta desativada, perfil rebaixado ou senha trocada em outro lugar só seriam notados na
+  // próxima gravação (mudar de tela não chama a API). Reconferir a sessão ao voltar para a aba e
+  // de tempos em tempos fecha essa brecha; um 401 aqui já leva ao login (ver lib/api-client.ts).
+  useEffect(() => {
+    if (status !== "ready") return
+    const recheck = () => {
+      if (document.visibilityState !== "visible") return
+      api<{ user: AuthUser }>("/api/auth/me")
+        .then(({ user }) => {
+          // Perfil rebaixado (ou 2 etapas ligadas/desligadas) noutro lugar: a tela passa a esconder o que a pessoa não
+          // pode mais fazer, sem esperar um 403 numa gravação. Mantém o mesmo objeto se nada mudou.
+          setData((prev) => (JSON.stringify(prev.user) === JSON.stringify(user) ? prev : { ...prev, user }))
+        })
+        .catch(() => {}) // um 401 já leva ao login (api-client); outros erros passageiros ficam para a próxima conferência
+    }
+    const timer = setInterval(recheck, SESSION_RECHECK_MS)
+    document.addEventListener("visibilitychange", recheck)
+    return () => {
+      clearInterval(timer)
+      document.removeEventListener("visibilitychange", recheck)
+    }
+  }, [status])
 
   const reload = useCallback(() => {
     setStatus("loading")
@@ -237,13 +272,28 @@ export function FinancialDataProvider({ children }: { children: ReactNode }) {
         }
         setData((prev) => ({
           ...prev,
-          exercicios: [...prev.exercicios, { id: exercicio.periodo, label: exercicio.periodo }],
+          exercicios: [...prev.exercicios, { id: exercicio.periodo, label: exercicio.periodo, auditado: false }],
         }))
         return exercicio.periodo
       })
       return created ?? null
     },
     [enqueue, flushValueWrites],
+  )
+
+  const setExercicioAuditado = useCallback(
+    (exercicioId: string, auditado: boolean) => {
+      setData((prev) => ({
+        ...prev,
+        exercicios: prev.exercicios.map((e) => (e.id === exercicioId ? { ...e, auditado } : e)),
+      }))
+      void enqueue(async () => {
+        const exercicioDbId = ids.current.exercicioIdByPeriodo[exercicioId]
+        if (!exercicioDbId) throw new ApiError(`Exercício ${exercicioId} não encontrado.`)
+        await api(`/api/exercicios/${exercicioDbId}`, { method: "PATCH", body: { auditado } })
+      })
+    },
+    [enqueue],
   )
 
   const updateAccountValue = useCallback(
@@ -345,9 +395,15 @@ export function FinancialDataProvider({ children }: { children: ReactNode }) {
         const exercicioDbId = ids.current.exercicioIdByPeriodo[exercicioId]
         if (!exercicioDbId) throw new ApiError(`Exercício ${exercicioId} não encontrado.`)
         const itens = entries.map((entry) => {
-          const contaId = ids.current.contaIdByCode[entry.code]
-          if (!contaId) throw new ApiError(`Conta ${entry.code} não encontrada.`)
-          return { contaId, valor: entry.value, confianca: entry.confidence, paginaOrigem: entry.page }
+          const contaId = entry.code === null ? null : ids.current.contaIdByCode[entry.code]
+          if (entry.code !== null && !contaId) throw new ApiError(`Conta ${entry.code} não encontrada.`)
+          return {
+            contaId,
+            valor: entry.value,
+            confianca: entry.confidence,
+            paginaOrigem: entry.page,
+            rotulo: entry.label?.slice(0, 200),
+          }
         })
         await api("/api/extracoes", {
           method: "POST",
@@ -373,6 +429,7 @@ export function FinancialDataProvider({ children }: { children: ReactNode }) {
       reload,
       setSector,
       addExercicio,
+      setExercicioAuditado,
       updateAccountValue,
       updateDreValue,
       addAccountNode,
@@ -389,6 +446,7 @@ export function FinancialDataProvider({ children }: { children: ReactNode }) {
       reload,
       setSector,
       addExercicio,
+      setExercicioAuditado,
       updateAccountValue,
       updateDreValue,
       addAccountNode,

@@ -5,6 +5,8 @@ import { Check, History, Plus, X } from "lucide-react"
 import { GlossaryTerm } from "@/components/glossary-term"
 import { PageHeader } from "@/components/page-header"
 import { ScaleToggle } from "@/components/scale-toggle"
+import { ExercicioAuditado } from "@/components/exercicio-auditado"
+import { can } from "@/lib/permissions"
 import { useFinancialStore } from "@/lib/store"
 import {
   DRE_LINES,
@@ -127,6 +129,14 @@ export function TabulacaoScreen() {
               </option>
             ))}
           </select>
+
+          {activeExercicioId && (
+            <ExercicioAuditado
+              auditado={store.exercicios.find((e) => e.id === activeExercicioId)?.auditado ?? false}
+              canToggle={can(store.user.papel, "auditar-exercicio")}
+              onToggle={(auditado) => store.setExercicioAuditado(activeExercicioId, auditado)}
+            />
+          )}
 
           {creatingExercicio ? (
             <div className="flex items-center gap-1">

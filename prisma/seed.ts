@@ -1,6 +1,4 @@
 import "dotenv/config"
-import { PrismaClient } from "@prisma/client"
-import { PrismaPg } from "@prisma/adapter-pg"
 import {
   COMPANY,
   createSeedAccounts,
@@ -13,11 +11,10 @@ import {
   type Account,
 } from "../lib/financial-data"
 import { DEFAULT_SECTOR_ID, sectorLabel } from "../lib/sector-benchmarks"
+import { prisma } from "../lib/db" // o mesmo cliente do app: assim o registro de auditoria inicial já nasce SELADO (logAudit)
+import { logAudit } from "../lib/server/audit/audit"
+import { assertAdminEnvValid, ensureAdmin } from "../lib/server/auth/ensure-admin"
 
-const connectionString = process.env.DATABASE_URL
-if (!connectionString) throw new Error("DATABASE_URL não configurada — veja .env.example")
-
-const prisma = new PrismaClient({ adapter: new PrismaPg(connectionString) })
 
 function slugify(label: string): string {
   return label
@@ -29,9 +26,9 @@ function slugify(label: string): string {
     .replace(/^-+|-+$/g, "")
 }
 
-// Espelha lib/store.tsx::seedData() — mesma empresa, exercícios e Plano de Contas
-// que o frontend usa como dados de demonstração, só que persistidos no Postgres
-// em vez de localStorage.
+// Grava no Postgres a empresa, os exercícios e o Plano de Contas de demonstração de
+// lib/financial-data.ts (createSeed*). Só o seed e os testes usam esses dados de exemplo;
+// a interface lê tudo do banco pelas rotas de API.
 async function seedContaTree(accounts: Account[], parentId: number | null, exercicioIdByPeriodo: Map<string, number>) {
   for (const account of accounts) {
     const conta = await prisma.conta.create({
@@ -50,7 +47,22 @@ async function seedContaTree(accounts: Account[], parentId: number | null, exerc
   }
 }
 
+// O seed é para DESENVOLVIMENTO e demonstração: apaga empresa, plano de contas, valores, extrações e a
+// auditoria (os usuários ficam). Em produção isso destruiria dados reais, então ele se recusa a rodar lá
+// sem confirmação explícita. Para só criar/restabelecer o administrador, use `pnpm admin:ensure`.
+function refuseInProduction() {
+  if (process.env.NODE_ENV === "production" && process.env.SEED_CONFIRM_WIPE !== "sim") {
+    throw new Error(
+      "O seed APAGA os dados de negócio (empresa, plano de contas, valores, extrações e auditoria) e está em NODE_ENV=production. " +
+        "Para só criar o administrador, rode `pnpm admin:ensure`. Se realmente quer apagar tudo, defina SEED_CONFIRM_WIPE=sim.",
+    )
+  }
+}
+
 async function main() {
+  refuseInProduction()
+  // Antes de apagar qualquer coisa: uma SEED_ADMIN_PASSWORD que a política recusa não pode derrubar os dados e só então falhar.
+  assertAdminEnvValid()
   console.log("Limpando dados existentes...")
   await prisma.valorExtraido.deleteMany()
   await prisma.extracao.deleteMany()
@@ -116,14 +128,14 @@ async function main() {
   }
 
   console.log("Registrando log de auditoria inicial...")
-  await prisma.auditLog.create({
-    data: {
-      empresaId: empresa.id,
-      usuario: "Sistema",
-      acao: "Dados de exemplo carregados",
-      detalhe: `${SEED_EXERCICIOS.length} exercícios de demonstração (${SEED_EXERCICIOS.join(", ")}).`,
-    },
-  })
+  await logAudit(
+    empresa.id,
+    "Dados de exemplo carregados",
+    `${SEED_EXERCICIOS.length} exercícios de demonstração (${SEED_EXERCICIOS.join(", ")}).`,
+    "Sistema",
+  )
+
+  await ensureAdmin(prisma)
 
   console.log("Seed concluído.")
 }

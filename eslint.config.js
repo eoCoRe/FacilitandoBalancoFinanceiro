@@ -9,7 +9,7 @@ import { defineConfig, globalIgnores } from 'eslint/config'
 // eslint-config-next já traz react-hooks e @typescript-eslint embutidos — não
 // declarar de novo (o ESLint recusa registrar o mesmo plugin duas vezes).
 export default defineConfig([
-  globalIgnores(['.next', 'node_modules', 'dist', 'next-env.d.ts']),
+  globalIgnores(['.next', 'node_modules', 'dist', 'coverage', 'next-env.d.ts']),
   {
     files: ['**/*.{ts,tsx}'],
     extends: [js.configs.recommended, ...nextCoreWebVitals, ...nextTypescript],

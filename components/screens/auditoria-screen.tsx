@@ -1,0 +1,385 @@
+"use client"
+
+import { useEffect, useRef, useState, type FormEvent } from "react"
+import { AlertTriangle, CheckCircle2, Download, Loader2, Search, ShieldCheck } from "lucide-react"
+import { PageHeader } from "@/components/page-header"
+import { Button } from "@/components/ui/button"
+import { api, errorMessage } from "@/lib/api-client"
+import { downloadFromApi } from "@/lib/download"
+import { can } from "@/lib/permissions"
+import { useFinancialStore } from "@/lib/store"
+
+interface Registro {
+  id: number
+  usuario: string
+  acao: string
+  detalhe: string
+  criadoEm: string
+}
+
+interface Pagina {
+  logs: Registro[]
+  proximoCursor: number | null
+  acoes?: string[]
+}
+
+interface Integridade {
+  integra: boolean
+  verificados: number
+  naoSelados: number
+  primeiroId: number | null
+  ultimoId: number | null
+  quebra: { id: number; motivo: string; tipo: "conteudo" | "encadeamento" | "posicao" | "sem-selo" } | null
+}
+
+interface Filtros {
+  usuario: string
+  acao: string
+  de: string // yyyy-mm-dd (dia local)
+  ate: string
+  q: string
+}
+
+const SEM_FILTROS: Filtros = { usuario: "", acao: "", de: "", ate: "", q: "" }
+
+// Dia (yyyy-mm-dd) do campo de data -> instante ISO. Um ano absurdo que o navegador aceita (ex.: 275760) vira data inválida:
+// devolve uma mensagem clara em vez do "Invalid time value" do JavaScript.
+function toIsoDay(day: string, time: string): string {
+  const date = new Date(`${day}${time}`)
+  if (Number.isNaN(date.getTime())) throw new Error("Data inválida nos filtros. Confira o dia informado.")
+  return date.toISOString()
+}
+
+// Filtros -> query string. As datas são dias no fuso do usuário: início do dia inicial e fim do dia final.
+function toQuery(f: Filtros, extra: Record<string, string> = {}): string {
+  const p = new URLSearchParams()
+  if (f.usuario.trim()) p.set("usuario", f.usuario.trim())
+  if (f.acao) p.set("acao", f.acao)
+  if (f.q.trim()) p.set("q", f.q.trim())
+  if (f.de) p.set("de", toIsoDay(f.de, "T00:00:00"))
+  if (f.ate) p.set("ate", toIsoDay(f.ate, "T23:59:59.999"))
+  for (const [k, v] of Object.entries(extra)) p.set(k, v)
+  return p.toString()
+}
+
+const fetchPage = (f: Filtros, extra: Record<string, string> = {}) => api<Pagina>(`/api/auditoria?${toQuery(f, extra)}`)
+
+const inputClass =
+  "rounded-md border border-border bg-background px-2.5 py-1.5 text-sm text-foreground outline-none focus:border-ring"
+
+export function AuditoriaScreen() {
+  const { user } = useFinancialStore()
+  const [filtros, setFiltros] = useState<Filtros>(SEM_FILTROS)
+  const [aplicados, setAplicados] = useState<Filtros>(SEM_FILTROS)
+  const [registros, setRegistros] = useState<Registro[] | null>(null)
+  const [cursor, setCursor] = useState<number | null>(null)
+  const [acoes, setAcoes] = useState<string[]>([])
+  const [carregando, setCarregando] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [integridade, setIntegridade] = useState<Integridade | null>(null)
+  const [verificando, setVerificando] = useState(false)
+  const [selando, setSelando] = useState(false)
+  const [exportando, setExportando] = useState(false)
+  // Numera as buscas de página inicial/filtro: só a MAIS RECENTE pode preencher a tela. Sem isso, a carga inicial
+  // (lenta) chegaria depois de um filtro já aplicado e sobrescreveria a tabela com dados sem filtro.
+  const buscaAtual = useRef(0)
+
+  useEffect(() => {
+    let cancelled = false
+    const busca = ++buscaAtual.current
+    fetchPage(SEM_FILTROS, { opcoes: "1" })
+      .then((pagina) => {
+        if (cancelled || busca !== buscaAtual.current) return
+        setRegistros(pagina.logs)
+        setCursor(pagina.proximoCursor)
+        setAcoes(pagina.acoes ?? [])
+      })
+      .catch((err) => {
+        if (!cancelled) setError(errorMessage(err))
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  function filtrar(event: FormEvent) {
+    event.preventDefault()
+    void aplicar(filtros)
+  }
+
+  async function aplicar(novos: Filtros) {
+    if (carregando) return
+    setCarregando(true)
+    setError(null)
+    const busca = ++buscaAtual.current
+    try {
+      // Pede também as ações existentes: podem ter surgido novas (ex.: "Auditoria exportada") desde a abertura.
+      const pagina = await fetchPage(novos, { opcoes: "1" })
+      if (busca !== buscaAtual.current) return // outra busca (mais nova) já assumiu a tela
+      setAplicados(novos)
+      setRegistros(pagina.logs)
+      setCursor(pagina.proximoCursor)
+      if (pagina.acoes) setAcoes(pagina.acoes)
+    } catch (err) {
+      setError(errorMessage(err))
+    } finally {
+      setCarregando(false)
+    }
+  }
+
+  async function carregarMais() {
+    if (carregando || cursor === null) return
+    setCarregando(true)
+    setError(null)
+    try {
+      const pagina = await fetchPage(aplicados, { cursor: String(cursor) })
+      setRegistros((prev) => [...(prev ?? []), ...pagina.logs])
+      setCursor(pagina.proximoCursor)
+    } catch (err) {
+      setError(errorMessage(err))
+    } finally {
+      setCarregando(false)
+    }
+  }
+
+  // "Limpar" também refaz a busca: senão os campos ficariam vazios com a tabela (e a exportação) ainda filtradas.
+  function limpar() {
+    setFiltros(SEM_FILTROS)
+    void aplicar(SEM_FILTROS)
+  }
+
+  // A exportação leva os filtros APLICADOS (o que está na tabela), não o que está só digitado nos campos.
+  async function exportar() {
+    if (exportando) return
+    setExportando(true)
+    setError(null)
+    try {
+      await downloadFromApi(`/api/auditoria/exportar?${toQuery(aplicados)}`, "auditoria.csv")
+    } catch (err) {
+      setError(errorMessage(err))
+    } finally {
+      setExportando(false)
+    }
+  }
+
+  const podeExportar = can(user.papel, "exportar-auditoria")
+  const podeSelar = can(user.papel, "selar-auditoria")
+
+  // Recuperação de uma falha de selagem (ou histórico anterior à selagem): o servidor só sela o que ele mesmo acabou de
+  // gravar (senão seria uma brecha para quem só tem o banco), então o administrador decide. A ação fica registrada na trilha.
+  async function selarPendentes() {
+    if (selando) return
+    if (
+      !window.confirm(
+        "O sistema vai selar agora TODOS os registros que estão sem selo, atestando que estão corretos. Só faça isso se tiver certeza de que ninguém mexeu neles no banco. A ação fica registrada na trilha. Continuar?",
+      )
+    ) {
+      return
+    }
+    setSelando(true)
+    setError(null)
+    try {
+      await api("/api/auditoria/selar-pendentes", { method: "POST" })
+      await verificarIntegridade()
+    } catch (err) {
+      setError(errorMessage(err))
+    } finally {
+      setSelando(false)
+    }
+  }
+
+  // Confere o selo de cada registro (nenhum alterado, apagado no meio ou inserido). Não sela nada; o servidor
+  // registra a própria verificação na trilha.
+  async function verificarIntegridade() {
+    if (verificando) return
+    setVerificando(true)
+    setError(null)
+    try {
+      setIntegridade(await api<Integridade>("/api/auditoria/integridade", { method: "POST" }))
+    } catch (err) {
+      setIntegridade(null)
+      setError(errorMessage(err))
+    } finally {
+      setVerificando(false)
+    }
+  }
+
+  return (
+    <div className="flex flex-col">
+      <PageHeader
+        eyebrow="Rastreabilidade"
+        title="Auditoria"
+        subtitle="Quem fez o quê e quando: lançamentos, alterações no plano de contas, acessos e ações administrativas."
+        actions={
+          podeExportar ? (
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" size="sm" className="h-8 gap-1.5" disabled={verificando} onClick={() => void verificarIntegridade()}>
+                {verificando ? <Loader2 className="size-3.5 animate-spin" /> : <ShieldCheck className="size-3.5" />}
+                Verificar integridade
+              </Button>
+              {/* Por fetch: um erro (sessão expirada, limite) vira mensagem aqui, sem trocar o app por um JSON cru. O servidor
+                  confere a permissão. */}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 gap-1.5"
+                disabled={exportando}
+                title="Exporta o que está na tabela (com os filtros aplicados)"
+                onClick={() => void exportar()}
+              >
+                {exportando ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
+                Exportar CSV
+              </Button>
+            </div>
+          ) : undefined
+        }
+      />
+
+      <div className="flex flex-col gap-4 px-8 py-6">
+        <form onSubmit={filtrar} className="grid gap-3 rounded-md border border-border bg-card p-4 md:grid-cols-6">
+          <input
+            placeholder="Usuário (e-mail)"
+            aria-label="Filtrar por usuário"
+            value={filtros.usuario}
+            onChange={(e) => setFiltros({ ...filtros, usuario: e.target.value })}
+            className={inputClass}
+          />
+          <select
+            aria-label="Filtrar por ação"
+            value={filtros.acao}
+            onChange={(e) => setFiltros({ ...filtros, acao: e.target.value })}
+            className={inputClass}
+          >
+            <option value="">Todas as ações</option>
+            {acoes.map((a) => (
+              <option key={a} value={a}>
+                {a}
+              </option>
+            ))}
+          </select>
+          <input
+            type="date"
+            aria-label="Data inicial"
+            value={filtros.de}
+            onChange={(e) => setFiltros({ ...filtros, de: e.target.value })}
+            className={inputClass}
+          />
+          <input
+            type="date"
+            aria-label="Data final"
+            value={filtros.ate}
+            onChange={(e) => setFiltros({ ...filtros, ate: e.target.value })}
+            className={inputClass}
+          />
+          <input
+            placeholder="Buscar no detalhe…"
+            aria-label="Buscar no texto"
+            value={filtros.q}
+            onChange={(e) => setFiltros({ ...filtros, q: e.target.value })}
+            className={inputClass}
+          />
+          <div className="flex gap-2">
+            <Button type="submit" size="sm" disabled={carregando} className="flex-1 gap-1.5">
+              {carregando ? <Loader2 className="animate-spin" /> : <Search />}
+              Filtrar
+            </Button>
+            <Button type="button" size="sm" variant="outline" onClick={limpar}>
+              Limpar
+            </Button>
+          </div>
+        </form>
+
+        {error && (
+          <div
+            role="alert"
+            className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive"
+          >
+            <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
+
+        {integridade &&
+          (integridade.integra ? (
+            <div role="status" className="flex items-start gap-2 rounded-md border border-ok/30 bg-ok/5 px-3 py-2 text-sm text-ok">
+              <CheckCircle2 className="mt-0.5 size-4 shrink-0" />
+              <span>
+                Trilha íntegra: {integridade.verificados} registro(s) conferidos
+                {integridade.primeiroId !== null && ` (do #${integridade.primeiroId} ao #${integridade.ultimoId})`}. Nenhum foi alterado,
+                apagado no meio ou inserido depois de gravado.
+                {integridade.naoSelados > 0 && ` ${integridade.naoSelados} registro(s) ainda sem selo.`}
+              </span>
+            </div>
+          ) : (
+            <div role="alert" className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+              <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+              <span>
+                <strong>A trilha foi adulterada.</strong> Problema no registro #{integridade.quebra?.id}: {integridade.quebra?.motivo}
+                {podeSelar && integridade.quebra?.tipo === "sem-selo" && (
+                  <>
+                    {" "}
+                    <button
+                      type="button"
+                      onClick={() => void selarPendentes()}
+                      disabled={selando}
+                      className="font-medium underline underline-offset-2 disabled:opacity-60"
+                    >
+                      {selando ? "Selando…" : "Foi só uma falha de selagem: selar os pendentes"}
+                    </button>
+                  </>
+                )}
+              </span>
+            </div>
+          ))}
+
+        {registros === null && !error ? (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground" role="status">
+            <Loader2 className="size-4 animate-spin" />
+            Carregando a auditoria…
+          </div>
+        ) : registros !== null && registros.length === 0 ? (
+          <p className="rounded-md border border-border bg-card px-4 py-8 text-center text-sm text-muted-foreground">
+            Nenhum registro encontrado com estes filtros.
+          </p>
+        ) : (
+          registros !== null && (
+            <div className="overflow-x-auto rounded-md border border-border bg-card">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border text-left text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                    <th className="px-3 py-3">Data e hora</th>
+                    <th className="px-3 py-3">Usuário</th>
+                    <th className="px-3 py-3">Ação</th>
+                    <th className="px-3 py-3">Detalhe</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {registros.map((r) => (
+                    <tr key={r.id} className="border-b border-border align-top last:border-0">
+                      <td className="whitespace-nowrap px-3 py-2.5 font-mono text-xs text-muted-foreground">
+                        {new Date(r.criadoEm).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "medium" })}
+                      </td>
+                      <td className="px-3 py-2.5 text-xs">{r.usuario}</td>
+                      <td className="px-3 py-2.5 font-medium text-foreground">{r.acao}</td>
+                      <td className="px-3 py-2.5 text-muted-foreground">{r.detalhe}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )
+        )}
+
+        {cursor !== null && (
+          <div className="flex justify-center">
+            <Button type="button" variant="outline" size="sm" disabled={carregando} onClick={carregarMais}>
+              {carregando && <Loader2 className="animate-spin" />}
+              Carregar mais
+            </Button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}

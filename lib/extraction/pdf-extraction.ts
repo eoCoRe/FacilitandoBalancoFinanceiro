@@ -11,6 +11,8 @@ export interface ExtractedRow {
   id: string
   code: string | null
   suggestedName: string
+  // Texto exato lido no documento (antes do casamento com o Plano de Contas): é a origem do valor (RF06).
+  sourceLabel: string
   value: number
   confidence: number
   page: number
@@ -19,6 +21,11 @@ export interface ExtractedRow {
 // Score mínimo para atribuir automaticamente uma conta em vez de deixar "não
 // reconhecida" (mapeamento manual) — melhor falhar visível do que arriscar um palpite.
 const MATCH_THRESHOLD = 70
+
+// A linha repetida vira "sem conta": mantém o texto, a página e a confiança lidos, mas não disputa a conta.
+function semConta(row: ExtractedRow): ExtractedRow {
+  return { ...row, code: null, suggestedName: row.sourceLabel }
+}
 
 export function extractRowsFromLines(lines: { text: string; page: number }[], accounts: Account[]): ExtractedRow[] {
   const leaves = collectLeaves(accounts)
@@ -36,6 +43,7 @@ export function extractRowsFromLines(lines: { text: string; page: number }[], ac
       id: `pdf-${line.page}-${i}`,
       code,
       suggestedName: account && code ? account.name : parsed.label,
+      sourceLabel: parsed.label,
       value: parsed.value,
       confidence,
       page: line.page,
@@ -44,7 +52,17 @@ export function extractRowsFromLines(lines: { text: string; page: number }[], ac
     if (code) {
       const existingIndex = rowIndexByCode.get(code)
       if (existingIndex !== undefined) {
-        if (rows[existingIndex].confidence < confidence) rows[existingIndex] = row
+        // A mesma conta apareceu de novo (ex.: no balanço e numa nota explicativa). Uma conta recebe UM valor, e fica
+        // a leitura de maior confiança; a outra NÃO é jogada fora: continua na lista como linha SEM conta (só vai
+        // para o histórico, sem lançar valor), para a trilha do RF06 guardar tudo o que foi lido e o analista poder
+        // conferir a divergência.
+        const anterior = rows[existingIndex]
+        if (anterior.confidence < confidence) {
+          rows[existingIndex] = row
+          rows.push(semConta(anterior))
+        } else {
+          rows.push(semConta(row))
+        }
         return
       }
       rowIndexByCode.set(code, rows.length)

@@ -111,7 +111,7 @@ export function OpiniaoDeVendaScreen({ onNavigate }: { onNavigate: (id: ScreenId
       <PageHeader
         eyebrow="Início"
         title="Parecer de Crédito"
-        subtitle={`Parecer automático para ${store.companyName}, com base nos indicadores de ${current}.`}
+        subtitle={`Parecer automático para ${store.companyName}, com base nos indicadores de ${current} (${store.exercicios.find((e) => e.id === current)?.auditado ? "exercício auditado" : "exercício não auditado"}).`}
         actions={
           <>
             <button
@@ -122,7 +122,9 @@ export function OpiniaoDeVendaScreen({ onNavigate }: { onNavigate: (id: ScreenId
               Ver números completos
               <ArrowRight className="size-3.5" />
             </button>
-            <Button size="sm" className="h-8 gap-1.5">
+            {/* Abre a impressão do navegador: dá para imprimir ou "Salvar como PDF". A barra lateral e os
+                botões saem do papel (print:hidden). */}
+            <Button size="sm" className="h-8 gap-1.5" onClick={() => window.print()}>
               <FileText className="size-3.5" />
               Exportar parecer
             </Button>
@@ -293,6 +295,11 @@ export function OpiniaoDeVendaScreen({ onNavigate }: { onNavigate: (id: ScreenId
           </section>
         </aside>
       </div>
+      {/* Só aparece no papel/PDF: quem emitiu e quando, para o parecer impresso ter origem. */}
+      <p className="hidden px-8 pb-6 text-xs text-muted-foreground print:block">
+        Emitido em {new Date().toLocaleString("pt-BR", { dateStyle: "long", timeStyle: "short" })} por {store.user.nome} (
+        {store.user.email}) — Central de Balanços.
+      </p>
     </div>
   )
 }

@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
-import { getDefaultEmpresa } from "@/lib/server/empresa"
-import { logAudit } from "@/lib/server/audit"
+import { getDefaultEmpresa } from "@/lib/server/data/empresa"
+import { logAudit } from "@/lib/server/audit/audit"
+import { requirePermission } from "@/lib/server/auth/authz"
 import { handleRouteError } from "@/lib/server/http"
 import { requireNonEmptyString, requirePositiveInt, ValidationError } from "@/lib/server/validation"
 
@@ -12,6 +13,7 @@ interface RouteParams {
 // Renomeia uma conta do Plano de Contas — equivalente a `store.renameAccountNode`.
 export async function PATCH(request: Request, { params }: RouteParams) {
   try {
+    const user = await requirePermission("gerir-plano-de-contas")
     const { id } = await params
     const contaId = requirePositiveInt(Number(id), "id")
 
@@ -24,7 +26,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     const atualizada = await prisma.conta.update({ where: { id: contaId }, data: { descricao: nome } })
 
     const empresa = await getDefaultEmpresa()
-    await logAudit(empresa.id, "Conta renomeada", `${conta.codigo} → "${nome}".`)
+    await logAudit(empresa.id, "Conta renomeada", `${conta.codigo} → "${nome}".`, user.email)
 
     return NextResponse.json(atualizada)
   } catch (error) {
@@ -38,6 +40,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
 // histórico da extração mesmo depois que a conta é excluída.
 export async function DELETE(_request: Request, { params }: RouteParams) {
   try {
+    const user = await requirePermission("gerir-plano-de-contas")
     const { id } = await params
     const contaId = requirePositiveInt(Number(id), "id")
 
@@ -47,7 +50,7 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
     await prisma.conta.delete({ where: { id: contaId } })
 
     const empresa = await getDefaultEmpresa()
-    await logAudit(empresa.id, "Conta removida", `${conta.codigo} excluída do Plano de Contas.`)
+    await logAudit(empresa.id, "Conta removida", `${conta.codigo} excluída do Plano de Contas.`, user.email)
 
     return NextResponse.json({ ok: true })
   } catch (error) {

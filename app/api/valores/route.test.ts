@@ -110,4 +110,21 @@ describe("PUT /api/valores", () => {
     expect(response.status).toBe(400)
     expect(prisma.valor.upsert).not.toHaveBeenCalled()
   })
+
+  it("a auditoria mostra código da conta e período (não ids internos)", async () => {
+    prisma.conta.findUnique.mockResolvedValue({ id: 3, codigo: "1.1.1" })
+    prisma.exercicio.findUnique.mockResolvedValue({ id: 9, periodo: "1T2026" })
+    prisma.valor.upsert.mockResolvedValue({ id: 1 })
+
+    await PUT(buildRequest({ contaId: 3, exercicioId: 9, valor: 1500 }))
+    expect(prisma.auditLog.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ detalhe: "1.1.1 · 1T2026 = 1500" }),
+    })
+
+    prisma.auditLog.create.mockClear()
+    await PUT(buildRequest({ contaId: 3, exercicioId: 9, valor: null }))
+    expect(prisma.auditLog.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ detalhe: "1.1.1 · 1T2026 limpo." }),
+    })
+  })
 })

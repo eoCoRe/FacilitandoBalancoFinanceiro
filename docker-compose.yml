@@ -7,7 +7,8 @@ services:
       POSTGRES_PASSWORD: central_balancos
       POSTGRES_DB: central_balancos
     ports:
-      - "5432:5432"
+      # Só a própria máquina: a senha do desenvolvimento é trivial, e "5432:5432" a publicaria em toda a rede (Wi-Fi do escritório).
+      - "127.0.0.1:5432:5432"
     volumes:
       - db-data:/var/lib/postgresql/data
     healthcheck:

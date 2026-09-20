@@ -1,6 +1,8 @@
-import { describe, expect, it } from "vitest"
-import { handleRouteError } from "./http"
-import { UnauthorizedError, ValidationError } from "./validation"
+import { afterEach, describe, expect, it, vi } from "vitest"
+import { handleRouteError } from "@/lib/server/http"
+import { UnauthorizedError, ValidationError } from "@/lib/server/validation"
+
+afterEach(() => vi.restoreAllMocks())
 
 describe("handleRouteError", () => {
   it("converte ValidationError em 400 com a mensagem do erro", async () => {
@@ -34,5 +36,18 @@ describe("handleRouteError", () => {
       caught = e
     }
     expect(caught).toBe("string qualquer")
+  })
+
+  it("registra o erro inesperado só com nome e código (a mensagem pode ter valores de consulta) antes de relançar", () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {})
+    const erro = Object.assign(new Error("Unique constraint failed on email=ana@teste.com"), { code: "P2002" })
+    erro.name = "PrismaClientKnownRequestError"
+
+    expect(() => handleRouteError(erro)).toThrow()
+
+    const linha = spy.mock.calls[0][0] as string
+    expect(JSON.parse(linha)).toMatchObject({ level: "error", event: "http.unhandled_error", errorName: "PrismaClientKnownRequestError", errorCode: "P2002" })
+    expect(linha).not.toContain("ana@teste.com")
+    spy.mockRestore()
   })
 })

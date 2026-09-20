@@ -1,6 +1,7 @@
 // Modelo de dados e motor de cálculo da Central de Balanços.
 // Valores em milhares de BRL (unidade base). A escala é aplicada só na exibição.
-// Este arquivo é puro (sem estado React) — o estado editável vive em lib/store.tsx.
+// Este arquivo é puro (sem estado React) — o estado da tela vive em lib/store.tsx, que o carrega do banco.
+// Os dados de exemplo (COMPANY, SEED_EXERCICIOS, createSeed*) servem só a prisma/seed.ts e aos testes.
 
 export interface Account {
   code: string

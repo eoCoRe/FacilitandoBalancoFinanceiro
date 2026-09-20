@@ -6,6 +6,7 @@ import { GlossaryTerm } from "@/components/glossary-term"
 import { PageHeader } from "@/components/page-header"
 import { ScaleToggle } from "@/components/scale-toggle"
 import { Button } from "@/components/ui/button"
+import { can } from "@/lib/permissions"
 import { useFinancialStore } from "@/lib/store"
 import { flattenAccounts, formatScaled, sumAccount, type Account, type Scale } from "@/lib/financial-data"
 import { cn } from "@/lib/utils"
@@ -16,6 +17,7 @@ interface DraftState {
 }
 
 interface TreeRowProps {
+  readOnly: boolean
   account: Account
   depth: number
   expanded: Set<string>
@@ -33,6 +35,7 @@ interface TreeRowProps {
 
 function TreeRow(props: TreeRowProps) {
   const {
+    readOnly,
     account,
     depth,
     expanded,
@@ -113,6 +116,7 @@ function TreeRow(props: TreeRowProps) {
           {hasChildren ? "Grupo" : "Analítica"}
         </span>
 
+        {!readOnly && (
         <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
           <button
             type="button"
@@ -159,6 +163,7 @@ function TreeRow(props: TreeRowProps) {
             <Trash2 className="size-3.5" />
           </button>
         </div>
+        )}
       </div>
 
       {hasChildItems &&
@@ -241,6 +246,7 @@ export function PlanoDeContasScreen() {
   const [draft, setDraft] = useState<DraftState | null>(null)
   const [rootDraftName, setRootDraftName] = useState("")
 
+  const canManage = can(store.user.papel, "gerir-plano-de-contas")
   const latestPeriod = store.exercicios[store.exercicios.length - 1]?.id ?? ""
 
   const toggle = (code: string) => {
@@ -281,14 +287,20 @@ export function PlanoDeContasScreen() {
       <PageHeader
         eyebrow="Estrutura"
         title="Plano de Contas"
-        subtitle="Organize a hierarquia de contas contábeis que estrutura a tabulação."
+        subtitle={
+          canManage
+            ? "Organize a hierarquia de contas contábeis que estrutura a tabulação."
+            : "Hierarquia de contas contábeis que estrutura a tabulação. Só coordenadores e administradores podem alterá-la."
+        }
         actions={
           <>
             <ScaleToggle value={scale} onChange={setScale} />
-            <Button size="sm" className="h-8 gap-1.5" onClick={() => setDraft({ parentCode: null, isGroup: true })}>
-              <FolderPlus className="size-3.5" />
-              Grupo raiz
-            </Button>
+            {canManage && (
+              <Button size="sm" className="h-8 gap-1.5" onClick={() => setDraft({ parentCode: null, isGroup: true })}>
+                <FolderPlus className="size-3.5" />
+                Grupo raiz
+              </Button>
+            )}
           </>
         }
       />
@@ -300,6 +312,7 @@ export function PlanoDeContasScreen() {
             {store.accounts.map((account) => (
               <TreeRow
                 key={account.code}
+                readOnly={!canManage}
                 account={account}
                 depth={0}
                 expanded={expanded}

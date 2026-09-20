@@ -1,8 +1,8 @@
 // Redação de identificadores/dados pessoais antes do envio a uma API de LLM externa —
 // pré-requisito de segurança do RFC (§5.4/§5.5) para quando a extração real (RF02)
-// existir. Hoje a extração é mock (lib/mock-extraction.ts) e não chama LLM nenhum, então
-// nada usa esta função ainda; o motor puro fica pronto para o dia em que passar a chamar,
-// chamado uma única vez sobre o texto extraído do PDF antes de montar o prompt.
+// existir. Hoje a extração é um leitor local de PDF (lib/extraction/) que roda no navegador e não
+// chama LLM nenhum, então nada usa esta função ainda; o motor puro fica pronto para o dia em que
+// passar a chamar, uma única vez sobre o texto extraído do PDF antes de montar o prompt.
 
 const CNPJ_FORMATADO = /\b\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}\b/g
 const CNPJ_NUMERICO = /\b\d{14}\b/g

@@ -1,9 +1,12 @@
 "use client"
 
 import { useMemo } from "react"
-import { ChevronDown, Info, Plus } from "lucide-react"
+import { ChevronDown, Download, Info, Plus } from "lucide-react"
 import { PageHeader } from "@/components/page-header"
 import { Button } from "@/components/ui/button"
+import { downloadTextFile } from "@/lib/download"
+import { exportFileName, indicesCsv } from "@/lib/export-csv"
+import { can } from "@/lib/permissions"
 import { useFinancialStore } from "@/lib/store"
 import {
   computeDre,
@@ -162,6 +165,8 @@ export function IndicesScreen() {
             <select
               id="setor-select"
               value={store.sectorId}
+              disabled={!can(store.user.papel, "editar-empresa")}
+              title={can(store.user.papel, "editar-empresa") ? undefined : "Só coordenadores e administradores alteram o setor"}
               onChange={(e) => store.setSector(e.target.value)}
               className="h-8 rounded-md border border-border bg-background px-2 text-sm text-foreground outline-none focus:border-ring"
             >
@@ -171,6 +176,20 @@ export function IndicesScreen() {
                 </option>
               ))}
             </select>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 gap-1.5"
+              onClick={() =>
+                downloadTextFile(
+                  exportFileName("indices", store.companyName),
+                  indicesCsv(store.accounts, store.dreByExercicio, exercicioIds),
+                )
+              }
+            >
+              <Download className="size-3.5" />
+              Exportar CSV
+            </Button>
             <Button size="sm" className="h-8 gap-1.5">
               <Plus className="size-3.5" />
               Novo índice

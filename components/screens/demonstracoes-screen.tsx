@@ -1,10 +1,13 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import { Check } from "lucide-react"
+import { Check, Download } from "lucide-react"
 import { GlossaryTerm } from "@/components/glossary-term"
 import { PageHeader } from "@/components/page-header"
 import { ScaleToggle } from "@/components/scale-toggle"
+import { Button } from "@/components/ui/button"
+import { downloadTextFile } from "@/lib/download"
+import { balancoCsv, balanceteCsv, dfcCsv, dreCsv, exportFileName } from "@/lib/export-csv"
 import { GLOSSARY } from "@/lib/glossary"
 import { useFinancialStore } from "@/lib/store"
 import {
@@ -264,13 +267,34 @@ export function DemonstracoesScreen() {
     return { period: id, ok: a !== undefined && p !== undefined && a === p }
   })
 
+  // Exporta a aba que está na tela, na escala escolhida (o arquivo confere com o que se vê).
+  function exportar() {
+    const csv =
+      tab === "balanco"
+        ? balancoCsv(store.accounts, exercicioIds, scale)
+        : tab === "dre"
+          ? dreCsv(store.dreByExercicio, exercicioIds, scale)
+          : tab === "dfc"
+            ? dfcCsv(store.dfc, exercicioIds, scale)
+            : balanceteCsv(store.accounts, lastPeriod, scale)
+    downloadTextFile(exportFileName(tab, store.companyName), csv)
+  }
+
   return (
     <div className="flex flex-col">
       <PageHeader
         eyebrow="Demonstrações consolidadas"
         title="Balanço · DRE · DFC"
         subtitle={SUB_TAB_SUBTITLE[tab]}
-        actions={<ScaleToggle value={scale} onChange={setScale} />}
+        actions={
+          <>
+            <ScaleToggle value={scale} onChange={setScale} />
+            <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={exportar}>
+              <Download className="size-3.5" />
+              Exportar CSV
+            </Button>
+          </>
+        }
       />
 
       {/* Sub-abas */}

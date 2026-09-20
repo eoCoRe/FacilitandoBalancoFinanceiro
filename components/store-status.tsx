@@ -41,10 +41,10 @@ export function MutationErrorBanner() {
   if (!mutationError) return null
 
   return (
-    <div
-      role="alert"
-      className="fixed inset-x-0 top-0 z-50 flex items-center justify-center gap-3 border-b border-destructive/30 bg-destructive/10 px-4 py-2 text-sm text-destructive backdrop-blur"
-    >
+    // Fundo opaco por baixo do tom vermelho: o aviso fica sobre qualquer tela e o contraste do texto
+    // não pode depender do que está atrás dele.
+    <div role="alert" className="fixed inset-x-0 top-0 z-50 bg-background print:hidden">
+      <div className="flex items-center justify-center gap-3 border-b border-destructive/30 bg-destructive/5 px-4 py-2 text-sm text-destructive">
       <AlertTriangle className="size-4 shrink-0" />
       <span>Não foi possível salvar: {mutationError}</span>
       <button
@@ -55,6 +55,7 @@ export function MutationErrorBanner() {
       >
         <X className="size-3.5" />
       </button>
+      </div>
     </div>
   )
 }
