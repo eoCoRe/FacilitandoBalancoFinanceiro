@@ -77,6 +77,22 @@ describe.each(ROTAS)("$nome", ({ min, chamar }) => {
     expect(response.status).toBe(401)
   })
 
+  // O outro lado da moeda: quem TEM o perfil mínimo (ou acima) não pode ser barrado por engano. O
+  // prisma é um objeto vazio, então depois de passar pela checagem a rota pode devolver 400 ou lançar
+  // um erro de banco — o que não pode é ser 401/403.
+  it(`perfil ${min} e acima passam pela checagem de acesso`, async () => {
+    for (const papel of PAPEIS.slice(PAPEIS.indexOf(min))) {
+      vi.mocked(getCurrentUser).mockResolvedValue(usuarioComPapel(papel))
+      let status: number | null = null
+      try {
+        status = (await chamar()).status
+      } catch {
+        // erro do "banco" simulado: a checagem de acesso já tinha passado.
+      }
+      expect([401, 403], `${papel} foi barrado indevidamente`).not.toContain(status)
+    }
+  })
+
   const abaixo = PAPEIS.slice(0, PAPEIS.indexOf(min))
   it.skipIf(abaixo.length === 0)(`perfil abaixo de ${min} responde 403`, async () => {
     for (const papel of abaixo) {
