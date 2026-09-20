@@ -1,6 +1,4 @@
 import "dotenv/config"
-import { PrismaClient } from "@prisma/client"
-import { PrismaPg } from "@prisma/adapter-pg"
 import {
   COMPANY,
   createSeedAccounts,
@@ -13,12 +11,10 @@ import {
   type Account,
 } from "../lib/financial-data"
 import { DEFAULT_SECTOR_ID, sectorLabel } from "../lib/sector-benchmarks"
+import { prisma } from "../lib/db" // o mesmo cliente do app: assim o registro de auditoria inicial já nasce SELADO (logAudit)
+import { logAudit } from "../lib/server/audit/audit"
 import { assertAdminEnvValid, ensureAdmin } from "../lib/server/auth/ensure-admin"
 
-const connectionString = process.env.DATABASE_URL
-if (!connectionString) throw new Error("DATABASE_URL não configurada — veja .env.example")
-
-const prisma = new PrismaClient({ adapter: new PrismaPg(connectionString) })
 
 function slugify(label: string): string {
   return label
@@ -132,14 +128,12 @@ async function main() {
   }
 
   console.log("Registrando log de auditoria inicial...")
-  await prisma.auditLog.create({
-    data: {
-      empresaId: empresa.id,
-      usuario: "Sistema",
-      acao: "Dados de exemplo carregados",
-      detalhe: `${SEED_EXERCICIOS.length} exercícios de demonstração (${SEED_EXERCICIOS.join(", ")}).`,
-    },
-  })
+  await logAudit(
+    empresa.id,
+    "Dados de exemplo carregados",
+    `${SEED_EXERCICIOS.length} exercícios de demonstração (${SEED_EXERCICIOS.join(", ")}).`,
+    "Sistema",
+  )
 
   await ensureAdmin(prisma)
 

@@ -66,6 +66,9 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     if (body.ativo !== undefined) {
       if (typeof body.ativo !== "boolean") throw new ValidationError("ativo deve ser verdadeiro ou falso.")
       data.ativo = body.ativo
+      // Mudar a situação (desativar OU reativar) zera as sessões abertas: sem isso, um cookie roubado antes da
+      // desativação voltaria a valer se a conta fosse reativada dentro do prazo do token.
+      data.sessoesValidasDesde = new Date()
       mudancas.push(body.ativo ? "reativado" : "desativado")
     }
     if (body.doisFatoresAtivo !== undefined) {
@@ -96,13 +99,21 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       if (alvo.id === admin.id) {
         throw new ValidationError("Você não pode rebaixar nem desativar a si mesmo. Peça a outro administrador.")
       }
-      const outrosAdmins = await prisma.usuario.count({
-        where: { papel: "ADMINISTRADOR", ativo: true, id: { not: alvo.id } },
-      })
-      if (outrosAdmins === 0) throw new ValidationError("Não é possível remover o último administrador ativo.")
     }
 
-    const atualizado = await prisma.usuario.update({ where: { id: usuarioId }, data })
+    const atualizado = perdeAdmin
+      ? // Contar e atualizar precisam ser UMA operação: dois administradores se rebaixando ao mesmo tempo passariam os dois
+        // pela contagem e deixariam o sistema sem nenhum. Travar as linhas dos administradores ativos faz o segundo esperar
+        // o primeiro terminar e contar de novo.
+        await prisma.$transaction(async (tx) => {
+          await tx.$queryRaw`SELECT id FROM usuario WHERE papel = 'ADMINISTRADOR' AND ativo = true FOR UPDATE`
+          const outrosAdmins = await tx.usuario.count({
+            where: { papel: "ADMINISTRADOR", ativo: true, id: { not: alvo.id } },
+          })
+          if (outrosAdmins === 0) throw new ValidationError("Não é possível remover o último administrador ativo.")
+          return tx.usuario.update({ where: { id: usuarioId }, data })
+        })
+      : await prisma.usuario.update({ where: { id: usuarioId }, data })
     if (body.doisFatoresAtivo === false) await prisma.codigoRecuperacao.deleteMany({ where: { usuarioId } })
 
     const empresa = await getDefaultEmpresa()

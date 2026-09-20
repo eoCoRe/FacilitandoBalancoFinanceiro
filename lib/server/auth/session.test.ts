@@ -1,6 +1,7 @@
 import { SignJWT } from "jose"
 import { NextResponse } from "next/server"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { ServiceUnavailableError } from "@/lib/server/validation"
 import { clearSessionCookie, SESSION_COOKIE, setSessionCookie, signSessionToken, verifySessionToken } from "@/lib/server/auth/session"
 
 const SECRET = "x".repeat(40)
@@ -64,6 +65,13 @@ describe("sessão", () => {
       .setExpirationTime("1h")
       .sign(key(SECRET))
     expect(await verifySessionToken(t)).toBeNull()
+  })
+
+  it("sem AUTH_SECRET o erro é de SERVIÇO INDISPONÍVEL (as rotas respondem 503 com a causa, não um 500 opaco)", async () => {
+    vi.stubEnv("AUTH_SECRET", "")
+    const erro = await signSessionToken(1).catch((e) => e)
+    expect(erro).toBeInstanceOf(ServiceUnavailableError)
+    expect(erro.message).toMatch(/AUTH_SECRET/)
   })
 
   it("falha fechado sem AUTH_SECRET ou com segredo curto (não emite nem aceita)", async () => {

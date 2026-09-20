@@ -9,6 +9,29 @@ interface Bucket {
 
 const buckets = new Map<string, Bucket>()
 
+// Teto de chaves rastreadas ao mesmo tempo. Sem ele, quem manda milhões de e-mails/IPs inventados (o cabeçalho de IP
+// pode ser forjado) encheria a memória do processo: um balde só some quando a MESMA chave é consultada de novo depois da
+// janela. Ao chegar no teto, primeiro se descartam os vencidos; se tudo ainda é da janela atual, os 10% mais antigos.
+export const MAX_BUCKETS = 50_000
+
+function makeRoom(now: number): void {
+  if (buckets.size < MAX_BUCKETS) return
+  for (const [key, bucket] of buckets) {
+    if (now - bucket.windowStart >= LOGIN_WINDOW_MS) buckets.delete(key)
+  }
+  if (buckets.size < MAX_BUCKETS) return
+  let drop = Math.ceil(MAX_BUCKETS / 10)
+  for (const key of buckets.keys()) {
+    if (drop-- <= 0) break
+    buckets.delete(key) // o Map guarda a ordem de inserção: os primeiros são os mais antigos
+  }
+}
+
+// Só para testes.
+export function bucketCount(): number {
+  return buckets.size
+}
+
 export const LOGIN_MAX_FAILURES = 5
 export const LOGIN_WINDOW_MS = 15 * 60 * 1000
 
@@ -31,8 +54,12 @@ export function isRateLimited(key: string, max = LOGIN_MAX_FAILURES, windowMs = 
 
 export function recordFailure(key: string, windowMs = LOGIN_WINDOW_MS, now = Date.now()): void {
   const bucket = current(key, now, windowMs)
-  if (bucket) bucket.failures++
-  else buckets.set(key, { failures: 1, windowStart: now })
+  if (bucket) {
+    bucket.failures++
+  } else {
+    makeRoom(now)
+    buckets.set(key, { failures: 1, windowStart: now })
+  }
 }
 
 // Reserva UMA tentativa ANTES de a conferência começar. Conferir senha/código é assíncrono (banco, scrypt): se o

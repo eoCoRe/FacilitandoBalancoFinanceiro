@@ -16,10 +16,10 @@ export function assertAdminEnvValid(env: Record<string, string | undefined> = pr
 // Se o e-mail já existe, vira administrador ativo com a senha informada, as sessões abertas dele caem e a
 // verificação em 2 etapas dele é DESLIGADA (e-mail e app, com os códigos de recuperação): é a ferramenta de
 // recuperação de quem perdeu o acesso, e um administrador que perdeu o celular ficaria trancado do mesmo jeito se
-// o 2º fator continuasse valendo. Quem roda isto tem acesso ao servidor/banco, que já podia fazer o mesmo à mão.
+// o 2º fator continuasse valendo. A política do PERFIL (exigir 2 etapas) continua valendo — só avisa. Quem roda isto tem acesso ao servidor/banco, que já podia fazer o mesmo à mão.
 // Sem variáveis, só avisa (e diz se falta administrador).
 export async function ensureAdmin(
-  prisma: Pick<PrismaClient, "usuario" | "codigoRecuperacao">,
+  prisma: Pick<PrismaClient, "usuario" | "codigoRecuperacao" | "politicaSeguranca">,
   env: Record<string, string | undefined> = process.env,
   log: Pick<Console, "log" | "warn"> = console,
 ): Promise<{ email: string } | null> {
@@ -53,5 +53,13 @@ export async function ensureAdmin(
   })
   await prisma.codigoRecuperacao.deleteMany({ where: { usuarioId: usuario.id } })
   log.log(`Administrador garantido: ${email}`)
+  // A POLÍTICA do perfil não é tocada aqui: se ela exige 2 etapas para administradores e o e-mail (SMTP) não funciona,
+  // o login continua falhando (fecha fechado). Quem opera precisa saber disso agora, não depois.
+  const politica = await prisma.politicaSeguranca.findUnique({ where: { papel: "ADMINISTRADOR" } })
+  if (politica?.doisFatoresObrigatorio) {
+    log.warn(
+      "ATENÇÃO: a política do perfil ADMINISTRADOR exige verificação em 2 etapas. O 2FA deste usuário foi desligado, mas se o envio de e-mail (SMTP) não estiver funcionando o login ainda vai falhar. Veja docs/OPERACAO.md (Emergências).",
+    )
+  }
   return { email }
 }

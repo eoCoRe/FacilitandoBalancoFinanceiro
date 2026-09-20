@@ -1,4 +1,5 @@
 import { after } from "next/server"
+import { describeError, logEvent } from "@/lib/server/log"
 
 // Roda `task` DEPOIS de a resposta ser enviada. Usado no envio de e-mail da recuperação de
 // senha: se a resposta esperasse o envio, o tempo dela diria se o e-mail existe. Falha da
@@ -9,7 +10,7 @@ export function afterResponse(task: () => Promise<void>): void {
     try {
       await task()
     } catch (error) {
-      console.error("Falha em tarefa pós-resposta:", error instanceof Error ? error.message : error)
+      logEvent("error", "http.after_response_failed", describeError(error))
     }
   })
 }

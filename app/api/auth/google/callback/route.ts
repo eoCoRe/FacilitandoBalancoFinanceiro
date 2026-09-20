@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
+import { describeError, logEvent } from "@/lib/server/log"
 import {
   appOrigin,
   exchangeCodeForIdToken,
@@ -46,7 +47,7 @@ export async function GET(request: NextRequest) {
     })
     profile = await verifyGoogleIdToken(idToken, config.clientId, flow.nonce)
   } catch (error) {
-    console.error("Falha no login com Google:", error instanceof Error ? error.message : error)
+    logEvent("error", "auth.google.failed", describeError(error))
     return failure(request, "google_falhou")
   }
 

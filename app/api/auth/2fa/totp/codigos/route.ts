@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
-import { logAudit } from "@/lib/server/audit/audit"
+import { logAuditSafe } from "@/lib/server/audit/audit"
 import { requireUser } from "@/lib/server/auth/authz"
-import { getDefaultEmpresa } from "@/lib/server/data/empresa"
 import { handleRouteError } from "@/lib/server/http"
 import { requireCurrentPassword } from "@/lib/server/auth/password-recheck"
 import { regenerateRecoveryCodes } from "@/lib/server/auth/second-factor"
@@ -20,8 +19,9 @@ export async function POST(request: Request) {
     await requireCurrentPassword(usuario, body.senha)
 
     const codigosRecuperacao = await regenerateRecoveryCodes(usuario.id)
-    const empresa = await getDefaultEmpresa()
-    await logAudit(empresa.id, "Códigos de recuperação renovados", "Novos códigos gerados; os anteriores foram invalidados.", user.email)
+    // "Safe": os códigos JÁ foram trocados no banco e só aparecem nesta resposta. Se a auditoria falhar, a pessoa não pode
+    // ficar sem eles (o erro vai para o log estruturado).
+    await logAuditSafe("Códigos de recuperação renovados", "Novos códigos gerados; os anteriores foram invalidados.", user.email)
     return NextResponse.json({ ok: true, codigosRecuperacao })
   } catch (error) {
     return handleRouteError(error)

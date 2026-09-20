@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
 import { requireUser } from "@/lib/server/auth/authz"
+import { describeError, logEvent } from "@/lib/server/log"
 import { handleRouteError } from "@/lib/server/http"
 import { mailAvailable, sendMail } from "@/lib/server/mail/mail"
 import { activationCodeMail } from "@/lib/server/mail/mail-templates"
@@ -29,7 +30,7 @@ export async function POST() {
     try {
       await sendMail(activationCodeMail(usuario.email, code, CODE_TTL_MS / 60_000))
     } catch (error) {
-      console.error("Falha ao enviar código de ativação:", error instanceof Error ? error.message : error)
+      logEvent("error", "auth.2fa.activation_mail_failed", describeError(error))
       throw new ServiceUnavailableError("Não foi possível enviar o código. Tente novamente em instantes.")
     }
     return NextResponse.json({ ok: true })

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest"
-import { clearFailures, isRateLimited, recordFailure, releaseAttempt, reserveAttempt, resetRateLimits } from "@/lib/server/auth/rate-limit"
+import { bucketCount, clearFailures, isRateLimited, MAX_BUCKETS, recordFailure, releaseAttempt, reserveAttempt, resetRateLimits } from "@/lib/server/auth/rate-limit"
 
 beforeEach(() => resetRateLimits())
 
@@ -62,5 +62,29 @@ describe("reserva de tentativas (contra rajadas paralelas)", () => {
     for (let i = 0; i < 5; i++) reserveAttempt("k", 5, 1000, 0)
     expect(reserveAttempt("k", 5, 1000, 999)).toBe(false)
     expect(reserveAttempt("k", 5, 1000, 1000)).toBe(true)
+  })
+})
+
+describe("teto de memória (chaves inventadas não enchem o processo)", () => {
+  it("nunca passa do máximo de chaves, por mais chaves diferentes que cheguem", () => {
+    for (let i = 0; i < MAX_BUCKETS * 2; i++) recordFailure(`login:email:lixo-${i}@x.com`, 15 * 60 * 1000, 1000)
+    expect(bucketCount()).toBeLessThanOrEqual(MAX_BUCKETS)
+  })
+
+  it("ao encher, descarta primeiro os VENCIDOS (a chave recente e a que está sendo atacada continuam contadas)", () => {
+    for (let i = 0; i < MAX_BUCKETS; i++) recordFailure(`velha-${i}`, 15 * 60 * 1000, 0)
+    const depois = 16 * 60 * 1000 // todas as velhas venceram
+    for (let i = 0; i < 5; i++) recordFailure("alvo", 15 * 60 * 1000, depois)
+    expect(isRateLimited("alvo", 5, 15 * 60 * 1000, depois)).toBe(true)
+    expect(bucketCount()).toBeLessThan(MAX_BUCKETS / 2)
+  })
+
+  it("cheio só de chaves recentes: descarta as mais ANTIGAS, e uma falha nova ainda entra", () => {
+    for (let i = 0; i < MAX_BUCKETS; i++) recordFailure(`k-${i}`, 15 * 60 * 1000, 1000)
+    recordFailure("nova", 15 * 60 * 1000, 1001)
+    expect(bucketCount()).toBeLessThanOrEqual(MAX_BUCKETS)
+    expect(isRateLimited("nova", 1, 15 * 60 * 1000, 1001)).toBe(true) // entrou
+    expect(isRateLimited("k-0", 1, 15 * 60 * 1000, 1001)).toBe(false) // a mais antiga saiu
+    expect(isRateLimited(`k-${MAX_BUCKETS - 1}`, 1, 15 * 60 * 1000, 1001)).toBe(true) // a mais nova ficou
   })
 })

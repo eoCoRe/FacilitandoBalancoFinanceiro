@@ -57,11 +57,12 @@ lib/
     └── http.ts, log.ts, validation.ts, after-response.ts   # infraestrutura comum das rotas
 prisma/
 ├── schema.prisma             # Empresa, Exercicio, Conta, Valor, Indice, Extracao, ValorExtraido, AuditLog,
-│                             #   LgpdErasureLog, Usuario, TokenVerificacao, PoliticaSeguranca
+│                             #   LgpdErasureLog, Usuario, TokenVerificacao, CodigoRecuperacao, PoliticaSeguranca
 ├── migrations/               # histórico versionado do banco
 └── seed.ts                   # dados de exemplo + primeiro administrador (SEED_ADMIN_*)
 scripts/
 ├── purge-expired-data.ts     # expurgo por retenção (LGPD) — roda via cron externo, não HTTP
+├── ensure-admin.ts           # cria/restabelece o administrador sem apagar dados (pnpm admin:ensure)
 └── smoke.mjs                 # teste de fumaça (HTTP, sem mocks), usado pelo job "integration" do CI
 vitest.setup.ts               # testes de rota: usuário logado padrão (administrador) e getCurrentUser simulado
 .github/workflows/            # CI (tipos, lint, testes, build + teste de fumaça com Postgres real) e CodeQL
@@ -83,7 +84,7 @@ vitest.setup.ts               # testes de rota: usuário logado padrão (adminis
 | `pnpm test` / `pnpm test:watch` | testes (Vitest; Prisma simulado, não precisam do banco) |
 | `pnpm lint` | ESLint |
 | `pnpm smoke` | teste de fumaça contra o app RODANDO (`pnpm build && pnpm start`) e um Postgres real: login, permissões, leitura e escrita por HTTP (`scripts/smoke.mjs`). O CI roda isso em um banco vazio |
-| `npx tsc --noEmit` | checagem de tipos (o build do Next não a exige) |
+| `npx tsc --noEmit` | checagem de tipos (o `next build` também checa; este é o atalho rápido) |
 | `pnpm purge:data` | expurgo de AuditLog/Extracao antigos (ver SECURITY.md) |
 | `pnpm admin:ensure` | cria/restabelece o administrador (`SEED_ADMIN_*`) **sem apagar dados** — o caminho em produção; o `prisma db seed` é só para desenvolvimento e apaga os dados de negócio |
 

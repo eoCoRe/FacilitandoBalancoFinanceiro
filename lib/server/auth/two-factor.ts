@@ -5,6 +5,7 @@ import type { Papel } from "@/lib/permissions"
 import { mailAvailable, sendMail } from "@/lib/server/mail/mail"
 import { loginCodeMail } from "@/lib/server/mail/mail-templates"
 import { getAuthSecret } from "@/lib/server/auth/session"
+import { describeError, logEvent } from "@/lib/server/log"
 import { ServiceUnavailableError } from "@/lib/server/validation"
 import { CODE_TTL_MS, createCodeChallenge } from "@/lib/server/auth/verification"
 
@@ -43,7 +44,7 @@ export async function sendLoginCode(usuario: { id: number; email: string }): Pro
   try {
     await sendMail(loginCodeMail(usuario.email, code, CODE_TTL_MS / 60_000))
   } catch (error) {
-    console.error("Falha ao enviar código de 2 etapas:", error instanceof Error ? error.message : error)
+    logEvent("error", "auth.2fa.login_mail_failed", describeError(error))
     throw new ServiceUnavailableError("Não foi possível enviar o código de verificação. Tente novamente em instantes.")
   }
   return id

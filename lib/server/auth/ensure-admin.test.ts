@@ -2,7 +2,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { assertAdminEnvValid, ensureAdmin } from "./ensure-admin"
 import { verifyPassword } from "./password"
 
-const prisma = { usuario: { count: vi.fn(), upsert: vi.fn() }, codigoRecuperacao: { deleteMany: vi.fn() } }
+const prisma = {
+  usuario: { count: vi.fn(), upsert: vi.fn() },
+  codigoRecuperacao: { deleteMany: vi.fn() },
+  politicaSeguranca: { findUnique: vi.fn() },
+}
 const log = { log: vi.fn(), warn: vi.fn() }
 const run = (env: Record<string, string | undefined>) => ensureAdmin(prisma as never, env, log as never)
 
@@ -10,6 +14,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   prisma.usuario.count.mockResolvedValue(1)
   prisma.usuario.upsert.mockResolvedValue({ id: 7 })
+  prisma.politicaSeguranca.findUnique.mockResolvedValue(null)
 })
 
 describe("ensureAdmin", () => {
@@ -36,6 +41,16 @@ describe("ensureAdmin", () => {
       totpUltimoPasso: null,
     })
     expect(prisma.codigoRecuperacao.deleteMany).toHaveBeenCalledWith({ where: { usuarioId: 7 } })
+  })
+
+  it("avisa se a POLÍTICA do perfil ainda exige 2 etapas (sem SMTP o login continuaria falhando); sem política, não avisa", async () => {
+    await run({ SEED_ADMIN_EMAIL: "a@b.com", SEED_ADMIN_PASSWORD: "uma-senha-forte-123" })
+    expect(log.warn).not.toHaveBeenCalled()
+
+    prisma.politicaSeguranca.findUnique.mockResolvedValue({ papel: "ADMINISTRADOR", doisFatoresObrigatorio: true })
+    await run({ SEED_ADMIN_EMAIL: "a@b.com", SEED_ADMIN_PASSWORD: "uma-senha-forte-123" })
+    expect(prisma.politicaSeguranca.findUnique).toHaveBeenCalledWith({ where: { papel: "ADMINISTRADOR" } })
+    expect(log.warn.mock.calls[0][0]).toMatch(/política do perfil ADMINISTRADOR exige/)
   })
 
   it("nome padrão quando não informado", async () => {

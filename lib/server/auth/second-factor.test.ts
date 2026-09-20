@@ -46,6 +46,7 @@ import {
   regenerateRecoveryCodes,
   startTotpEnrollment,
 } from "@/lib/server/auth/second-factor"
+import { ServiceUnavailableError } from "@/lib/server/validation"
 import { base32Decode, decryptTotpSecret, totpCodeAtStep, totpStep } from "@/lib/server/auth/totp"
 
 const AGORA = new Date("2026-09-20T10:00:00Z")
@@ -158,6 +159,16 @@ describe("conferir no login", () => {
     const { codigos } = await ligar()
     const [a, b] = await Promise.all([checkLoginCode(db.state.usuario, codigos[0]), checkLoginCode(db.state.usuario, codigos[0])])
     expect([a.ok, b.ok].filter(Boolean)).toHaveLength(1)
+  })
+})
+
+describe("chave que não decifra (AUTH_SECRET foi trocado)", () => {
+  it("responde com um erro de serviço indisponível e orientação clara — não um 500 opaco — e registra a causa", async () => {
+    const { chave } = await ligar()
+    vi.stubEnv("AUTH_SECRET", "outro".repeat(10)) // troca do segredo depois de a chave ter sido cifrada
+    const erro = await checkLoginCode(db.state.usuario, codigoAgora(chave, 1)).catch((e) => e)
+    expect(erro).toBeInstanceOf(ServiceUnavailableError)
+    expect(erro.message).toMatch(/administrador/)
   })
 })
 

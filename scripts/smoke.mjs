@@ -237,6 +237,20 @@ try {
     assert.ok(auditoria.some((l) => l.acao === "Usuário criado" && l.usuario === ADMIN_EMAIL))
   })
 
+  await check("administradores: rebaixar um administrador (contagem + trava de linhas numa transação) e a trava do último administrador, no Postgres real", async () => {
+    const segundo = { nome: "Segundo admin de fumaça", email: `smoke.${sufixo}.adm@teste.local`, senha: "outra-senha-do-smoke-9876" }
+    const criado = await admin.call("POST", "/api/usuarios", { ...segundo, papel: "ADMINISTRADOR" })
+    assert.equal(criado.status, 201, JSON.stringify(criado.json))
+    // sobra o administrador de verdade: rebaixar o segundo passa (é o caminho que usa SELECT ... FOR UPDATE)
+    const rebaixado = await admin.call("PATCH", `/api/usuarios/${criado.json.id}`, { papel: "ANALISTA" })
+    assert.equal(rebaixado.status, 200, JSON.stringify(rebaixado.json))
+    assert.equal(rebaixado.json.papel, "ANALISTA")
+    // o próprio administrador não pode se rebaixar (nem seria o último: a regra vem antes)
+    const eu = (await admin.call("GET", "/api/auth/me")).json.user
+    assert.equal((await admin.call("PATCH", `/api/usuarios/${eu.id}`, { papel: "ANALISTA" })).status, 400)
+    assert.equal((await admin.call("PATCH", `/api/usuarios/${criado.json.id}`, { ativo: false })).status, 200)
+  })
+
   await check("permissões reais: o analista lança valores, mas não gerencia contas nem usuários", async () => {
     const login = await analista.call("POST", "/api/auth/login", { email: analistaCreds.email, senha: analistaCreds.senha })
     assert.equal(login.status, 200)

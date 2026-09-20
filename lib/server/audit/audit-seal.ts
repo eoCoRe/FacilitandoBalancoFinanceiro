@@ -17,11 +17,12 @@ import { getAuthSecret } from "@/lib/server/auth/session"
 // Trava que serializa a selagem entre requisições simultâneas (dois selando ao mesmo tempo bifurcariam a cadeia).
 const SEAL_LOCK_KEY = 7_310_442
 const SEAL_BATCH = 100
-// Um registro SEM selo só é selado se for recente. Sem esse limite, quem tivesse acesso só ao banco poderia zerar o
-// selo de um trecho final da trilha, alterar o conteúdo e deixar o próprio servidor "carimbar" o resultado. Passado
-// o prazo, registro sem selo é problema a apontar (a selagem está falhando, ou mexeram no banco), não algo a consertar
-// em silêncio. Única exceção: trilha ainda SEM NENHUM selo (primeira execução, ou depois de o histórico ter sido
-// apagado) — aí não há cadeia a defender e todo o histórico existente é selado de uma vez.
+// Um registro SEM selo só é selado pelo servidor se for recente (sem exceção). Sem esse limite, quem tivesse acesso só
+// ao banco poderia zerar os selos (de um trecho ou da trilha toda), alterar o conteúdo e deixar o próprio servidor
+// "carimbar" o resultado. Passado o prazo, registro sem selo é problema a apontar (a selagem está falhando, ou mexeram
+// no banco), não algo a consertar em silêncio; quem decide selar um registro velho é o ADMINISTRADOR, por uma ação
+// explícita que fica na trilha (POST /api/auditoria/selar-pendentes) — inclusive para selar o histórico que já existia
+// quando este recurso entrou (uma vez, ao atualizar uma instalação antiga).
 export const SEAL_GRACE_MS = 15 * 60 * 1000
 // Cada lote é uma transação interativa (padrão do Prisma: 5 s). O tempo folgado evita que um banco lento ou remoto
 // aborte o lote no meio e o refaça para sempre; a trava só é mantida enquanto o lote roda.
@@ -62,7 +63,7 @@ export async function sealPending({ ignoreGrace = false }: { ignoreGrace?: boole
         select: { selo: true, seloSeq: true },
       })
       const pending = await tx.auditLog.findMany({
-        where: { selo: null, ...(last && !ignoreGrace ? { criadoEm: { gte: new Date(Date.now() - SEAL_GRACE_MS) } } : {}) },
+        where: { selo: null, ...(ignoreGrace ? {} : { criadoEm: { gte: new Date(Date.now() - SEAL_GRACE_MS) } }) },
         orderBy: { id: "asc" },
         take: SEAL_BATCH,
       })
@@ -148,8 +149,9 @@ export async function verifyAuditIntegrity(): Promise<IntegrityReport> {
     }
   }
 
-  // Registro sem selo e velho demais para ser selado: a selagem está falhando ou mexeram no banco.
-  if (!quebra && primeiroId !== null) {
+  // Registro sem selo e velho demais para ser selado: a selagem está falhando ou mexeram no banco (ou é o histórico
+  // de uma instalação anterior, que o administrador precisa selar uma vez).
+  if (!quebra) {
     const velho = await prisma.auditLog.findFirst({
       where: { selo: null, criadoEm: { lt: new Date(Date.now() - SEAL_GRACE_MS) } },
       orderBy: { id: "asc" },

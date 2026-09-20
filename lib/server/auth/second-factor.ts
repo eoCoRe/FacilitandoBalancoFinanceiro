@@ -1,4 +1,6 @@
 import { prisma } from "@/lib/db"
+import { describeError, logEvent } from "@/lib/server/log"
+import { ServiceUnavailableError } from "@/lib/server/validation"
 import {
   decryptTotpSecret,
   encryptTotpSecret,
@@ -96,7 +98,17 @@ export async function checkLoginCode(
   }
 
   if (!usuario.totpSegredo) return { ok: false }
-  const step = matchTotp(decryptTotpSecret(usuario.totpSegredo), rawCode, { afterStep: usuario.totpUltimoPasso })
+  let secret: string
+  try {
+    secret = decryptTotpSecret(usuario.totpSegredo)
+  } catch (error) {
+    // A chave foi cifrada com outro AUTH_SECRET (foi trocado) ou o dado está corrompido: sem a chave não há como conferir.
+    logEvent("error", "auth.totp.decrypt_failed", { userId: usuario.id, ...describeError(error) })
+    throw new ServiceUnavailableError(
+      "Não foi possível conferir o código do aplicativo. Peça a um administrador para desligar a verificação em 2 etapas da sua conta e cadastre de novo.",
+    )
+  }
+  const step = matchTotp(secret, rawCode, { afterStep: usuario.totpUltimoPasso })
   if (step === null) return { ok: false }
   const claimed = await prisma.usuario.updateMany({
     where: { id: usuario.id, OR: [{ totpUltimoPasso: null }, { totpUltimoPasso: { lt: step } }] },

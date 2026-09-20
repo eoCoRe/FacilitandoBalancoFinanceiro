@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
-import { logAudit } from "@/lib/server/audit/audit"
+import { logAuditSafe } from "@/lib/server/audit/audit"
 import { requireUser } from "@/lib/server/auth/authz"
-import { getDefaultEmpresa } from "@/lib/server/data/empresa"
 import { handleRouteError } from "@/lib/server/http"
 import { clearFailures, reserveAttempt } from "@/lib/server/auth/rate-limit"
 import { confirmTotpEnrollment, TOTP_ENROLL_KEY } from "@/lib/server/auth/second-factor"
@@ -30,8 +29,9 @@ export async function POST(request: Request) {
     }
     clearFailures(key)
 
-    const empresa = await getDefaultEmpresa()
-    await logAudit(empresa.id, "App autenticador ativado", "Verificação em 2 etapas por aplicativo ligada.", user.email)
+    // "Safe": o app JÁ está ligado e os códigos de recuperação só aparecem nesta resposta — uma falha da auditoria não
+    // pode escondê-los (a pessoa ficaria com o 2FA ligado, sem os códigos, e a nova tentativa diria "já ligado").
+    await logAuditSafe("App autenticador ativado", "Verificação em 2 etapas por aplicativo ligada.", user.email)
     return NextResponse.json({ ok: true, codigosRecuperacao })
   } catch (error) {
     return handleRouteError(error)

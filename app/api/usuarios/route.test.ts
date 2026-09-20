@@ -6,6 +6,8 @@ const { prisma } = vi.hoisted(() => ({
     empresa: { findFirst: vi.fn() },
     auditLog: { create: vi.fn() },
     codigoRecuperacao: { deleteMany: vi.fn() },
+    $transaction: vi.fn(),
+    $queryRaw: vi.fn(),
   },
 }))
 vi.mock("@/lib/db", () => ({ prisma }))
@@ -36,6 +38,8 @@ const patch = (id: number, body: unknown) =>
 beforeEach(() => {
   vi.clearAllMocks()
   prisma.empresa.findFirst.mockResolvedValue({ id: 1 })
+  prisma.$transaction.mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) => fn(prisma))
+  prisma.$queryRaw.mockResolvedValue([])
 })
 
 describe("GET /api/usuarios", () => {
@@ -118,6 +122,36 @@ describe("PATCH /api/usuarios/:id", () => {
     expect((await patch(3, { papel: "COORDENADOR" })).status).toBe(400)
     expect((await patch(3, { ativo: false })).status).toBe(400)
     expect(prisma.usuario.update).not.toHaveBeenCalled()
+  })
+
+  it("a contagem de administradores e a alteração são UMA transação, com as linhas dos administradores travadas (corrida entre dois admins)", async () => {
+    prisma.usuario.findUnique.mockResolvedValue(row({ id: 3, papel: "ADMINISTRADOR" }))
+    prisma.usuario.count.mockResolvedValue(1)
+    prisma.usuario.update.mockResolvedValue(row({ id: 3, papel: "COORDENADOR" }))
+    await patch(3, { papel: "COORDENADOR" })
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1)
+    expect(String(prisma.$queryRaw.mock.calls[0][0])).toContain("FOR UPDATE")
+    // travou ANTES de contar, e contou antes de gravar
+    expect(prisma.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(prisma.usuario.count.mock.invocationCallOrder[0])
+    expect(prisma.usuario.count.mock.invocationCallOrder[0]).toBeLessThan(prisma.usuario.update.mock.invocationCallOrder[0])
+  })
+
+  it("mudança que não tira ninguém de administrador não precisa da transação (nem da trava)", async () => {
+    prisma.usuario.findUnique.mockResolvedValue(row({ id: 3, papel: "ANALISTA" }))
+    prisma.usuario.update.mockResolvedValue(row({ id: 3, papel: "COORDENADOR" }))
+    await patch(3, { papel: "COORDENADOR" })
+    expect(prisma.$transaction).not.toHaveBeenCalled()
+  })
+
+  it("desativar E reativar zeram as sessões abertas (um cookie roubado não volta a valer com a reativação)", async () => {
+    prisma.usuario.findUnique.mockResolvedValue(row({ id: 4, ativo: false }))
+    prisma.usuario.update.mockResolvedValue(row({ id: 4, ativo: true }))
+    await patch(4, { ativo: true })
+    expect(prisma.usuario.update.mock.calls[0][0].data.sessoesValidasDesde).toBeInstanceOf(Date)
+
+    prisma.usuario.findUnique.mockResolvedValue(row({ id: 4, ativo: true }))
+    await patch(4, { ativo: false })
+    expect(prisma.usuario.update.mock.calls[1][0].data.sessoesValidasDesde).toBeInstanceOf(Date)
   })
 
   it("permite rebaixar outro administrador quando ainda sobra ao menos um", async () => {

@@ -198,10 +198,37 @@ describe("prazo para selar (quem tem só o banco não pode fazer o servidor cari
     expect(await sealPending()).toBe(1)
   })
 
-  it("trilha SEM NENHUM selo (primeira execução): todo o histórico existente é selado, por mais velho que seja", async () => {
+  it("trilha SEM NENHUM selo e histórico velho (instalação anterior): o servidor NÃO sela sozinho — a verificação aponta e o administrador sela uma vez", async () => {
     add(4, { criadoEm: new Date("2025-01-01T00:00:00Z") })
-    expect(await sealPending()).toBe(4)
+    expect(await sealPending()).toBe(0)
+    const antes = await verifyAuditIntegrity()
+    expect(antes.integra).toBe(false)
+    expect(antes.quebra).toMatchObject({ id: 1, motivo: expect.stringContaining("sem selo há mais de 15 minutos") })
+
+    expect(await sealPending({ ignoreGrace: true })).toBe(4)
     expect(await verifyAuditIntegrity()).toMatchObject({ integra: true, verificados: 4, naoSelados: 0 })
+  })
+
+  it("ATAQUE: zerar os selos de TODA a trilha e editar — antes não havia selo nenhum a defender, e o servidor carimbava tudo", async () => {
+    add(5)
+    await sealPending()
+    passaTempo(SEAL_GRACE_MS + 60_000)
+    for (const linha of db.state.rows) {
+      linha.selo = null
+      linha.seloAnterior = null
+      linha.seloSeq = null
+    }
+    db.state.rows[1].detalhe = "adulterado"
+    expect(await sealPending()).toBe(0) // o servidor NÃO recria os selos
+    const r = await verifyAuditIntegrity()
+    expect(r.integra).toBe(false)
+    expect(r.quebra?.id).toBe(1)
+  })
+
+  it("trilha nova (nenhum selo, registros recentes): selados normalmente — instalação nova não precisa de ação nenhuma", async () => {
+    add(3)
+    expect(await sealPending()).toBe(3)
+    expect(await verifyAuditIntegrity()).toMatchObject({ integra: true, verificados: 3 })
   })
 
   it("vale também para o registro atrasado: se confirmar dentro do prazo, entra na cadeia", async () => {

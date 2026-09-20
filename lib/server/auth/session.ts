@@ -1,4 +1,5 @@
 import { jwtVerify, SignJWT } from "jose"
+import { ServiceUnavailableError } from "@/lib/server/validation"
 import type { NextResponse } from "next/server"
 
 // Sessão sem estado no servidor: um JWT assinado (HS256) num cookie httpOnly. O token só
@@ -20,7 +21,8 @@ export const SESSION_ABSOLUTE_MAX_SECONDS = 24 * 60 * 60
 export function getAuthSecret(): Uint8Array {
   const secret = process.env.AUTH_SECRET
   if (!secret || secret.length < 32) {
-    throw new Error("AUTH_SECRET ausente ou curta (mínimo 32 caracteres) — veja .env.example")
+    // ServiceUnavailableError: as rotas respondem 503 com a causa (como o proxy faz nas páginas), em vez de um 500 opaco.
+    throw new ServiceUnavailableError("AUTH_SECRET ausente ou curta (mínimo 32 caracteres) — veja .env.example")
   }
   return new TextEncoder().encode(secret)
 }
