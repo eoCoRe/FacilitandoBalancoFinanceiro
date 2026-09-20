@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 const { prisma } = vi.hoisted(() => ({
   prisma: {
     auditLog: { deleteMany: vi.fn(), aggregate: vi.fn() },
+    $transaction: vi.fn(),
+    $queryRaw: vi.fn(),
     extracao: { deleteMany: vi.fn() },
     tokenVerificacao: { deleteMany: vi.fn() },
   },
@@ -18,6 +20,8 @@ beforeEach(() => {
   vi.clearAllMocks()
   prisma.auditLog.deleteMany.mockResolvedValue({ count: 0 })
   prisma.auditLog.aggregate.mockResolvedValue({ _min: { seloSeq: null } }) // nenhum registro selado dentro do prazo
+  prisma.$transaction.mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) => fn(prisma))
+  prisma.$queryRaw.mockResolvedValue([])
   prisma.extracao.deleteMany.mockResolvedValue({ count: 0 })
   prisma.tokenVerificacao.deleteMany.mockResolvedValue({ count: 0 })
 })
@@ -118,4 +122,14 @@ describe("o expurgo da auditoria só apaga um PREFIXO da cadeia de selos", () =>
     await purgeExpiredData(NOW)
     expect(prisma.auditLog.deleteMany).toHaveBeenCalledWith({ where: { criadoEm: { lt: CORTE } } })
   })
+
+  it("roda sob a MESMA trava da selagem (um selo em andamento não pode apontar para um registro recém-apagado)", async () => {
+    await purgeExpiredData(NOW)
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1)
+    expect(String(prisma.$queryRaw.mock.calls[0][0])).toContain("pg_advisory_xact_lock")
+    // travou ANTES de decidir o que apagar
+    expect(prisma.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(prisma.auditLog.aggregate.mock.invocationCallOrder[0])
+    expect(prisma.auditLog.aggregate.mock.invocationCallOrder[0]).toBeLessThan(prisma.auditLog.deleteMany.mock.invocationCallOrder[0])
+  })
 })
+

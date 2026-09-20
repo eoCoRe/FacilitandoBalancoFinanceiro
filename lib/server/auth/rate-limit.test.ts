@@ -104,3 +104,19 @@ describe("teto de memória (chaves inventadas não enchem o processo)", () => {
     expect(isRateLimited("b-0", 5, 15 * 60 * 1000, 1001)).toBe(true)
   })
 })
+
+describe("teto de memória: limites de 3 falhas e falha fechada", () => {
+  it("um bloqueio de 3 falhas (recuperar-senha, ativar 2FA) também é protegido da inundação", () => {
+    for (let i = 0; i < 3; i++) recordFailure("reset:email:vitima@x.com", 15 * 60 * 1000, 500)
+    expect(isRateLimited("reset:email:vitima@x.com", 3, 15 * 60 * 1000, 600)).toBe(true)
+    for (let i = 0; i < MAX_BUCKETS * 2; i++) recordFailure(`lixo-${i}`, 15 * 60 * 1000, 600)
+    expect(isRateLimited("reset:email:vitima@x.com", 3, 15 * 60 * 1000, 700)).toBe(true)
+  })
+
+  it("tabela cheia de baldes protegidos: quem tenta reservar uma chave NOVA é RECUSADO (falha fechada), não deixado passar sem limite", () => {
+    for (let i = 0; i < MAX_BUCKETS; i++) for (let f = 0; f < 5; f++) recordFailure(`b-${i}`, 15 * 60 * 1000, 1000)
+    expect(reserveAttempt("alvo-novo", 5, 15 * 60 * 1000, 1001)).toBe(false)
+    expect(recordFailure("alvo-novo", 15 * 60 * 1000, 1001)).toBe(false)
+    expect(bucketCount()).toBe(MAX_BUCKETS)
+  })
+})

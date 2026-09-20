@@ -12,10 +12,12 @@ const buckets = new Map<string, Bucket>()
 // Teto de chaves rastreadas ao mesmo tempo. Sem ele, quem manda milhões de e-mails/IPs inventados (o cabeçalho de IP
 // pode ser forjado) encheria a memória do processo: um balde só some quando a MESMA chave é consultada de novo depois da
 // janela. Ao chegar no teto: primeiro se descartam os vencidos; se tudo ainda é da janela atual, os 10% mais antigos
-// que NÃO estão bloqueados. Um bloqueio ativo (falhas no máximo) nunca é apagado para abrir espaço — senão inundar de
-// chaves falsas zeraria o limite de quem está sendo atacado. Se não sobrar o que descartar, a chave NOVA deixa de ser
-// rastreada (o rastreio das já existentes, inclusive dos bloqueios, é preservado).
+// que NÃO estão protegidos. Um bloqueio ativo nunca é apagado para abrir espaço — senão inundar de chaves falsas zeraria o
+// limite de quem está sendo atacado. Os limites em uso vão de 3 a 20 falhas, então "protegido" é qualquer balde com 3 ou
+// mais falhas (todo bloqueio é um deles). Se não sobrar o que descartar, o rastreio de uma chave NOVA falha — e quem
+// reserva uma tentativa (`reserveAttempt`) recebe "recusado": um limitador de segurança falha FECHADO.
 export const MAX_BUCKETS = 50_000
+const PROTECTED_FAILURES = 3
 
 function makeRoom(now: number): boolean {
   if (buckets.size < MAX_BUCKETS) return true
@@ -26,7 +28,7 @@ function makeRoom(now: number): boolean {
   let drop = Math.ceil(MAX_BUCKETS / 10)
   for (const [key, bucket] of buckets) { // o Map guarda a ordem de inserção: os primeiros são os mais antigos
     if (drop <= 0) break
-    if (bucket.failures >= LOGIN_MAX_FAILURES) continue // bloqueio ativo: fica
+    if (bucket.failures >= PROTECTED_FAILURES) continue // pode ser um bloqueio ativo: fica
     buckets.delete(key)
     drop--
   }
@@ -58,13 +60,16 @@ export function isRateLimited(key: string, max = LOGIN_MAX_FAILURES, windowMs = 
   return (current(key, now, windowMs)?.failures ?? 0) >= max
 }
 
-export function recordFailure(key: string, windowMs = LOGIN_WINDOW_MS, now = Date.now()): void {
+// Devolve false quando não deu para rastrear a chave (tabela cheia de baldes protegidos).
+export function recordFailure(key: string, windowMs = LOGIN_WINDOW_MS, now = Date.now()): boolean {
   const bucket = current(key, now, windowMs)
   if (bucket) {
     bucket.failures++
-  } else {
-    if (makeRoom(now)) buckets.set(key, { failures: 1, windowStart: now })
+    return true
   }
+  if (!makeRoom(now)) return false
+  buckets.set(key, { failures: 1, windowStart: now })
+  return true
 }
 
 // Reserva UMA tentativa ANTES de a conferência começar. Conferir senha/código é assíncrono (banco, scrypt): se o
@@ -74,8 +79,7 @@ export function recordFailure(key: string, windowMs = LOGIN_WINDOW_MS, now = Dat
 // `releaseAttempt` devolve só esta reserva (quando o contador é compartilhado com outras pessoas, como o do IP).
 export function reserveAttempt(key: string, max = LOGIN_MAX_FAILURES, windowMs = LOGIN_WINDOW_MS, now = Date.now()): boolean {
   if (isRateLimited(key, max, windowMs, now)) return false
-  recordFailure(key, windowMs, now)
-  return true
+  return recordFailure(key, windowMs, now) // não rastreável (tabela cheia): recusa, em vez de deixar passar sem limite
 }
 
 export function releaseAttempt(key: string, windowMs = LOGIN_WINDOW_MS, now = Date.now()): void {

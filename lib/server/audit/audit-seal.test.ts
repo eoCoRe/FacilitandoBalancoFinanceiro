@@ -62,7 +62,7 @@ const db = vi.hoisted(() => {
 })
 vi.mock("@/lib/db", () => ({ prisma: db.prisma }))
 
-import { computeSeal, resetOwnUnsealed, sealOwn, sealPending, UNSEALED_TOLERANCE_MS, verifyAuditIntegrity } from "@/lib/server/audit/audit-seal"
+import { computeSeal, resetOwnUnsealed, sealOwn, sealPending, verifyAuditIntegrity } from "@/lib/server/audit/audit-seal"
 
 // "Agora" fixo, poucos minutos depois dos registros criados por add().
 const AGORA = new Date("2026-09-20T10:05:00Z")
@@ -86,7 +86,8 @@ function add(n = 1, over: Partial<Row> = {}) {
 }
 // A ação explícita do administrador (ou a preparação de um cenário): sela todos os pendentes.
 const selarTodos = () => sealPending({ all: true })
-const passaTempo = (ms: number) => vi.setSystemTime(new Date(Date.now() + ms))
+// Sem a espera de 1,5 s da verificação (nos testes a espera é zero, salvo o que testa a espera de propósito).
+const verificar = (opcoes: { settleMs?: number } = {}) => verifyAuditIntegrity({ settleMs: 0, ...opcoes })
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -168,7 +169,7 @@ describe("selagem", () => {
     expect(await sealPending({ ids: [4] })).toBe(1)
 
     expect(atrasado.seloSeq).toBe(6) // entrou no fim
-    expect(await verifyAuditIntegrity()).toMatchObject({ integra: true, verificados: 6, naoSelados: 0 })
+    expect(await verificar()).toMatchObject({ integra: true, verificados: 6, naoSelados: 0 })
   })
 
   it("registro selado SEM posição não vira o 'último' da cadeia (no Postgres, ORDER BY DESC põe NULL primeiro)", async () => {
@@ -228,22 +229,20 @@ describe("sealOwn: o servidor só sela o que ELE gravou", () => {
     await sealOwn(4)
 
     expect(db.state.rows.map((r) => r.selo !== null)).toEqual([true, false, false, true]) // só o #4 (dele) foi selado
-    passaTempo(UNSEALED_TOLERANCE_MS + 1000)
-    const r = await verifyAuditIntegrity()
+    const r = await verificar()
     expect(r.integra).toBe(false)
     expect(r.quebra?.id).toBe(2)
   })
 
-  it("mesmo com a data do registro reescrita para 'agora' (o servidor não se guia por ela), não carimba o que não gravou", async () => {
-    add(2)
+  it("mesmo com a data do registro reescrita (agora ou FUTURA), não carimba o que não gravou — a data não decide nada", async () => {
+    add(3)
     await sealOwn(1)
-    db.state.rows[0].selo = null
-    db.state.rows[0].seloAnterior = null
-    db.state.rows[0].seloSeq = null
-    db.state.rows[0].detalhe = "adulterado"
-    db.state.rows[0].criadoEm = new Date() // "recente"
-    await sealOwn(2)
-    expect(db.state.rows[0].selo).toBeNull()
+    for (const criadoEm of [new Date(), new Date(Date.now() + 365 * 86_400_000)]) {
+      const alvo = db.state.rows[1]
+      Object.assign(alvo, { selo: null, seloAnterior: null, seloSeq: null, detalhe: "adulterado", criadoEm })
+      await sealOwn(3)
+      expect(alvo.selo).toBeNull()
+    }
   })
 
   it("se a selagem falhar, o id fica guardado e a PRÓXIMA gravação sela os dois", async () => {
@@ -255,7 +254,7 @@ describe("sealOwn: o servidor só sela o que ELE gravou", () => {
     db.state.falhaTransacao = false
     await sealOwn(2)
     expect(db.state.rows.map((r) => r.selo !== null)).toEqual([true, true])
-    expect(await verifyAuditIntegrity()).toMatchObject({ integra: true, verificados: 2 })
+    expect(await verificar()).toMatchObject({ integra: true, verificados: 2 })
   })
 
   it("depois do sucesso o id sai da lista: a próxima chamada não repete trabalho", async () => {
@@ -265,22 +264,34 @@ describe("sealOwn: o servidor só sela o que ELE gravou", () => {
     await sealOwn(2)
     expect(db.prisma.$transaction).toHaveBeenCalledTimes(1) // um lote só, sem reprocessar o #1
   })
+
+  it("guarda no máximo os 1000 ids mais recentes quando a selagem falha por muito tempo (a memória não cresce sem limite)", async () => {
+    db.state.falhaTransacao = true
+    add(1005)
+    for (let id = 1; id <= 1005; id++) await sealOwn(id).catch(() => {})
+    db.state.falhaTransacao = false
+    db.prisma.$transaction.mockClear()
+    await sealOwn(1005)
+    // os 5 mais antigos foram descartados da lista; os 1000 restantes são selados (em lotes de 100)
+    expect(db.state.rows.filter((r) => r.selo !== null)).toHaveLength(1000)
+    expect(db.state.rows.slice(0, 5).every((r) => r.selo === null)).toBe(true)
+  })
 })
 
 describe("verificação", () => {
   it("trilha intacta: íntegra, com a contagem e a faixa de ids", async () => {
     add(5)
     await selarTodos()
-    expect(await verifyAuditIntegrity()).toEqual({ integra: true, verificados: 5, naoSelados: 0, primeiroId: 1, ultimoId: 5, quebra: null })
+    expect(await verificar()).toEqual({ integra: true, verificados: 5, naoSelados: 0, primeiroId: 1, ultimoId: 5, quebra: null })
   })
 
   it("trilha vazia: íntegra, nada a conferir", async () => {
-    expect(await verifyAuditIntegrity()).toMatchObject({ integra: true, verificados: 0, primeiroId: null })
+    expect(await verificar()).toMatchObject({ integra: true, verificados: 0, primeiroId: null })
   })
 
   it("a verificação NÃO sela nada", async () => {
     add(2)
-    await verifyAuditIntegrity()
+    await verificar()
     expect(db.state.rows.every((r) => r.selo === null)).toBe(true)
     expect(db.prisma.$transaction).not.toHaveBeenCalled()
   })
@@ -294,7 +305,7 @@ describe("verificação", () => {
     add(5)
     await selarTodos()
     Object.assign(db.state.rows[2], mudanca) // o registro #3
-    const r = await verifyAuditIntegrity()
+    const r = await verificar()
     expect(r.integra).toBe(false)
     expect(r.quebra).toMatchObject({ id: 3, motivo: expect.stringContaining("alterado") })
     expect(r.verificados).toBe(2) // conferiu #1 e #2 antes de achar o problema
@@ -304,46 +315,46 @@ describe("verificação", () => {
     add(5)
     await selarTodos()
     db.state.rows.splice(2, 1) // some o #3
-    const r = await verifyAuditIntegrity()
+    const r = await verificar()
     expect(r.integra).toBe(false)
-    expect(r.quebra).toMatchObject({ id: 4, motivo: expect.stringContaining("encadeamento") })
+    expect(r.quebra).toMatchObject({ id: 4, tipo: "encadeamento", motivo: expect.stringContaining("encadeamento") })
   })
 
   it("inserir um registro forjado no meio também é detectado", async () => {
     add(4)
     await selarTodos()
     db.state.rows.splice(2, 0, { ...db.state.rows[1], id: 99, selo: "0".repeat(64) })
-    expect((await verifyAuditIntegrity()).integra).toBe(false)
+    expect((await verificar()).integra).toBe(false)
   })
 
   it("tirar só a POSIÇÃO de um registro selado não o esconde da verificação", async () => {
     add(4)
     await selarTodos()
     db.state.rows[3].seloSeq = null // o último: sumiria da leitura por posição, mas continua com selo
-    const r = await verifyAuditIntegrity()
+    const r = await verificar()
     expect(r.integra).toBe(false)
-    expect(r.quebra).toMatchObject({ id: 4, motivo: expect.stringContaining("posição") })
+    expect(r.quebra).toMatchObject({ id: 4, tipo: "posicao", motivo: expect.stringContaining("posição") })
   })
 
   it("tirar a posição de um registro do MEIO quebra o encadeamento no seguinte", async () => {
     add(4)
     await selarTodos()
     db.state.rows[1].seloSeq = null
-    expect(await verifyAuditIntegrity()).toMatchObject({ integra: false, quebra: { id: 3 } })
+    expect(await verificar()).toMatchObject({ integra: false, quebra: { id: 3 } })
   })
 
   it("trocar o selo por um inventado não passa (sem a chave não dá para calcular)", async () => {
     add(3)
     await selarTodos()
     db.state.rows[1].selo = "f".repeat(64)
-    expect((await verifyAuditIntegrity()).integra).toBe(false)
+    expect((await verificar()).integra).toBe(false)
   })
 
   it("o expurgo por retenção (apaga o COMEÇO da cadeia) não é tratado como adulteração", async () => {
     add(6)
     await selarTodos()
     db.state.rows.splice(0, 3) // sobram #4..#6; o #4 aponta para um selo que não existe mais
-    expect(await verifyAuditIntegrity()).toMatchObject({ integra: true, verificados: 3, primeiroId: 4, ultimoId: 6 })
+    expect(await verificar()).toMatchObject({ integra: true, verificados: 3, primeiroId: 4, ultimoId: 6 })
   })
 
   it("mas adulterar o primeiro que sobrou depois do expurgo continua sendo detectado", async () => {
@@ -351,42 +362,55 @@ describe("verificação", () => {
     await selarTodos()
     db.state.rows.splice(0, 3)
     db.state.rows[0].acao = "outra"
-    expect((await verifyAuditIntegrity()).quebra).toMatchObject({ id: 4 })
+    expect((await verificar()).quebra).toMatchObject({ id: 4 })
   })
 
   it("selo trocado de chave (AUTH_SECRET/AUDIT_SEAL_SECRET mudou) aparece como problema, não some", async () => {
     add(3)
     await selarTodos()
     vi.stubEnv("AUDIT_SEAL_SECRET", "novo".repeat(10))
-    expect((await verifyAuditIntegrity()).integra).toBe(false)
+    expect((await verificar()).integra).toBe(false)
   })
 
   it("confere trilhas maiores que uma página de leitura", async () => {
     add(2300)
     await selarTodos()
-    expect(await verifyAuditIntegrity()).toMatchObject({ integra: true, verificados: 2300 })
+    expect(await verificar()).toMatchObject({ integra: true, verificados: 2300 })
   })
 })
 
-describe("registros sem selo (o tempo só decide o que APONTAR, nunca o que o servidor carimba)", () => {
-  it("recém-gravado e ainda sem selo (pode estar sendo selado agora): conta em naoSelados, mas não é problema", async () => {
-    add(1)
-    add(1, { criadoEm: new Date(AGORA.getTime() - 30_000) }) // gravado há 30 s
-    await sealOwn(1)
-    expect(await verifyAuditIntegrity()).toMatchObject({ integra: true, verificados: 1, naoSelados: 1 })
-  })
-
-  it("sem selo há mais que a tolerância: a verificação aponta (e continua sem selo)", async () => {
+describe("registros sem selo (a DATA do registro não decide nada: só a espera e a origem)", () => {
+  it("um registro gravado por OUTRO servidor e selado durante a espera da verificação não é problema", async () => {
     add(3)
     await selarTodos()
-    add(1, { criadoEm: new Date(AGORA.getTime() - 2 * 3600_000) }) // criado há 2 h e nunca selado
-    const r = await verifyAuditIntegrity()
-    expect(r.integra).toBe(false)
-    expect(r.quebra).toMatchObject({ id: 4, motivo: expect.stringContaining("sem selo há mais de 2 minutos") })
-    expect(db.state.rows[3].selo).toBeNull()
+    add(1) // outro servidor acabou de gravar o #4 e ainda não selou
+    const verificacao = verificar({ settleMs: 40 })
+    await new Promise((resolve) => setTimeout(resolve, 10))
+    await sealPending({ ids: [4] }) // o outro servidor termina de selar
+    expect(await verificacao).toMatchObject({ integra: true, naoSelados: 0 }) // (a cadeia foi lida antes de o #4 ser selado: ele entra na próxima)
   })
 
-  it("ATAQUE: zerar os selos de TODA a trilha e editar — nada é carimbado; a verificação aponta depois da tolerância", async () => {
+  it("continua sem selo depois da espera: é problema, mesmo recém-gravado", async () => {
+    add(3)
+    await selarTodos()
+    add(1, { criadoEm: new Date() })
+    const r = await verificar({ settleMs: 10 })
+    expect(r.integra).toBe(false)
+    expect(r.quebra).toMatchObject({ id: 4, tipo: "sem-selo", motivo: expect.stringContaining("sem selo") })
+    expect(db.state.rows[3].selo).toBeNull() // e a verificação não o selou
+  })
+
+  it("ATAQUE: registro sem selo com data FUTURA (ou 'agora') para se esconder atrás da tolerância — é apontado do mesmo jeito", async () => {
+    add(3)
+    await selarTodos()
+    const alvo = db.state.rows[2]
+    Object.assign(alvo, { selo: null, seloAnterior: null, seloSeq: null, detalhe: "adulterado", criadoEm: new Date(Date.now() + 30 * 86_400_000) })
+    const r = await verificar()
+    expect(r.integra).toBe(false)
+    expect(r.quebra?.id).toBe(3)
+  })
+
+  it("ATAQUE: zerar os selos de TODA a trilha e editar — nada é carimbado, e a verificação aponta", async () => {
     add(5)
     await selarTodos()
     for (const linha of db.state.rows) {
@@ -397,31 +421,57 @@ describe("registros sem selo (o tempo só decide o que APONTAR, nunca o que o se
     db.state.rows[1].detalhe = "adulterado"
     add(1)
     await sealOwn(6) // o servidor grava e sela SÓ o dele
-    passaTempo(UNSEALED_TOLERANCE_MS + 1000)
-    const r = await verifyAuditIntegrity()
+    const r = await verificar()
     expect(r.integra).toBe(false)
     expect(r.quebra?.id).toBe(1)
+  })
+
+  it("falha PASSAGEIRA de selagem: a verificação repete a selagem do que este processo gravou — sem falso alarme e sem o administrador", async () => {
+    add(3)
+    await selarTodos()
+    add(1)
+    db.state.falhaTransacao = true
+    await expect(sealOwn(4)).rejects.toThrow()
+    db.state.falhaTransacao = false // o banco voltou, ninguém mais gravou nada no meio tempo
+
+    expect(await verificar()).toMatchObject({ integra: true, verificados: 4, naoSelados: 0 })
+  })
+
+  it("se o retry da própria verificação também falhar, o registro aparece como sem selo (a verdade), sem quebrar a verificação", async () => {
+    add(2)
+    await selarTodos()
+    add(1)
+    db.state.falhaTransacao = true
+    await expect(sealOwn(3)).rejects.toThrow()
+    const r = await verificar()
+    expect(r.integra).toBe(false)
+    expect(r.quebra?.id).toBe(3)
+  })
+
+  it("selagem perdida com o reinício do servidor (o id sumiu da memória): a verificação aponta e o administrador sela", async () => {
+    add(3)
+    await selarTodos()
+    add(1)
+    resetOwnUnsealed() // o processo reiniciou
+    expect((await verificar()).integra).toBe(false)
+    await selarTodos()
+    expect(await verificar()).toMatchObject({ integra: true, verificados: 4 })
   })
 
   it("instalação anterior à selagem (histórico sem selo): apontado até o administrador selar UMA vez; depois íntegra", async () => {
     add(4, { criadoEm: new Date("2025-01-01T00:00:00Z") })
     expect(await sealPending()).toBe(0) // o servidor não sela histórico por conta própria
-    const antes = await verifyAuditIntegrity()
+    const antes = await verificar()
     expect(antes.integra).toBe(false)
-    expect(antes.quebra).toMatchObject({ id: 1, motivo: expect.stringContaining("sem selo há mais de") })
+    expect(antes.quebra).toMatchObject({ id: 1, motivo: expect.stringContaining("sem selo") })
 
     expect(await selarTodos()).toBe(4) // decisão do administrador (rota selar-pendentes)
-    expect(await verifyAuditIntegrity()).toMatchObject({ integra: true, verificados: 4, naoSelados: 0 })
+    expect(await verificar()).toMatchObject({ integra: true, verificados: 4, naoSelados: 0 })
   })
 
-  it("recuperação depois de reiniciar o servidor no meio de uma falha de selagem: o administrador sela e volta a ficar íntegro", async () => {
+  it("trilha nova: cada registro é selado pelo servidor que o gravou, e a verificação passa sem nenhuma ação", async () => {
     add(3)
-    await selarTodos()
-    add(1)
-    // (a selagem do #4 falhou e o processo reiniciou: o id se perdeu da memória)
-    passaTempo(3 * 3600_000)
-    expect((await verifyAuditIntegrity()).integra).toBe(false)
-    await selarTodos()
-    expect(await verifyAuditIntegrity()).toMatchObject({ integra: true, verificados: 4 })
+    for (const id of [1, 2, 3]) await sealOwn(id)
+    expect(await verificar()).toMatchObject({ integra: true, verificados: 3 })
   })
 })

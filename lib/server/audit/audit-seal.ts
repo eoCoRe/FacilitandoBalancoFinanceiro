@@ -22,16 +22,19 @@ import { getAuthSecret } from "@/lib/server/auth/session"
 // expurgo por retenção só apaga o começo da cadeia (ver retention.ts) e a verificação recomeça do primeiro que sobrou.
 
 // Trava que serializa a selagem entre requisições simultâneas (dois selando ao mesmo tempo bifurcariam a cadeia).
-const SEAL_LOCK_KEY = 7_310_442
+export const SEAL_LOCK_KEY = 7_310_442
 const SEAL_BATCH = 100
 // Cada lote é uma transação interativa (padrão do Prisma: 5 s). O tempo folgado evita que um banco lento ou remoto
 // aborte o lote no meio e o refaça para sempre; a trava só é mantida enquanto o lote roda.
 const SEAL_TX_OPTIONS = { timeout: 30_000, maxWait: 10_000 }
 // Limite de lotes por chamada: quem grava um evento não deve ficar preso selando um histórico enorme.
 const SEAL_MAX_BATCHES = 25
-// Na VERIFICAÇÃO, registro sem selo mais novo que isto ainda pode estar sendo selado (por este ou por outro servidor);
-// mais velho que isto é problema. O tempo só decide o que APONTAR — nunca o que o servidor carimba.
-export const UNSEALED_TOLERANCE_MS = 2 * 60 * 1000
+// Quantos registros no máximo UMA chamada de sealPending consegue selar (lotes × tamanho do lote).
+export const SEAL_MAX_PER_CALL = SEAL_BATCH * SEAL_MAX_BATCHES
+// Na VERIFICAÇÃO, um registro sem selo pode estar sendo selado agora (pelo servidor que o gravou, milissegundos depois do
+// `create`). Em vez de confiar na data do registro — que quem escreve no banco também escreve — a verificação ESPERA um
+// instante e olha de novo: quem ainda está sem selo depois disso não está "em andamento".
+export const SETTLE_MS = 1500
 
 type SealFields = { id: number; empresaId: number; usuario: string; acao: string; detalhe: string; criadoEm: Date }
 
@@ -107,6 +110,16 @@ export async function sealOwn(id: number): Promise<void> {
   for (const selado of ids) ownUnsealed.delete(selado)
 }
 
+// Tenta de novo selar o que ESTE processo gravou e não conseguiu selar (uma falha passageira do banco). É seguro: só
+// mexe em registros que este processo mesmo gravou. A verificação chama isto antes de conferir, para uma falha
+// passageira não virar um falso alarme de adulteração.
+export async function retryOwnUnsealed(): Promise<void> {
+  if (ownUnsealed.size === 0) return
+  const ids = [...ownUnsealed]
+  await sealPending({ ids })
+  for (const selado of ids) ownUnsealed.delete(selado)
+}
+
 // Só para testes.
 export function resetOwnUnsealed(): void {
   ownUnsealed.clear()
@@ -116,18 +129,22 @@ export interface IntegrityReport {
   integra: boolean
   // Registros com selo conferidos (do primeiro ao último selado).
   verificados: number
-  // Registros ainda sem selo (gravados neste instante, por exemplo).
+  // Registros ainda sem selo. Só é "problema" (quebra) se continuarem assim depois de a verificação esperar um instante.
   naoSelados: number
   primeiroId: number | null
   ultimoId: number | null
-  // Primeiro problema encontrado, se houver.
-  quebra: { id: number; motivo: string } | null
+  // Primeiro problema encontrado, se houver. `tipo` deixa a tela decidir o que oferecer sem depender do texto da mensagem
+  // (só "sem-selo" é algo que o administrador pode resolver selando à mão).
+  quebra: { id: number; motivo: string; tipo: "conteudo" | "encadeamento" | "posicao" | "sem-selo" } | null
 }
 
 const VERIFY_PAGE = 1000
 
-// Confere a cadeia inteira, do primeiro ao último registro selado. Não sela nada (ver "quem sela o quê" acima).
-export async function verifyAuditIntegrity(): Promise<IntegrityReport> {
+// Confere a cadeia inteira, do primeiro ao último registro selado. Não sela nada de ninguém (ver "quem sela o quê"
+// acima); só repete a selagem do que ESTE processo gravou e não conseguiu selar.
+export async function verifyAuditIntegrity({ settleMs = SETTLE_MS }: { settleMs?: number } = {}): Promise<IntegrityReport> {
+  await retryOwnUnsealed().catch(() => {}) // se ainda falhar, o registro aparece como sem selo, que é a verdade
+
   let verificados = 0
   let primeiroId: number | null = null
   let ultimoId: number | null = null
@@ -149,11 +166,11 @@ export async function verifyAuditIntegrity(): Promise<IntegrityReport> {
         // O primeiro registro que sobrou é a âncora: o selo anterior dele é aceito como está (o anterior pode
         // ter sido expurgado por retenção), mas o selo do próprio registro é conferido.
       } else if (row.seloAnterior !== anterior) {
-        quebra = { id: row.id, motivo: "O encadeamento com o registro anterior não confere: há registro apagado ou inserido antes deste." }
+        quebra = { id: row.id, tipo: "encadeamento", motivo: "O encadeamento com o registro anterior não confere: há registro apagado ou inserido antes deste." }
         break
       }
       if (!safeEqual(row.selo, computeSeal(row.seloAnterior, row))) {
-        quebra = { id: row.id, motivo: "O conteúdo deste registro não confere com o selo: foi alterado depois de gravado." }
+        quebra = { id: row.id, tipo: "conteudo", motivo: "O conteúdo deste registro não confere com o selo: foi alterado depois de gravado." }
         break
       }
       anterior = row.selo
@@ -172,23 +189,26 @@ export async function verifyAuditIntegrity(): Promise<IntegrityReport> {
       select: { id: true },
     })
     if (semPosicao) {
-      quebra = { id: semPosicao.id, motivo: "Este registro tem selo mas não tem posição na cadeia: foi mexido diretamente no banco." }
+      quebra = { id: semPosicao.id, tipo: "posicao", motivo: "Este registro tem selo mas não tem posição na cadeia: foi mexido diretamente no banco." }
     }
   }
 
-  // Registro sem selo há tempo demais: a selagem está falhando, ou mexeram no banco, ou é o histórico de uma instalação
-  // anterior (o administrador precisa selar uma vez). Os mais novos podem estar sendo selados agora, então só contam
-  // em `naoSelados`.
+  // Registro que continua SEM selo: a selagem falhou (e o processo reiniciou), ou é o histórico de uma instalação
+  // anterior (o administrador sela uma vez), ou mexeram no banco. Um registro que acabou de ser gravado por outro
+  // servidor pode estar sendo selado neste instante, por isso se espera um pouco e se olha de novo — sem usar a data do
+  // registro, que não é confiável (quem escreve no banco reescreve a data).
   if (!quebra) {
-    const velho = await prisma.auditLog.findFirst({
-      where: { selo: null, criadoEm: { lt: new Date(Date.now() - UNSEALED_TOLERANCE_MS) } },
-      orderBy: { id: "asc" },
-      select: { id: true },
-    })
-    if (velho) {
-      quebra = {
-        id: velho.id,
-        motivo: `Este registro está sem selo há mais de ${UNSEALED_TOLERANCE_MS / 60_000} minutos: a selagem está falhando ou o registro foi mexido diretamente no banco.`,
+    const primeiroSemSelo = () =>
+      prisma.auditLog.findFirst({ where: { selo: null }, orderBy: { id: "asc" }, select: { id: true } })
+    if (await primeiroSemSelo()) {
+      if (settleMs > 0) await new Promise((resolve) => setTimeout(resolve, settleMs))
+      const semSelo = await primeiroSemSelo()
+      if (semSelo) {
+        quebra = {
+          id: semSelo.id,
+          tipo: "sem-selo",
+          motivo: "Este registro está sem selo: a selagem falhou, é anterior ao recurso, ou o registro foi mexido diretamente no banco.",
+        }
       }
     }
   }

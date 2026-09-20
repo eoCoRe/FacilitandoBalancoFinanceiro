@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
 import { logAudit } from "@/lib/server/audit/audit"
-import { sealPending } from "@/lib/server/audit/audit-seal"
+import { SEAL_MAX_PER_CALL, sealPending } from "@/lib/server/audit/audit-seal"
 import { requirePermission } from "@/lib/server/auth/authz"
 import { getDefaultEmpresa } from "@/lib/server/data/empresa"
 import { handleRouteError } from "@/lib/server/http"
@@ -15,13 +15,22 @@ export async function POST() {
     const admin = await requirePermission("selar-auditoria")
     const empresa = await getDefaultEmpresa()
 
-    const pendentes = await prisma.auditLog.findMany({ where: { selo: null }, orderBy: { id: "asc" }, select: { id: true } })
-    const selados = await sealPending({ all: true })
-    if (pendentes.length > 0) {
+    const antes = await prisma.auditLog.aggregate({ _min: { id: true }, _max: { id: true }, where: { selo: null } })
+
+    // Uma chamada sela até SEAL_MAX_PER_CALL; um histórico maior precisa de várias, e o administrador não deve ter que
+    // clicar de novo. Continua enquanto cada rodada encher o limite (então pode haver mais).
+    let selados = 0
+    for (let rodada = 0; rodada < 1000; rodada++) {
+      const n = await sealPending({ all: true })
+      selados += n
+      if (n < SEAL_MAX_PER_CALL) break
+    }
+
+    if (selados > 0) {
       await logAudit(
         empresa.id,
         "Registros pendentes selados manualmente",
-        `${selados} registro(s) sem selo (#${pendentes[0].id} a #${pendentes[pendentes.length - 1].id}) foram selados por decisão do administrador.`,
+        `${selados} registro(s) sem selo (#${antes._min.id} a #${antes._max.id}) foram selados por decisão do administrador.`,
         admin.email,
       )
     }

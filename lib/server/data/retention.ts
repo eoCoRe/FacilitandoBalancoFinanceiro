@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db"
+import { SEAL_LOCK_KEY } from "@/lib/server/audit/audit-seal"
 
 // Prazos padrão — política ainda não fixada pelo negócio (ver SECURITY.md); estes
 // defaults são só um ponto de partida defensável, sobrescrevível por variável de
@@ -50,18 +51,26 @@ export async function purgeExpiredData(now: Date = new Date()): Promise<PurgeRes
   // poderia arrancar um registro do MEIO da cadeia e a verificação acusaria adulteração em dado honesto. Por isso só se
   // apaga um PREFIXO da cadeia: o que vence E está antes do primeiro registro que continua guardado. Um registro velho
   // que ficou depois de um registro ainda dentro do prazo espera o prefixo passar (some no expurgo seguinte).
+  // Tudo sob a MESMA trava da selagem: sem ela, um registro sendo selado neste instante (que já leu o "último selado")
+  // poderia ficar apontando para um registro que o expurgo acabou de apagar.
   const auditCutoff = daysBefore(auditLogRetentionDays, now)
-  const primeiroMantido = await prisma.auditLog.aggregate({
-    _min: { seloSeq: true },
-    where: { criadoEm: { gte: auditCutoff }, seloSeq: { not: null } },
-  })
-  const limiteDaCadeia = primeiroMantido._min.seloSeq
-  const auditLogsApagados = await prisma.auditLog.deleteMany({
-    where: {
-      criadoEm: { lt: auditCutoff },
-      ...(limiteDaCadeia === null ? {} : { OR: [{ selo: null }, { seloSeq: { lt: limiteDaCadeia } }] }),
+  const auditLogsApagados = await prisma.$transaction(
+    async (tx) => {
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(${SEAL_LOCK_KEY})::text`
+      const primeiroMantido = await tx.auditLog.aggregate({
+        _min: { seloSeq: true },
+        where: { criadoEm: { gte: auditCutoff }, seloSeq: { not: null } },
+      })
+      const limiteDaCadeia = primeiroMantido._min.seloSeq
+      return tx.auditLog.deleteMany({
+        where: {
+          criadoEm: { lt: auditCutoff },
+          ...(limiteDaCadeia === null ? {} : { OR: [{ selo: null }, { seloSeq: { lt: limiteDaCadeia } }] }),
+        },
+      })
     },
-  })
+    { timeout: 120_000, maxWait: 30_000 },
+  )
   const extracoesApagadas = await prisma.extracao.deleteMany({
     where: { criadoEm: { lt: daysBefore(extracaoRetentionDays, now) } },
   })

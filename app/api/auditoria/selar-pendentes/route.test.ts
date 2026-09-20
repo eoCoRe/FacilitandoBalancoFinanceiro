@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const { prisma, seal } = vi.hoisted(() => ({
-  prisma: { empresa: { findFirst: vi.fn() }, auditLog: { create: vi.fn(), findMany: vi.fn() } },
+  prisma: { empresa: { findFirst: vi.fn() }, auditLog: { create: vi.fn(), aggregate: vi.fn() } },
   seal: { sealPending: vi.fn() },
 }))
 vi.mock("@/lib/db", () => ({ prisma }))
@@ -11,13 +11,14 @@ vi.mock("@/lib/server/audit/audit-seal", async (importOriginal) => ({
 }))
 
 import { getCurrentUser } from "@/lib/server/auth/current-user"
+import { SEAL_MAX_PER_CALL } from "@/lib/server/audit/audit-seal"
 import { POST } from "./route"
 
 beforeEach(() => {
   vi.clearAllMocks()
   vi.mocked(getCurrentUser).mockResolvedValue({ id: 1, email: "admin@teste.com", nome: "Admin", papel: "ADMINISTRADOR" })
   prisma.empresa.findFirst.mockResolvedValue({ id: 1 })
-  prisma.auditLog.findMany.mockResolvedValue([{ id: 40 }, { id: 41 }, { id: 44 }])
+  prisma.auditLog.aggregate.mockResolvedValue({ _min: { id: 40 }, _max: { id: 44 } })
   seal.sealPending.mockResolvedValue(3)
 })
 
@@ -36,8 +37,17 @@ describe("POST /api/auditoria/selar-pendentes", () => {
     })
   })
 
+  it("histórico MAIOR que o limite de uma chamada: continua selando até acabar e a trilha registra o total REAL", async () => {
+    seal.sealPending.mockReset()
+    seal.sealPending.mockResolvedValueOnce(SEAL_MAX_PER_CALL).mockResolvedValueOnce(SEAL_MAX_PER_CALL).mockResolvedValueOnce(120)
+    const corpo = await (await POST()).json()
+    expect(corpo).toEqual({ selados: SEAL_MAX_PER_CALL * 2 + 120 })
+    expect(seal.sealPending).toHaveBeenCalledTimes(3)
+    expect(prisma.auditLog.create.mock.calls[0][0].data.detalhe).toContain(`${SEAL_MAX_PER_CALL * 2 + 120} registro(s)`)
+  })
+
   it("sem nada pendente: não grava registro nenhum na trilha", async () => {
-    prisma.auditLog.findMany.mockResolvedValue([])
+    prisma.auditLog.aggregate.mockResolvedValue({ _min: { id: null }, _max: { id: null } })
     seal.sealPending.mockResolvedValue(0)
     expect(await (await POST()).json()).toEqual({ selados: 0 })
     expect(prisma.auditLog.create).not.toHaveBeenCalled()

@@ -8,9 +8,9 @@ import { handleRouteError } from "@/lib/server/http"
 // Confere se a trilha de auditoria continua íntegra (nenhum registro alterado, apagado no meio ou inserido).
 // Mesmo perfil da exportação (coordenador ou acima): a conferência lê a trilha inteira. O resultado — inclusive
 // quando encontra problema — também fica registrado na trilha.
-// É POST, e não GET, porque TEM EFEITO: sela o que faltar e grava a própria verificação. Uma navegação vinda
-// de outro site carregaria o cookie Lax num GET (disparo à vontade de uma varredura pesada e de linhas na
-// auditoria); como POST, cai na proteção contra CSRF do proxy.
+// É POST, e não GET, porque TEM EFEITO: grava a própria verificação na trilha (e é uma varredura pesada). Uma navegação
+// vinda de outro site carregaria o cookie Lax num GET (disparo à vontade de linhas na auditoria e de carga no banco); como
+// POST, cai na proteção contra CSRF do proxy. A verificação NÃO sela nada de ninguém (ver audit-seal.ts).
 export async function POST() {
   try {
     const user = await requirePermission("exportar-auditoria")

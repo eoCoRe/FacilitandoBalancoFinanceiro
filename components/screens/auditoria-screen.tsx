@@ -29,7 +29,7 @@ interface Integridade {
   naoSelados: number
   primeiroId: number | null
   ultimoId: number | null
-  quebra: { id: number; motivo: string } | null
+  quebra: { id: number; motivo: string; tipo: "conteudo" | "encadeamento" | "posicao" | "sem-selo" } | null
 }
 
 interface Filtros {
@@ -159,8 +159,8 @@ export function AuditoriaScreen() {
     }
   }
 
-  // Confere o selo de cada registro (nenhum alterado, apagado no meio ou inserido). O servidor também sela
-  // o que ainda faltar e registra a própria verificação na trilha.
+  // Confere o selo de cada registro (nenhum alterado, apagado no meio ou inserido). Não sela nada; o servidor
+  // registra a própria verificação na trilha.
   async function verificarIntegridade() {
     if (verificando) return
     setVerificando(true)
@@ -281,7 +281,7 @@ export function AuditoriaScreen() {
               <AlertTriangle className="mt-0.5 size-4 shrink-0" />
               <span>
                 <strong>A trilha foi adulterada.</strong> Problema no registro #{integridade.quebra?.id}: {integridade.quebra?.motivo}
-                {podeSelar && integridade.quebra?.motivo.includes("sem selo há mais de") && (
+                {podeSelar && integridade.quebra?.tipo === "sem-selo" && (
                   <>
                     {" "}
                     <button
