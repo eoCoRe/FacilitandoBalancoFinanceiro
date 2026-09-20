@@ -45,6 +45,8 @@ interface StoreApi extends FinancialSnapshot {
   setSector: (sectorId: string) => void
   // Devolve o id do exercício criado, ou null se o servidor recusou (ex.: período já existe).
   addExercicio: (label: string) => Promise<string | null>
+  // Marca/desmarca o exercício como auditado (informativo; só coordenador ou acima).
+  setExercicioAuditado: (exercicioId: string, auditado: boolean) => void
   updateAccountValue: (code: string, exercicioId: string, value: number | undefined) => void
   updateDreValue: (exercicioId: string, lineId: string, value: number | undefined) => void
   addAccountNode: (parentCode: string | null, name: string, isGroup: boolean) => Promise<boolean>
@@ -260,13 +262,28 @@ export function FinancialDataProvider({ children }: { children: ReactNode }) {
         }
         setData((prev) => ({
           ...prev,
-          exercicios: [...prev.exercicios, { id: exercicio.periodo, label: exercicio.periodo }],
+          exercicios: [...prev.exercicios, { id: exercicio.periodo, label: exercicio.periodo, auditado: false }],
         }))
         return exercicio.periodo
       })
       return created ?? null
     },
     [enqueue, flushValueWrites],
+  )
+
+  const setExercicioAuditado = useCallback(
+    (exercicioId: string, auditado: boolean) => {
+      setData((prev) => ({
+        ...prev,
+        exercicios: prev.exercicios.map((e) => (e.id === exercicioId ? { ...e, auditado } : e)),
+      }))
+      void enqueue(async () => {
+        const exercicioDbId = ids.current.exercicioIdByPeriodo[exercicioId]
+        if (!exercicioDbId) throw new ApiError(`Exercício ${exercicioId} não encontrado.`)
+        await api(`/api/exercicios/${exercicioDbId}`, { method: "PATCH", body: { auditado } })
+      })
+    },
+    [enqueue],
   )
 
   const updateAccountValue = useCallback(
@@ -396,6 +413,7 @@ export function FinancialDataProvider({ children }: { children: ReactNode }) {
       reload,
       setSector,
       addExercicio,
+      setExercicioAuditado,
       updateAccountValue,
       updateDreValue,
       addAccountNode,
@@ -412,6 +430,7 @@ export function FinancialDataProvider({ children }: { children: ReactNode }) {
       reload,
       setSector,
       addExercicio,
+      setExercicioAuditado,
       updateAccountValue,
       updateDreValue,
       addAccountNode,

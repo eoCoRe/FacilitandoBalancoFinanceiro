@@ -155,8 +155,8 @@ describe("mapSnapshot", () => {
       cnpj: "12.345.678/0001-90",
       sectorId: "servicos",
       exercicios: [
-        { id: "4T2024", label: "4T2024" },
-        { id: "1T2025", label: "1T2025" },
+        { id: "4T2024", label: "4T2024", auditado: false },
+        { id: "1T2025", label: "1T2025", auditado: false },
       ],
     })
     expect(ids.exercicioIdByPeriodo).toEqual({ "4T2024": 4, "1T2025": 5 })

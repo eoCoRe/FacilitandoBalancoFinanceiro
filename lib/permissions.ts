@@ -24,6 +24,7 @@ export type Permission =
   | "gerir-plano-de-contas" // criar, renomear e excluir contas
   | "editar-empresa" // razão social e setor
   | "exportar-auditoria" // baixar a trilha de auditoria inteira em CSV
+  | "auditar-exercicio" // marcar/desmarcar um exercício como auditado
   | "gerir-usuarios"
   | "lgpd" // exportar e eliminar dados (Art. 18)
 
@@ -35,6 +36,7 @@ const MIN_PAPEL: Record<Permission, Papel> = {
   "gerir-plano-de-contas": "COORDENADOR",
   "editar-empresa": "COORDENADOR",
   "exportar-auditoria": "COORDENADOR",
+  "auditar-exercicio": "COORDENADOR",
   "gerir-usuarios": "ADMINISTRADOR",
   lgpd: "ADMINISTRADOR",
 }

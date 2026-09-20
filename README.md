@@ -80,7 +80,7 @@ e-mail — opcional por usuário, com opção de o administrador exigir por perf
 SMTP (`SMTP_*` no `.env`); sem ele, em desenvolvimento o e-mail aparece no console do
 servidor e em produção esses recursos ficam desligados.
 Três perfis, cumulativos: **analista** (consulta e lança valores/extrações), **coordenador**
-(+ Plano de Contas, cadastro da empresa e exportar a auditoria) e **administrador** (+ usuários e LGPD). A regra
+(+ Plano de Contas, cadastro da empresa, marcar exercício como auditado e exportar a auditoria) e **administrador** (+ usuários e LGPD). A regra
 está em `lib/permissions.ts` e é imposta no servidor em toda rota de `app/api/`; detalhes e
 limitações em `SECURITY.md`.
 

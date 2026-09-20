@@ -111,7 +111,7 @@ export function OpiniaoDeVendaScreen({ onNavigate }: { onNavigate: (id: ScreenId
       <PageHeader
         eyebrow="Início"
         title="Parecer de Crédito"
-        subtitle={`Parecer automático para ${store.companyName}, com base nos indicadores de ${current}.`}
+        subtitle={`Parecer automático para ${store.companyName}, com base nos indicadores de ${current} (${store.exercicios.find((e) => e.id === current)?.auditado ? "exercício auditado" : "exercício não auditado"}).`}
         actions={
           <>
             <button

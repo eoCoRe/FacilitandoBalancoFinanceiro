@@ -14,6 +14,7 @@ import { DEFAULT_SECTOR_ID, SECTORS } from "./sector-benchmarks"
 export interface Exercicio {
   id: string
   label: string
+  auditado: boolean
 }
 
 export interface AuditEntry {
@@ -175,7 +176,7 @@ export function mapSnapshot(payloads: {
       companyName: empresa.razaoSocial,
       cnpj: empresa.cnpj,
       sectorId: sectorIdFromLabel(empresa.setor),
-      exercicios: empresa.exercicios.map((ex) => ({ id: ex.periodo, label: ex.periodo })),
+      exercicios: empresa.exercicios.map((ex) => ({ id: ex.periodo, label: ex.periodo, auditado: ex.auditado })),
       accounts,
       dreByExercicio,
       dfc: mapDfc(payloads.dfc),
