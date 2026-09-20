@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
 import { handleRouteError } from "@/lib/server/http"
-import { isRateLimited, recordFailure } from "@/lib/server/rate-limit"
+import { isRateLimited, recordFailure } from "@/lib/server/auth/rate-limit"
 import {
   sendLoginCode,
   setTwoFactorCookie,
@@ -10,7 +10,7 @@ import {
   TWO_FACTOR_CHALLENGE_MAX,
   TWO_FACTOR_COOKIE,
   verifyTwoFactorToken,
-} from "@/lib/server/two-factor"
+} from "@/lib/server/auth/two-factor"
 import { TooManyRequestsError, UnauthorizedError, ValidationError } from "@/lib/server/validation"
 
 // "Não recebi o código": envia um novo (o anterior deixa de valer). Divide o mesmo limite de

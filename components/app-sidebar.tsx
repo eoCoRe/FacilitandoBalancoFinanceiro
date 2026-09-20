@@ -1,7 +1,7 @@
 "use client"
 
 import { Search } from "lucide-react"
-import { AccountMenu } from "@/components/account-menu"
+import { AccountMenu } from "@/components/auth/account-menu"
 import { can } from "@/lib/permissions"
 import { useFinancialStore } from "@/lib/store"
 import { INICIO_NAV, ANALISE_NAV, DETALHADO_NAV, ADMIN_NAV, type NavItem, type ScreenId } from "@/lib/navigation"

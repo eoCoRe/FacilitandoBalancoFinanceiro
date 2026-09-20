@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
-import { logAudit } from "@/lib/server/audit"
-import { requireUser } from "@/lib/server/authz"
-import { getDefaultEmpresa } from "@/lib/server/empresa"
+import { logAudit } from "@/lib/server/audit/audit"
+import { requireUser } from "@/lib/server/auth/authz"
+import { getDefaultEmpresa } from "@/lib/server/data/empresa"
 import { handleRouteError } from "@/lib/server/http"
-import { requireCurrentPassword } from "@/lib/server/password-recheck"
+import { requireCurrentPassword } from "@/lib/server/auth/password-recheck"
 import { ValidationError } from "@/lib/server/validation"
 
 // Desliga o 2FA por e-mail da própria conta. Exige a senha (uma sessão emprestada não basta para

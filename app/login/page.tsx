@@ -1,7 +1,7 @@
 import type { Metadata } from "next"
-import { LoginForm } from "@/components/login-form"
-import { googleConfig } from "@/lib/server/google"
-import { mailAvailable } from "@/lib/server/mail"
+import { LoginForm } from "@/components/auth/login-form"
+import { googleConfig } from "@/lib/server/auth/google"
+import { mailAvailable } from "@/lib/server/mail/mail"
 
 export const metadata: Metadata = { title: "Entrar · Central de Balanços" }
 

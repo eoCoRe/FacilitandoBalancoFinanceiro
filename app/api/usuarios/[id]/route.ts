@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
 import { isPapel } from "@/lib/permissions"
-import { logAudit } from "@/lib/server/audit"
-import { requirePermission } from "@/lib/server/authz"
-import { getDefaultEmpresa } from "@/lib/server/empresa"
+import { logAudit } from "@/lib/server/audit/audit"
+import { requirePermission } from "@/lib/server/auth/authz"
+import { getDefaultEmpresa } from "@/lib/server/data/empresa"
 import { handleRouteError } from "@/lib/server/http"
-import { hashPassword, requireValidPassword } from "@/lib/server/password"
-import { toUsuarioDto } from "@/lib/server/usuarios"
+import { hashPassword, requireValidPassword } from "@/lib/server/auth/password"
+import { toUsuarioDto } from "@/lib/server/data/usuarios"
 import { requireNonEmptyString, requirePositiveInt, ValidationError } from "@/lib/server/validation"
 
 interface RouteParams {

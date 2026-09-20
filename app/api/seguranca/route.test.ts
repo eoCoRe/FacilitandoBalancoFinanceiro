@@ -9,7 +9,7 @@ const { prisma, mail } = vi.hoisted(() => ({
   mail: { mailAvailable: vi.fn(), sendMail: vi.fn() },
 }))
 vi.mock("@/lib/db", () => ({ prisma }))
-vi.mock("@/lib/server/mail", () => ({ mailAvailable: mail.mailAvailable, sendMail: mail.sendMail }))
+vi.mock("@/lib/server/mail/mail", () => ({ mailAvailable: mail.mailAvailable, sendMail: mail.sendMail }))
 
 import { GET, PUT } from "./route"
 

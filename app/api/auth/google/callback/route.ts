@@ -9,8 +9,8 @@ import {
   OAUTH_COOKIE_PATH,
   verifyGoogleIdToken,
   verifyOAuthFlow,
-} from "@/lib/server/google"
-import { issueSession } from "@/lib/server/login-session"
+} from "@/lib/server/auth/google"
+import { issueSession } from "@/lib/server/auth/login-session"
 
 // Todo desfecho é um redirecionamento (a tela de login mostra o motivo pelo código `erro`);
 // o corpo da falha nunca vaza para a URL.

@@ -1,5 +1,5 @@
 import type { Metadata } from "next"
-import { ResetPasswordForm } from "@/components/reset-password-form"
+import { ResetPasswordForm } from "@/components/auth/reset-password-form"
 
 // O token está na URL: sem Referer, ele não vaza para nenhum site que a página venha a carregar.
 export const metadata: Metadata = {

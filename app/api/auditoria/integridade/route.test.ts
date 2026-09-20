@@ -5,12 +5,12 @@ const { prisma, seal } = vi.hoisted(() => ({
   seal: { verifyAuditIntegrity: vi.fn() },
 }))
 vi.mock("@/lib/db", () => ({ prisma }))
-vi.mock("@/lib/server/audit-seal", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/server/audit-seal")>()),
+vi.mock("@/lib/server/audit/audit-seal", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/server/audit/audit-seal")>()),
   verifyAuditIntegrity: seal.verifyAuditIntegrity,
 }))
 
-import { getCurrentUser } from "@/lib/server/current-user"
+import { getCurrentUser } from "@/lib/server/auth/current-user"
 import { GET } from "./route"
 
 const OK = { integra: true, verificados: 12, naoSelados: 0, primeiroId: 1, ultimoId: 12, quebra: null }

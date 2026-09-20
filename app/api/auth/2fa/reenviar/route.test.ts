@@ -7,14 +7,14 @@ const { prisma, mail, verification } = vi.hoisted(() => ({
   verification: { createCodeChallenge: vi.fn() },
 }))
 vi.mock("@/lib/db", () => ({ prisma }))
-vi.mock("@/lib/server/mail", () => ({ sendMail: mail.sendMail, mailAvailable: mail.mailAvailable }))
-vi.mock("@/lib/server/verification", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/server/verification")>()),
+vi.mock("@/lib/server/mail/mail", () => ({ sendMail: mail.sendMail, mailAvailable: mail.mailAvailable }))
+vi.mock("@/lib/server/auth/verification", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/server/auth/verification")>()),
   createCodeChallenge: verification.createCodeChallenge,
 }))
 
-import { resetRateLimits } from "@/lib/server/rate-limit"
-import { signTwoFactorToken } from "@/lib/server/two-factor"
+import { resetRateLimits } from "@/lib/server/auth/rate-limit"
+import { signTwoFactorToken } from "@/lib/server/auth/two-factor"
 import { POST } from "./route"
 
 async function reenviar(cookie: string | null | undefined = undefined) {

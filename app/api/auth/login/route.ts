@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
-import { logAuditSafe } from "@/lib/server/audit"
-import { clientIp } from "@/lib/server/client-ip"
+import { logAuditSafe } from "@/lib/server/audit/audit"
+import { clientIp } from "@/lib/server/auth/client-ip"
 import { handleRouteError } from "@/lib/server/http"
 import { logEvent } from "@/lib/server/log"
-import { issueSession } from "@/lib/server/login-session"
-import { PASSWORD_MAX_LENGTH, verifyAgainstDummy, verifyPassword } from "@/lib/server/password"
-import { clearFailures, isRateLimited, recordFailure } from "@/lib/server/rate-limit"
-import { TOTP_CHALLENGE } from "@/lib/server/second-factor"
+import { issueSession } from "@/lib/server/auth/login-session"
+import { PASSWORD_MAX_LENGTH, verifyAgainstDummy, verifyPassword } from "@/lib/server/auth/password"
+import { clearFailures, isRateLimited, recordFailure } from "@/lib/server/auth/rate-limit"
+import { TOTP_CHALLENGE } from "@/lib/server/auth/second-factor"
 import {
   isTwoFactorRequired,
   sendLoginCode,
@@ -15,7 +15,7 @@ import {
   signTwoFactorToken,
   TWO_FACTOR_CHALLENGE_KEY,
   TWO_FACTOR_CHALLENGE_MAX,
-} from "@/lib/server/two-factor"
+} from "@/lib/server/auth/two-factor"
 import { requireEmail, TooManyRequestsError, UnauthorizedError, ValidationError } from "@/lib/server/validation"
 
 const IP_MAX_FAILURES = 20

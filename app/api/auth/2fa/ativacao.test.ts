@@ -11,15 +11,15 @@ const { prisma, mail, verification } = vi.hoisted(() => ({
   verification: { createCodeChallenge: vi.fn(), checkCode: vi.fn(), latestPendingChallengeId: vi.fn() },
 }))
 vi.mock("@/lib/db", () => ({ prisma }))
-vi.mock("@/lib/server/mail", () => ({ sendMail: mail.sendMail, mailAvailable: mail.mailAvailable }))
-vi.mock("@/lib/server/verification", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/server/verification")>()),
+vi.mock("@/lib/server/mail/mail", () => ({ sendMail: mail.sendMail, mailAvailable: mail.mailAvailable }))
+vi.mock("@/lib/server/auth/verification", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/server/auth/verification")>()),
   ...verification,
 }))
 
-import { getCurrentUser } from "@/lib/server/current-user"
-import { hashPassword } from "@/lib/server/password"
-import { resetRateLimits } from "@/lib/server/rate-limit"
+import { getCurrentUser } from "@/lib/server/auth/current-user"
+import { hashPassword } from "@/lib/server/auth/password"
+import { resetRateLimits } from "@/lib/server/auth/rate-limit"
 import { POST as ativar } from "./ativar/route"
 import { POST as confirmar } from "./confirmar/route"
 import { POST as desativar } from "./desativar/route"

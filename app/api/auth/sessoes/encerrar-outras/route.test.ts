@@ -9,7 +9,7 @@ const { prisma } = vi.hoisted(() => ({
 }))
 vi.mock("@/lib/db", () => ({ prisma }))
 
-import { getCurrentUser } from "@/lib/server/current-user"
+import { getCurrentUser } from "@/lib/server/auth/current-user"
 import { POST } from "./route"
 
 beforeEach(() => {

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
-import { requirePermission } from "@/lib/server/authz"
+import { requirePermission } from "@/lib/server/auth/authz"
 import { handleRouteError } from "@/lib/server/http"
 
 // DFC é somente leitura e fora do escopo funcional do RFC (ver a nota em

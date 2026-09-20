@@ -35,8 +35,9 @@ proxy.ts                      # checagem otimista de páginas (cookie assinado);
 components/
 ├── screens/                  # telas: dashboard, plano-de-contas, tabulacao, demonstracoes, indices,
 │                             #   opiniao-de-venda, extracao-ia, auditoria, usuarios
+├── auth/                     # login, recuperação/redefinição de senha, menu da conta, 2FA (e-mail e app autenticador)
 ├── ui/                       # componentes genéricos (botão, tooltip)
-└── *.tsx                     # sidebar, menu da conta, formulários de login/recuperação, 2FA, avisos
+└── *.tsx                     # sidebar, cabeçalho de página, histórico de extrações, selo de auditado, avisos
 lib/
 ├── financial-data.ts         # modelo de dados e motor de cálculo (puro, sem estado)
 ├── permissions.ts            # perfis e permissões (usado no servidor E na tela)
@@ -48,7 +49,12 @@ lib/
 ├── csv.ts                    # montagem do CSV (BOM, separador `;` para o Excel em português, anti-injeção de fórmula)
 ├── redaction.ts              # anonimização de CNPJ/CPF/razão social (pronta para uma futura chamada a LLM)
 ├── db.ts                     # cliente Prisma (só as rotas e scripts usam)
-└── server/                   # só servidor: sessão, senha, e-mail, 2FA, rate-limit, auditoria, LGPD, validação
+└── server/                   # só servidor (nunca importado por componentes):
+    ├── auth/                 #   sessão, senha, login, Google, 2FA (e-mail e TOTP), rate-limit, permissões nas rotas
+    ├── mail/                 #   envio de e-mail (SMTP) e modelos das mensagens
+    ├── audit/                #   trilha de auditoria: gravação, selos de integridade, filtros da listagem
+    ├── data/                 #   regras de dados: plano de contas, valores, empresa, usuários, LGPD, retenção
+    └── http.ts, log.ts, validation.ts, after-response.ts   # infraestrutura comum das rotas
 prisma/
 ├── schema.prisma             # Empresa, Exercicio, Conta, Valor, Indice, Extracao, ValorExtraido, AuditLog,
 │                             #   LgpdErasureLog, Usuario, TokenVerificacao, PoliticaSeguranca

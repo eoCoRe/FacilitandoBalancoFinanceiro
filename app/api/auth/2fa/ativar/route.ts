@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
-import { requireUser } from "@/lib/server/authz"
+import { requireUser } from "@/lib/server/auth/authz"
 import { handleRouteError } from "@/lib/server/http"
-import { mailAvailable, sendMail } from "@/lib/server/mail"
-import { activationCodeMail } from "@/lib/server/mail-templates"
-import { isRateLimited, recordFailure } from "@/lib/server/rate-limit"
+import { mailAvailable, sendMail } from "@/lib/server/mail/mail"
+import { activationCodeMail } from "@/lib/server/mail/mail-templates"
+import { isRateLimited, recordFailure } from "@/lib/server/auth/rate-limit"
 import { ServiceUnavailableError, TooManyRequestsError, ValidationError } from "@/lib/server/validation"
-import { CODE_TTL_MS, createCodeChallenge } from "@/lib/server/verification"
+import { CODE_TTL_MS, createCodeChallenge } from "@/lib/server/auth/verification"
 
 // Primeiro passo de LIGAR a verificação em 2 etapas: manda um código ao e-mail da conta. Só
 // depois de o usuário digitá-lo (/api/auth/2fa/confirmar) o 2FA passa a valer — assim ninguém

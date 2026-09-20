@@ -8,7 +8,7 @@ const { prisma } = vi.hoisted(() => ({
 }))
 vi.mock("@/lib/db", () => ({ prisma }))
 
-import { getCurrentUser } from "@/lib/server/current-user"
+import { getCurrentUser } from "@/lib/server/auth/current-user"
 import { GET } from "./route"
 
 const get = (id: string | number) =>

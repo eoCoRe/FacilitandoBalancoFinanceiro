@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
-import { logAudit } from "@/lib/server/audit"
-import { AUDIT_EXPORT_MAX, parseAuditQuery } from "@/lib/server/auditoria"
-import { requirePermission } from "@/lib/server/authz"
+import { logAudit } from "@/lib/server/audit/audit"
+import { AUDIT_EXPORT_MAX, parseAuditQuery } from "@/lib/server/audit/auditoria"
+import { requirePermission } from "@/lib/server/auth/authz"
 import { toCsv } from "@/lib/csv"
-import { getDefaultEmpresa } from "@/lib/server/empresa"
+import { getDefaultEmpresa } from "@/lib/server/data/empresa"
 import { handleRouteError } from "@/lib/server/http"
 
 // Exporta a trilha de auditoria em CSV (mesmos filtros da listagem; até 10 mil linhas). Só coordenador ou

@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
-import { requireUser } from "@/lib/server/authz"
+import { requireUser } from "@/lib/server/auth/authz"
 import { handleRouteError } from "@/lib/server/http"
-import { requireCurrentPassword } from "@/lib/server/password-recheck"
-import { startTotpEnrollment } from "@/lib/server/second-factor"
+import { requireCurrentPassword } from "@/lib/server/auth/password-recheck"
+import { startTotpEnrollment } from "@/lib/server/auth/second-factor"
 import { ValidationError } from "@/lib/server/validation"
 
 // Passo 1 de ligar o app autenticador: exige a senha e devolve uma chave nova (mostrada só agora)

@@ -15,14 +15,14 @@ const { prisma, sf } = vi.hoisted(() => ({
   },
 }))
 vi.mock("@/lib/db", () => ({ prisma }))
-vi.mock("@/lib/server/second-factor", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/server/second-factor")>()),
+vi.mock("@/lib/server/auth/second-factor", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/server/auth/second-factor")>()),
   ...sf,
 }))
 
-import { getCurrentUser } from "@/lib/server/current-user"
-import { hashPassword } from "@/lib/server/password"
-import { resetRateLimits } from "@/lib/server/rate-limit"
+import { getCurrentUser } from "@/lib/server/auth/current-user"
+import { hashPassword } from "@/lib/server/auth/password"
+import { resetRateLimits } from "@/lib/server/auth/rate-limit"
 import { POST as codigos } from "./codigos/route"
 import { POST as confirmar } from "./confirmar/route"
 import { POST as desativar } from "./desativar/route"

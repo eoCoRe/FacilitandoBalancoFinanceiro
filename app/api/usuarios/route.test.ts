@@ -10,7 +10,7 @@ const { prisma } = vi.hoisted(() => ({
 }))
 vi.mock("@/lib/db", () => ({ prisma }))
 
-import { verifyPassword } from "@/lib/server/password"
+import { verifyPassword } from "@/lib/server/auth/password"
 import { GET, POST } from "./route"
 import { PATCH } from "./[id]/route"
 

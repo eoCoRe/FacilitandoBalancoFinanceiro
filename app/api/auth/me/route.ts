@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
-import { requireUser } from "@/lib/server/authz"
+import { requireUser } from "@/lib/server/auth/authz"
 import { handleRouteError } from "@/lib/server/http"
-import { mailAvailable } from "@/lib/server/mail"
+import { mailAvailable } from "@/lib/server/mail/mail"
 
 // Quem está logado — o front usa para mostrar o nome, decidir o que exibir por perfil e mostrar
 // o estado da verificação em 2 etapas.

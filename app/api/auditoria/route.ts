@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
-import { parseAuditQuery } from "@/lib/server/auditoria"
-import { requirePermission } from "@/lib/server/authz"
-import { getDefaultEmpresa } from "@/lib/server/empresa"
+import { parseAuditQuery } from "@/lib/server/audit/auditoria"
+import { requirePermission } from "@/lib/server/auth/authz"
+import { getDefaultEmpresa } from "@/lib/server/data/empresa"
 import { handleRouteError } from "@/lib/server/http"
 
 // Trilha de auditoria (RF08/RNF03), mais recentes primeiro. Sem parâmetros devolve os 50 últimos (o que a

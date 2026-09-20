@@ -9,7 +9,7 @@ import {
   OAUTH_COOKIE_PATH,
   OAUTH_MAX_AGE_SECONDS,
   signOAuthFlow,
-} from "@/lib/server/google"
+} from "@/lib/server/auth/google"
 
 // Primeiro passo do "Entrar com Google": guarda o estado do fluxo (state/PKCE/nonce) num
 // cookie assinado de vida curta e manda o navegador para a tela de login do Google.

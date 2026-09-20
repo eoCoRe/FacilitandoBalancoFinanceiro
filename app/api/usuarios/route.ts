@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
 import { isPapel } from "@/lib/permissions"
-import { logAudit } from "@/lib/server/audit"
-import { requirePermission } from "@/lib/server/authz"
-import { getDefaultEmpresa } from "@/lib/server/empresa"
+import { logAudit } from "@/lib/server/audit/audit"
+import { requirePermission } from "@/lib/server/auth/authz"
+import { getDefaultEmpresa } from "@/lib/server/data/empresa"
 import { handleRouteError } from "@/lib/server/http"
-import { hashPassword, requireValidPassword } from "@/lib/server/password"
+import { hashPassword, requireValidPassword } from "@/lib/server/auth/password"
 import { requireEmail, requireNonEmptyString, ValidationError } from "@/lib/server/validation"
-import { toUsuarioDto } from "@/lib/server/usuarios"
+import { toUsuarioDto } from "@/lib/server/data/usuarios"
 
 // Gestão de usuários — só administrador. Nunca devolve o hash da senha nem o googleSub: a
 // tela só precisa saber SE a pessoa tem senha / conta Google vinculada.

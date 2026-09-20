@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
-import { describeError, logEvent } from "./log"
-import { ForbiddenError, ServiceUnavailableError, TooManyRequestsError, UnauthorizedError, ValidationError } from "./validation"
+import { describeError, logEvent } from "@/lib/server/log"
+import { ForbiddenError, ServiceUnavailableError, TooManyRequestsError, UnauthorizedError, ValidationError } from "@/lib/server/validation"
 
 // Converte ValidationError em 400 com a mensagem já pronta para o cliente. JSON
 // malformado no corpo (SyntaxError de `request.json()`) também é entrada inválida do

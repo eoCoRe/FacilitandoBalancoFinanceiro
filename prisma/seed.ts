@@ -13,7 +13,7 @@ import {
   type Account,
 } from "../lib/financial-data"
 import { DEFAULT_SECTOR_ID, sectorLabel } from "../lib/sector-benchmarks"
-import { hashPassword, requireValidPassword } from "../lib/server/password"
+import { hashPassword, requireValidPassword } from "../lib/server/auth/password"
 
 const connectionString = process.env.DATABASE_URL
 if (!connectionString) throw new Error("DATABASE_URL não configurada — veja .env.example")

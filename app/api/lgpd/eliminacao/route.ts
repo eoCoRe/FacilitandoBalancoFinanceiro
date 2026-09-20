@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server"
-import { getDefaultEmpresa } from "@/lib/server/empresa"
+import { getDefaultEmpresa } from "@/lib/server/data/empresa"
 import { handleRouteError } from "@/lib/server/http"
-import { requirePermission } from "@/lib/server/authz"
-import { eraseEmpresaData } from "@/lib/server/lgpd"
+import { requirePermission } from "@/lib/server/auth/authz"
+import { eraseEmpresaData } from "@/lib/server/data/lgpd"
 import { requireNonEmptyString } from "@/lib/server/validation"
 
 // Direito de eliminação (LGPD Art. 18, VI) — irreversível. Só o perfil administrador

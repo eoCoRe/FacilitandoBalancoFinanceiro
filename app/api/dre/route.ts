@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
-import { requirePermission } from "@/lib/server/authz"
+import { requirePermission } from "@/lib/server/auth/authz"
 import { handleRouteError } from "@/lib/server/http"
 import { computeDre, DRE_LINES, DRE_MEMO_LINE, type DreValues } from "@/lib/financial-data"
 

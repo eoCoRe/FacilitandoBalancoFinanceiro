@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server"
-import { logAudit } from "@/lib/server/audit"
-import { verifyAuditIntegrity } from "@/lib/server/audit-seal"
-import { requirePermission } from "@/lib/server/authz"
-import { getDefaultEmpresa } from "@/lib/server/empresa"
+import { logAudit } from "@/lib/server/audit/audit"
+import { verifyAuditIntegrity } from "@/lib/server/audit/audit-seal"
+import { requirePermission } from "@/lib/server/auth/authz"
+import { getDefaultEmpresa } from "@/lib/server/data/empresa"
 import { handleRouteError } from "@/lib/server/http"
 
 // Confere se a trilha de auditoria continua íntegra (nenhum registro alterado, apagado no meio ou inserido).

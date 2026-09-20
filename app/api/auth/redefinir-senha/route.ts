@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
-import { logAuditSafe } from "@/lib/server/audit"
-import { clientIp } from "@/lib/server/client-ip"
+import { logAuditSafe } from "@/lib/server/audit/audit"
+import { clientIp } from "@/lib/server/auth/client-ip"
 import { handleRouteError } from "@/lib/server/http"
 import { logEvent } from "@/lib/server/log"
-import { hashPassword, requireValidPassword } from "@/lib/server/password"
-import { isRateLimited, recordFailure } from "@/lib/server/rate-limit"
+import { hashPassword, requireValidPassword } from "@/lib/server/auth/password"
+import { isRateLimited, recordFailure } from "@/lib/server/auth/rate-limit"
 import { TooManyRequestsError, ValidationError } from "@/lib/server/validation"
-import { consumeResetToken, releaseResetToken } from "@/lib/server/verification"
+import { consumeResetToken, releaseResetToken } from "@/lib/server/auth/verification"
 
 const IP_MAX = 10
 

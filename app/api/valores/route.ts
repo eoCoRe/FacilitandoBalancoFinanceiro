@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
-import { getDefaultEmpresa } from "@/lib/server/empresa"
-import { logAudit } from "@/lib/server/audit"
-import { requirePermission } from "@/lib/server/authz"
+import { getDefaultEmpresa } from "@/lib/server/data/empresa"
+import { logAudit } from "@/lib/server/audit/audit"
+import { requirePermission } from "@/lib/server/auth/authz"
 import { handleRouteError } from "@/lib/server/http"
 import { requireBoundedNumber, requirePositiveInt, ValidationError } from "@/lib/server/validation"
-import { upsertOrDeleteValor } from "@/lib/server/valores"
+import { upsertOrDeleteValor } from "@/lib/server/data/valores"
 
 // Lança (ou apaga, se valor:null) o valor de uma conta num exercício —
 // equivalente a `store.updateAccountValue` / `store.updateDreValue`. Funciona

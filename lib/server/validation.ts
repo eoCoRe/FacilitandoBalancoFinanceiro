@@ -3,17 +3,17 @@
 
 export class ValidationError extends Error {}
 
-// Token LGPD ausente/incorreto (ver lib/server/lgpd.ts) — 401, não 400: o problema não é
+// Token LGPD ausente/incorreto (ver lib/server/data/lgpd.ts) — 401, não 400: o problema não é
 // a forma do payload, é a credencial de acesso ao endpoint.
 export class UnauthorizedError extends Error {}
 
-// Login válido, mas o perfil não pode fazer isso — 403 (ver lib/server/authz.ts).
+// Login válido, mas o perfil não pode fazer isso — 403 (ver lib/server/auth/authz.ts).
 export class ForbiddenError extends Error {}
 
 // Serviço de que a operação depende (ex.: envio de e-mail) indisponível — 503.
 export class ServiceUnavailableError extends Error {}
 
-// Muitas tentativas de login seguidas — 429 (ver lib/server/rate-limit.ts).
+// Muitas tentativas de login seguidas — 429 (ver lib/server/auth/rate-limit.ts).
 export class TooManyRequestsError extends Error {}
 
 export function requireNonEmptyString(value: unknown, field: string, maxLength = 200): string {

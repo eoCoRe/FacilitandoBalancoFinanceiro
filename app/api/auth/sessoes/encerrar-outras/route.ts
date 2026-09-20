@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
-import { logAuditSafe } from "@/lib/server/audit"
-import { requireUser } from "@/lib/server/authz"
+import { logAuditSafe } from "@/lib/server/audit/audit"
+import { requireUser } from "@/lib/server/auth/authz"
 import { handleRouteError } from "@/lib/server/http"
-import { setSessionCookie, signSessionToken } from "@/lib/server/session"
+import { setSessionCookie, signSessionToken } from "@/lib/server/auth/session"
 
 // "Sair dos outros dispositivos": encerra TODAS as sessões abertas da conta, menos a desta requisição (o cookie
 // dela é reemitido logo em seguida). Útil quando o usuário esqueceu o sistema aberto em outro computador ou

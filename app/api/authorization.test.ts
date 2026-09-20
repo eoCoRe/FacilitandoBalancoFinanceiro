@@ -2,7 +2,7 @@ import { readdirSync, readFileSync } from "node:fs"
 import { join, relative } from "node:path"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { PAPEIS, type Papel } from "@/lib/permissions"
-import { getCurrentUser } from "@/lib/server/current-user"
+import { getCurrentUser } from "@/lib/server/auth/current-user"
 
 // As rotas rejeitam ANTES de tocar no banco; se alguma tocasse, este objeto vazio faria o
 // teste falhar em vez de passar por acaso.

@@ -9,7 +9,7 @@ const { prisma } = vi.hoisted(() => ({
 }))
 vi.mock("@/lib/db", () => ({ prisma }))
 
-import { getCurrentUser } from "@/lib/server/current-user"
+import { getCurrentUser } from "@/lib/server/auth/current-user"
 import { PATCH } from "./route"
 
 const patch = (id: string | number, body: unknown) =>

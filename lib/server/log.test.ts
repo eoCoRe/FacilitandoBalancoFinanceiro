@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { describeError, logEvent, maskEmail, redactFields } from "./log"
+import { describeError, logEvent, maskEmail, redactFields } from "@/lib/server/log"
 
 describe("maskEmail", () => {
   it("mantém a 1ª letra e o domínio", () => {

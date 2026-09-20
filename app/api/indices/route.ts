@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
 import { computeDre, INDICATORS, makeIndicatorContext, type DreValues } from "@/lib/financial-data"
-import { requirePermission } from "@/lib/server/authz"
-import { buildBpAccountTree } from "@/lib/server/contas"
+import { requirePermission } from "@/lib/server/auth/authz"
+import { buildBpAccountTree } from "@/lib/server/data/contas"
 import { handleRouteError } from "@/lib/server/http"
 import { requirePositiveInt, ValidationError } from "@/lib/server/validation"
 

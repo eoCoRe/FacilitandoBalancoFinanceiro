@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
-import { logAuditSafe } from "@/lib/server/audit"
-import { requireUser } from "@/lib/server/authz"
+import { logAuditSafe } from "@/lib/server/audit/audit"
+import { requireUser } from "@/lib/server/auth/authz"
 import { handleRouteError } from "@/lib/server/http"
-import { hashPassword, PASSWORD_MAX_LENGTH, requireValidPassword, verifyPassword } from "@/lib/server/password"
-import { clearFailures, isRateLimited, PASSWORD_CHECK_KEY, recordFailure } from "@/lib/server/rate-limit"
-import { setSessionCookie, signSessionToken } from "@/lib/server/session"
+import { hashPassword, PASSWORD_MAX_LENGTH, requireValidPassword, verifyPassword } from "@/lib/server/auth/password"
+import { clearFailures, isRateLimited, PASSWORD_CHECK_KEY, recordFailure } from "@/lib/server/auth/rate-limit"
+import { setSessionCookie, signSessionToken } from "@/lib/server/auth/session"
 import { TooManyRequestsError, ValidationError } from "@/lib/server/validation"
 
 // Troca a própria senha. Exige a senha atual (quem só entra pelo Google e ainda não tem senha

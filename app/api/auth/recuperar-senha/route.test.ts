@@ -11,9 +11,9 @@ const { prisma, mail, verification, deferred } = vi.hoisted(() => ({
   deferred: { tasks: [] as Promise<void>[] },
 }))
 vi.mock("@/lib/db", () => ({ prisma }))
-vi.mock("@/lib/server/mail", () => ({ sendMail: mail.sendMail, mailAvailable: mail.mailAvailable }))
-vi.mock("@/lib/server/verification", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/server/verification")>()),
+vi.mock("@/lib/server/mail/mail", () => ({ sendMail: mail.sendMail, mailAvailable: mail.mailAvailable }))
+vi.mock("@/lib/server/auth/verification", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/server/auth/verification")>()),
   createResetToken: verification.createResetToken,
 }))
 // Executa a tarefa "depois da resposta" na hora, guardando a promessa para o teste esperar.
@@ -23,7 +23,7 @@ vi.mock("@/lib/server/after-response", () => ({
   },
 }))
 
-import { resetRateLimits } from "@/lib/server/rate-limit"
+import { resetRateLimits } from "@/lib/server/auth/rate-limit"
 import { POST } from "./route"
 
 const post = (body: unknown, ip = "1.1.1.1") =>

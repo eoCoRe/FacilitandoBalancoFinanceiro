@@ -6,7 +6,7 @@ import {
   requirePositiveInt,
   requireRange,
   ValidationError,
-} from "./validation"
+} from "@/lib/server/validation"
 
 describe("requireNonEmptyString", () => {
   it("retorna a string sem espaços nas pontas", () => {

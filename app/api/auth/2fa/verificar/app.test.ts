@@ -12,18 +12,18 @@ const { prisma, sf, verification } = vi.hoisted(() => ({
   verification: { checkCode: vi.fn() },
 }))
 vi.mock("@/lib/db", () => ({ prisma }))
-vi.mock("@/lib/server/second-factor", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/server/second-factor")>()),
+vi.mock("@/lib/server/auth/second-factor", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/server/auth/second-factor")>()),
   checkLoginCode: sf.checkLoginCode,
 }))
-vi.mock("@/lib/server/verification", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/server/verification")>()),
+vi.mock("@/lib/server/auth/verification", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/server/auth/verification")>()),
   checkCode: verification.checkCode,
 }))
 
-import { resetRateLimits } from "@/lib/server/rate-limit"
-import { TOTP_CHALLENGE } from "@/lib/server/second-factor"
-import { signTwoFactorToken } from "@/lib/server/two-factor"
+import { resetRateLimits } from "@/lib/server/auth/rate-limit"
+import { TOTP_CHALLENGE } from "@/lib/server/auth/second-factor"
+import { signTwoFactorToken } from "@/lib/server/auth/two-factor"
 import { POST } from "./route"
 
 const usuario = (over = {}) => ({

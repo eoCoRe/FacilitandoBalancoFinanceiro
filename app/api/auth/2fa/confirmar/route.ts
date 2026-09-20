@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
-import { logAudit } from "@/lib/server/audit"
-import { requireUser } from "@/lib/server/authz"
-import { getDefaultEmpresa } from "@/lib/server/empresa"
-import { codeCheckMessage } from "@/lib/server/code-messages"
+import { logAudit } from "@/lib/server/audit/audit"
+import { requireUser } from "@/lib/server/auth/authz"
+import { getDefaultEmpresa } from "@/lib/server/data/empresa"
+import { codeCheckMessage } from "@/lib/server/auth/code-messages"
 import { handleRouteError } from "@/lib/server/http"
 import { ValidationError } from "@/lib/server/validation"
-import { checkCode, latestPendingChallengeId } from "@/lib/server/verification"
+import { checkCode, latestPendingChallengeId } from "@/lib/server/auth/verification"
 
 // Segundo passo de LIGAR o 2FA: confere o código recebido por e-mail e só então ativa.
 export async function POST(request: Request) {

@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server"
-import { logAudit } from "@/lib/server/audit"
-import { getDefaultEmpresa } from "@/lib/server/empresa"
+import { logAudit } from "@/lib/server/audit/audit"
+import { getDefaultEmpresa } from "@/lib/server/data/empresa"
 import { handleRouteError } from "@/lib/server/http"
-import { requirePermission } from "@/lib/server/authz"
-import { exportEmpresaData } from "@/lib/server/lgpd"
+import { requirePermission } from "@/lib/server/auth/authz"
+import { exportEmpresaData } from "@/lib/server/data/lgpd"
 
 // Direito de acesso e portabilidade (LGPD Art. 18, II e V) — devolve tudo que o sistema
 // tem sobre a empresa (protótipo é single-tenant). Só o perfil administrador (permissão "lgpd").

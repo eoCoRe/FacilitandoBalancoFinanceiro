@@ -9,13 +9,13 @@ const { prisma, verification } = vi.hoisted(() => ({
   verification: { consumeResetToken: vi.fn(), releaseResetToken: vi.fn() },
 }))
 vi.mock("@/lib/db", () => ({ prisma }))
-vi.mock("@/lib/server/verification", () => ({
+vi.mock("@/lib/server/auth/verification", () => ({
   consumeResetToken: verification.consumeResetToken,
   releaseResetToken: verification.releaseResetToken,
 }))
 
-import { resetRateLimits } from "@/lib/server/rate-limit"
-import { verifyPassword } from "@/lib/server/password"
+import { resetRateLimits } from "@/lib/server/auth/rate-limit"
+import { verifyPassword } from "@/lib/server/auth/password"
 import { POST } from "./route"
 
 const post = (body: unknown, ip = "1.1.1.1") =>

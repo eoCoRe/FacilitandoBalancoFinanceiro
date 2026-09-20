@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
-import { logAuditSafe } from "@/lib/server/audit"
-import { requireUser } from "@/lib/server/authz"
+import { logAuditSafe } from "@/lib/server/audit/audit"
+import { requireUser } from "@/lib/server/auth/authz"
 import { handleRouteError } from "@/lib/server/http"
 import { ValidationError } from "@/lib/server/validation"
 

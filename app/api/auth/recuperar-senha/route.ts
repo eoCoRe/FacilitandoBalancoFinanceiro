@@ -1,15 +1,15 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
-import { logAuditSafe } from "@/lib/server/audit"
+import { logAuditSafe } from "@/lib/server/audit/audit"
 import { afterResponse } from "@/lib/server/after-response"
-import { publicOrigin } from "@/lib/server/app-url"
-import { clientIp } from "@/lib/server/client-ip"
+import { publicOrigin } from "@/lib/server/auth/app-url"
+import { clientIp } from "@/lib/server/auth/client-ip"
 import { handleRouteError } from "@/lib/server/http"
-import { mailAvailable, sendMail } from "@/lib/server/mail"
-import { resetPasswordMail } from "@/lib/server/mail-templates"
-import { isRateLimited, recordFailure } from "@/lib/server/rate-limit"
+import { mailAvailable, sendMail } from "@/lib/server/mail/mail"
+import { resetPasswordMail } from "@/lib/server/mail/mail-templates"
+import { isRateLimited, recordFailure } from "@/lib/server/auth/rate-limit"
 import { requireEmail, ServiceUnavailableError, TooManyRequestsError } from "@/lib/server/validation"
-import { createResetToken, RESET_TTL_MS } from "@/lib/server/verification"
+import { createResetToken, RESET_TTL_MS } from "@/lib/server/auth/verification"
 
 const EMAIL_MAX = 3
 const IP_MAX = 10

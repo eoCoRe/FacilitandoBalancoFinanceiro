@@ -1,6 +1,6 @@
 import "dotenv/config"
 import { prisma } from "@/lib/db"
-import { purgeExpiredData } from "@/lib/server/retention"
+import { purgeExpiredData } from "@/lib/server/data/retention"
 
 // Rotina de expurgo (LGPD Art. 15/16) — pensada para rodar via agendador externo (cron,
 // GitHub Actions scheduled workflow, Vercel Cron, etc.), nunca como rota HTTP: é uma

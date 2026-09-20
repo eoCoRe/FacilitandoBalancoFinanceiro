@@ -1,9 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server"
-import { SESSION_COOKIE, verifySessionToken } from "@/lib/server/session"
+import { SESSION_COOKIE, verifySessionToken } from "@/lib/server/auth/session"
 
 // Checagem OTIMISTA de página: só confere a assinatura do cookie (sem banco), para mandar quem
 // não está logado direto para /login e quem já está para fora dela. Não é a defesa dos dados —
-// essa é a checagem "segura" de cada rota em /api (lib/server/authz.ts), que consulta o banco
+// essa é a checagem "segura" de cada rota em /api (lib/server/auth/authz.ts), que consulta o banco
 // e confere perfil. Por isso /api fica fora do matcher: as rotas se protegem sozinhas.
 
 // Páginas de quem ainda não tem sessão. Quem já está logado é mandado para fora de /login;

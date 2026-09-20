@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { handleRouteError } from "./http"
-import { UnauthorizedError, ValidationError } from "./validation"
+import { handleRouteError } from "@/lib/server/http"
+import { UnauthorizedError, ValidationError } from "@/lib/server/validation"
 
 afterEach(() => vi.restoreAllMocks())
 

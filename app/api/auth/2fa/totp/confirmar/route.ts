@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
-import { logAudit } from "@/lib/server/audit"
-import { requireUser } from "@/lib/server/authz"
-import { getDefaultEmpresa } from "@/lib/server/empresa"
+import { logAudit } from "@/lib/server/audit/audit"
+import { requireUser } from "@/lib/server/auth/authz"
+import { getDefaultEmpresa } from "@/lib/server/data/empresa"
 import { handleRouteError } from "@/lib/server/http"
-import { clearFailures, isRateLimited, recordFailure } from "@/lib/server/rate-limit"
-import { confirmTotpEnrollment, TOTP_ENROLL_KEY } from "@/lib/server/second-factor"
+import { clearFailures, isRateLimited, recordFailure } from "@/lib/server/auth/rate-limit"
+import { confirmTotpEnrollment, TOTP_ENROLL_KEY } from "@/lib/server/auth/second-factor"
 import { TooManyRequestsError, ValidationError } from "@/lib/server/validation"
 
 // Passo 2: o primeiro código do app prova que ele foi cadastrado direito; só então o app autenticador

@@ -9,9 +9,9 @@ const { prisma } = vi.hoisted(() => ({
 }))
 vi.mock("@/lib/db", () => ({ prisma }))
 
-import { getCurrentUser } from "@/lib/server/current-user"
-import { hashPassword, verifyPassword } from "@/lib/server/password"
-import { resetRateLimits } from "@/lib/server/rate-limit"
+import { getCurrentUser } from "@/lib/server/auth/current-user"
+import { hashPassword, verifyPassword } from "@/lib/server/auth/password"
+import { resetRateLimits } from "@/lib/server/auth/rate-limit"
 import { POST } from "./route"
 
 const FAST = { N: 1024, r: 8, p: 1 }

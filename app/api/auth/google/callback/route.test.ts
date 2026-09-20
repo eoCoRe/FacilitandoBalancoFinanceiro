@@ -11,13 +11,13 @@ const { prisma, google } = vi.hoisted(() => ({
 }))
 vi.mock("@/lib/db", () => ({ prisma }))
 // Só a parte que fala com o Google é trocada; state/PKCE/cookie assinado rodam de verdade.
-vi.mock("@/lib/server/google", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/server/google")>()),
+vi.mock("@/lib/server/auth/google", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/server/auth/google")>()),
   exchangeCodeForIdToken: google.exchangeCodeForIdToken,
   verifyGoogleIdToken: google.verifyGoogleIdToken,
 }))
 
-import { newOAuthFlow, signOAuthFlow } from "@/lib/server/google"
+import { newOAuthFlow, signOAuthFlow } from "@/lib/server/auth/google"
 import { GET } from "./route"
 
 const flow = newOAuthFlow()
