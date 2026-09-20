@@ -47,25 +47,35 @@ scripts/
 └── purge-expired-data.ts    # expurgo de dados por retenção (LGPD) — roda via cron externo, não HTTP
 ```
 
+## Acesso e perfis
+
+Login com e-mail/senha e, opcionalmente, com Google (defina `GOOGLE_CLIENT_ID`,
+`GOOGLE_CLIENT_SECRET` e `APP_URL`; só entra quem um administrador já cadastrou).
+Três perfis, cumulativos: **analista** (consulta e lança valores/extrações), **coordenador**
+(+ Plano de Contas e cadastro da empresa) e **administrador** (+ usuários e LGPD). A regra
+está em `lib/permissions.ts` e é imposta no servidor em toda rota de `app/api/`; detalhes e
+limitações em `SECURITY.md`.
+
 ## Rodando localmente
 
 A interface **precisa do banco no ar**: sem Postgres (ou sem seed) a tela inicial
 mostra "Não foi possível carregar os dados".
 
 ```bash
+cp .env.example .env          # ANTES do install (o postinstall roda `prisma generate`, que lê o .env)
+# edite o .env: gere AUTH_SECRET (`openssl rand -hex 32`) e defina SEED_ADMIN_PASSWORD
 pnpm install
-cp .env.example .env          # ajuste DATABASE_URL/LGPD_ADMIN_TOKEN se não usar o compose abaixo
 docker compose up -d          # Postgres local
 npx prisma migrate deploy   # aplica as migrações (use `migrate dev` ao alterar o schema)
 npx prisma db seed
 pnpm dev
 ```
 
-Acesse `http://localhost:3000`. `pnpm test` roda a suíte com Prisma mockado —
+Acesse `http://localhost:3000` e entre com `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` (o `db seed` cria esse administrador; troque a senha em "Senha", no rodapé da barra lateral). Depois, crie os demais acessos em **Usuários** (só administrador). `pnpm test` roda a suíte com Prisma mockado —
 não precisa do banco no ar.
 
 `GET /api/lgpd/exportacao` e `DELETE /api/lgpd/eliminacao` (direitos do titular —
-LGPD Art. 18) exigem o header `x-lgpd-token: <LGPD_ADMIN_TOKEN>`. O expurgo por
+LGPD Art. 18) exigem sessão de **administrador**. O expurgo por
 retenção (`AUDIT_LOG_RETENTION_DAYS`/`EXTRACAO_RETENTION_DAYS`) roda com
 `pnpm purge:data` — ver `SECURITY.md` para detalhes e para o motivo de não ser uma
 rota HTTP.

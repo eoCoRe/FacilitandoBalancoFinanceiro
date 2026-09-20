@@ -132,6 +132,7 @@ describe("sectorIdFromLabel", () => {
 describe("mapSnapshot", () => {
   it("monta o snapshot e o índice de ids a partir das respostas da API", () => {
     const { snapshot, ids } = mapSnapshot({
+      me: { user: { id: 3, nome: "Ana", email: "ana@teste.com", papel: "COORDENADOR" } },
       empresa: {
         id: 1,
         cnpj: "12.345.678/0001-90",
@@ -149,6 +150,7 @@ describe("mapSnapshot", () => {
     })
 
     expect(snapshot).toMatchObject({
+      user: { id: 3, nome: "Ana", email: "ana@teste.com", papel: "COORDENADOR" },
       companyName: "Farmácia Bem-Estar Ltda",
       cnpj: "12.345.678/0001-90",
       sectorId: "servicos",

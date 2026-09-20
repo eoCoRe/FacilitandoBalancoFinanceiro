@@ -13,6 +13,7 @@ import {
   type Account,
 } from "../lib/financial-data"
 import { DEFAULT_SECTOR_ID, sectorLabel } from "../lib/sector-benchmarks"
+import { hashPassword, requireValidPassword } from "../lib/server/password"
 
 const connectionString = process.env.DATABASE_URL
 if (!connectionString) throw new Error("DATABASE_URL não configurada — veja .env.example")
@@ -48,6 +49,32 @@ async function seedContaTree(accounts: Account[], parentId: number | null, exerc
       await seedContaTree(account.children, conta.id, exercicioIdByPeriodo)
     }
   }
+}
+
+// O seed apaga os dados de negócio mas NÃO os usuários (quem já foi cadastrado continua). Só
+// garante que exista um administrador para o primeiro acesso, a partir do ambiente — nenhuma
+// senha padrão fica no código.
+async function seedAdmin() {
+  const email = process.env.SEED_ADMIN_EMAIL?.trim().toLowerCase()
+  const senha = process.env.SEED_ADMIN_PASSWORD
+  if (!email || !senha) {
+    const existing = await prisma.usuario.count({ where: { papel: "ADMINISTRADOR", ativo: true } })
+    console.warn(
+      existing > 0
+        ? "SEED_ADMIN_EMAIL/SEED_ADMIN_PASSWORD não definidos — mantendo os administradores existentes."
+        : "ATENÇÃO: nenhum administrador existe e SEED_ADMIN_EMAIL/SEED_ADMIN_PASSWORD não foram definidos — ninguém conseguirá entrar. Veja .env.example.",
+    )
+    return
+  }
+  requireValidPassword(senha, "SEED_ADMIN_PASSWORD")
+  const senhaHash = await hashPassword(senha)
+  const nome = process.env.SEED_ADMIN_NAME?.trim() || "Administrador"
+  await prisma.usuario.upsert({
+    where: { email },
+    update: { papel: "ADMINISTRADOR", ativo: true, senhaHash, sessoesValidasDesde: new Date() },
+    create: { email, nome, senhaHash, papel: "ADMINISTRADOR" },
+  })
+  console.log(`Administrador garantido: ${email}`)
 }
 
 async function main() {
@@ -124,6 +151,8 @@ async function main() {
       detalhe: `${SEED_EXERCICIOS.length} exercícios de demonstração (${SEED_EXERCICIOS.join(", ")}).`,
     },
   })
+
+  await seedAdmin()
 
   console.log("Seed concluído.")
 }

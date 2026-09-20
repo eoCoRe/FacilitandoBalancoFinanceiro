@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
 import { getDefaultEmpresa } from "@/lib/server/empresa"
 import { logAudit } from "@/lib/server/audit"
+import { requirePermission } from "@/lib/server/authz"
 import { handleRouteError } from "@/lib/server/http"
 import { requireNonEmptyString, ValidationError } from "@/lib/server/validation"
 
@@ -11,6 +12,7 @@ import { requireNonEmptyString, ValidationError } from "@/lib/server/validation"
 // mesmo estilo de app/api/plano-de-contas (nextCodigo checa antes de criar).
 export async function POST(request: Request) {
   try {
+    const user = await requirePermission("lancar-valores")
     const body = await request.json()
     const { periodo: rawPeriodo } = body as { periodo: unknown }
     const periodo = requireNonEmptyString(rawPeriodo, "periodo", 50)
@@ -24,7 +26,7 @@ export async function POST(request: Request) {
 
     const exercicio = await prisma.exercicio.create({ data: { empresaId: empresa.id, periodo } })
 
-    await logAudit(empresa.id, "Exercício criado", `Novo exercício "${periodo}" aberto para tabulação.`)
+    await logAudit(empresa.id, "Exercício criado", `Novo exercício "${periodo}" aberto para tabulação.`, user.email)
 
     return NextResponse.json(exercicio, { status: 201 })
   } catch (error) {

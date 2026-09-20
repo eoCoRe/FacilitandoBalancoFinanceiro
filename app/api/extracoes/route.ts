@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
 import { getDefaultEmpresa } from "@/lib/server/empresa"
 import { logAudit } from "@/lib/server/audit"
+import { requirePermission } from "@/lib/server/authz"
 import { handleRouteError } from "@/lib/server/http"
 import {
   requireBoundedNumber,
@@ -42,6 +43,7 @@ function parseItem(raw: unknown, index: number): ExtracaoItemInput {
 // mapeada viram Valor de verdade — equivalente a store.confirmExtraction.
 export async function POST(request: Request) {
   try {
+    const user = await requirePermission("lancar-valores")
     const body = await request.json()
     const { exercicioId: rawExercicioId, arquivoOrigem: rawArquivoOrigem, modeloLlm, itens: rawItens } = body as {
       exercicioId: number
@@ -91,6 +93,7 @@ export async function POST(request: Request) {
       empresa.id,
       "Extração confirmada",
       `${gravados} conta(s) de "${arquivoOrigem}" gravada(s) (revisão humana concluída).`,
+      user.email,
     )
 
     return NextResponse.json({ extracaoId: extracao.id, gravados }, { status: 201 })
@@ -100,21 +103,26 @@ export async function POST(request: Request) {
 }
 
 export async function GET() {
-  const extracoes = await prisma.extracao.findMany({
-    orderBy: { criadoEm: "desc" },
-    take: 20,
-    include: { _count: { select: { valoresExtraidos: true } }, exercicio: true },
-  })
+  try {
+    await requirePermission("consultar")
+    const extracoes = await prisma.extracao.findMany({
+      orderBy: { criadoEm: "desc" },
+      take: 20,
+      include: { _count: { select: { valoresExtraidos: true } }, exercicio: true },
+    })
 
-  return NextResponse.json({
-    extracoes: extracoes.map((e) => ({
-      id: e.id,
-      arquivoOrigem: e.arquivoOrigem,
-      modeloLlm: e.modeloLlm,
-      status: e.status,
-      criadoEm: e.criadoEm,
-      exercicio: e.exercicio.periodo,
-      totalItens: e._count.valoresExtraidos,
-    })),
-  })
+    return NextResponse.json({
+      extracoes: extracoes.map((e) => ({
+        id: e.id,
+        arquivoOrigem: e.arquivoOrigem,
+        modeloLlm: e.modeloLlm,
+        status: e.status,
+        criadoEm: e.criadoEm,
+        exercicio: e.exercicio.periodo,
+        totalItens: e._count.valoresExtraidos,
+      })),
+    })
+  } catch (error) {
+    return handleRouteError(error)
+  }
 }

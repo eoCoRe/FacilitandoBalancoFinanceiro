@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
 import { computeDre, INDICATORS, makeIndicatorContext, type DreValues } from "@/lib/financial-data"
+import { requirePermission } from "@/lib/server/authz"
 import { buildBpAccountTree } from "@/lib/server/contas"
 import { handleRouteError } from "@/lib/server/http"
 import { requirePositiveInt, ValidationError } from "@/lib/server/validation"
@@ -11,6 +12,7 @@ import { requirePositiveInt, ValidationError } from "@/lib/server/validation"
 // alimentam /api/plano-de-contas e /api/dre — nenhuma fórmula é recalculada aqui.
 export async function GET(request: Request) {
   try {
+    await requirePermission("consultar")
     const indices = await prisma.indice.findMany({ orderBy: { id: "asc" } })
 
     const exercicioIdParam = new URL(request.url).searchParams.get("exercicioId")

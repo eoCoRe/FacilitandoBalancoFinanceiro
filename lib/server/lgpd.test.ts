@@ -14,12 +14,8 @@ const { prisma } = vi.hoisted(() => ({
 
 vi.mock("@/lib/db", () => ({ prisma }))
 
-import { eraseEmpresaData, exportEmpresaData, requireLgpdToken } from "./lgpd"
-import { UnauthorizedError, ValidationError } from "./validation"
-
-function buildRequest(headers: Record<string, string> = {}) {
-  return new Request("http://localhost/api/lgpd/exportacao", { headers })
-}
+import { eraseEmpresaData, exportEmpresaData } from "./lgpd"
+import { ValidationError } from "./validation"
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -28,28 +24,6 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllEnvs()
-})
-
-describe("requireLgpdToken", () => {
-  it("falha fechado: lança erro (não deixa passar) quando LGPD_ADMIN_TOKEN não está configurada", () => {
-    vi.stubEnv("LGPD_ADMIN_TOKEN", "")
-    expect(() => requireLgpdToken(buildRequest({ "x-lgpd-token": "qualquer" }))).toThrow(/LGPD_ADMIN_TOKEN/)
-  })
-
-  it("rejeita com UnauthorizedError quando o header está ausente", () => {
-    vi.stubEnv("LGPD_ADMIN_TOKEN", "segredo-123")
-    expect(() => requireLgpdToken(buildRequest())).toThrow(UnauthorizedError)
-  })
-
-  it("rejeita com UnauthorizedError quando o header não corresponde ao token configurado", () => {
-    vi.stubEnv("LGPD_ADMIN_TOKEN", "segredo-123")
-    expect(() => requireLgpdToken(buildRequest({ "x-lgpd-token": "errado" }))).toThrow(UnauthorizedError)
-  })
-
-  it("passa quando o header corresponde ao token configurado", () => {
-    vi.stubEnv("LGPD_ADMIN_TOKEN", "segredo-123")
-    expect(() => requireLgpdToken(buildRequest({ "x-lgpd-token": "segredo-123" }))).not.toThrow()
-  })
 })
 
 describe("exportEmpresaData", () => {

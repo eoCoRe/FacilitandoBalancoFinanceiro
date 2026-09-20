@@ -8,6 +8,7 @@ import {
   mapSnapshot,
   type AuditEntry,
   type AuditoriaPayload,
+  type AuthUser,
   type ContaNodePayload,
   type DfcPayload,
   type DrePayload,
@@ -53,6 +54,8 @@ interface StoreApi extends FinancialSnapshot {
 }
 
 const EMPTY: FinancialSnapshot = {
+  // Placeholder de menor privilégio: o app só renderiza depois da carga (StoreLoadGate).
+  user: { id: 0, nome: "", email: "", papel: "ANALISTA" } satisfies AuthUser,
   companyName: "",
   cnpj: "",
   sectorId: "",
@@ -73,14 +76,15 @@ const EXTRACTION_MODEL = "leitor-pdf-local"
 const VALUE_WRITE_DELAY_MS = 600
 
 async function fetchSnapshot() {
-  const [empresa, contas, dre, dfc, auditoria] = await Promise.all([
+  const [me, empresa, contas, dre, dfc, auditoria] = await Promise.all([
+    api<{ user: AuthUser }>("/api/auth/me"),
     api<EmpresaPayload>("/api/empresa"),
     api<{ contas: ContaNodePayload[] }>("/api/plano-de-contas"),
     api<DrePayload>("/api/dre"),
     api<DfcPayload>("/api/dfc"),
     api<AuditoriaPayload>("/api/auditoria"),
   ])
-  return mapSnapshot({ empresa, contas, dre, dfc, auditoria })
+  return mapSnapshot({ me, empresa, contas, dre, dfc, auditoria })
 }
 
 function mapAccountTree(accounts: Account[], code: string, fn: (a: Account) => Account): Account[] {

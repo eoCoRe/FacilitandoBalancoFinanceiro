@@ -1,22 +1,5 @@
 import { prisma } from "@/lib/db"
-import { UnauthorizedError, ValidationError } from "./validation"
-
-// Guarda de acesso provisória para os endpoints de direitos do titular (LGPD Art. 18):
-// exercer o direito de acesso/exportação ou de eliminação não pode ficar aberto sem
-// nenhum controle, mas o sistema ainda não tem autenticação real (RNF02, decisão
-// explícita do usuário de deixar para depois — ver SECURITY.md). Um segredo compartilhado
-// é o mínimo defensável até existir login de verdade; não é a solução final.
-// Fail-closed: sem a variável configurada, o endpoint não funciona (não abre sozinho).
-export function requireLgpdToken(request: Request): void {
-  const expected = process.env.LGPD_ADMIN_TOKEN
-  if (!expected) {
-    throw new Error("LGPD_ADMIN_TOKEN não configurada — veja .env.example")
-  }
-  const provided = request.headers.get("x-lgpd-token")
-  if (provided !== expected) {
-    throw new UnauthorizedError("Token de acesso LGPD ausente ou inválido (header x-lgpd-token).")
-  }
-}
+import { ValidationError } from "./validation"
 
 // Direito de acesso e portabilidade (LGPD Art. 18, II e V) — snapshot de tudo que o
 // sistema tem sobre a empresa (protótipo é single-tenant, então "a empresa" é sempre a

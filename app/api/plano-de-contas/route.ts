@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
 import { getDefaultEmpresa } from "@/lib/server/empresa"
 import { logAudit } from "@/lib/server/audit"
+import { requirePermission } from "@/lib/server/authz"
 import { handleRouteError } from "@/lib/server/http"
 import { requireNonEmptyString, requirePositiveInt, ValidationError } from "@/lib/server/validation"
 
@@ -17,6 +18,15 @@ interface ContaNode {
 // Árvore do Balanço Patrimonial (tipo BP), com os valores lançados por exercício —
 // equivalente a `store.accounts` no frontend, só que lido do Postgres.
 export async function GET() {
+  try {
+    await requirePermission("consultar")
+    return NextResponse.json({ contas: await buildTree() })
+  } catch (error) {
+    return handleRouteError(error)
+  }
+}
+
+async function buildTree(): Promise<ContaNode[]> {
   const contas = await prisma.conta.findMany({
     where: { tipo: "BP" },
     include: { valores: { include: { exercicio: true } } },
@@ -41,7 +51,7 @@ export async function GET() {
     if (parent) parent.subcontas = [...(parent.subcontas ?? []), node]
   }
 
-  return NextResponse.json({ contas: roots })
+  return roots
 }
 
 // Cria uma conta raiz (parentId null) ou subconta — equivalente a
@@ -50,6 +60,7 @@ export async function GET() {
 // subcontas) de conta analítica (recebe valores); padrão: analítica.
 export async function POST(request: Request) {
   try {
+    const user = await requirePermission("gerir-plano-de-contas")
     const body = await request.json()
     const { parentId: rawParentId, nome: rawNome, ehGrupo: rawEhGrupo } = body as {
       parentId: number | null
@@ -75,6 +86,7 @@ export async function POST(request: Request) {
       empresa.id,
       "Conta criada",
       parentId === null ? `Grupo raiz "${nome}" (${codigo}).` : `"${nome}" adicionada em ${codigo}.`,
+      user.email,
     )
 
     return NextResponse.json(conta, { status: 201 })

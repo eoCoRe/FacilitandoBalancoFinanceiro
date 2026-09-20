@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
 import { getDefaultEmpresa } from "@/lib/server/empresa"
 import { logAudit } from "@/lib/server/audit"
+import { requirePermission } from "@/lib/server/authz"
 import { handleRouteError } from "@/lib/server/http"
 import { requireBoundedNumber, requirePositiveInt, ValidationError } from "@/lib/server/validation"
 import { upsertOrDeleteValor } from "@/lib/server/valores"
@@ -11,6 +12,7 @@ import { upsertOrDeleteValor } from "@/lib/server/valores"
 // para qualquer tipo de conta (BP, DRE ou DFC), já que Valor é genérico.
 export async function PUT(request: Request) {
   try {
+    const user = await requirePermission("lancar-valores")
     const body = await request.json()
     const { contaId: rawContaId, exercicioId: rawExercicioId, valor: rawValor } = body as {
       contaId: number
@@ -42,6 +44,7 @@ export async function PUT(request: Request) {
       empresa.id,
       valor === null ? "Valor removido" : "Valor lançado",
       valor === null ? `conta ${contaId} · exercício ${exercicioId} limpo.` : `conta ${contaId} · exercício ${exercicioId} = ${valor}`,
+      user.email,
     )
 
     if (registro === null) return NextResponse.json({ ok: true })

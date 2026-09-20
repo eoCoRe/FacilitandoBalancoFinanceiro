@@ -20,6 +20,13 @@ enum ContaTipo {
   DFC
 }
 
+// Perfis do RFC (RNF02). A hierarquia (quem pode o quê) mora em lib/permissions.ts.
+enum Papel {
+  ANALISTA
+  COORDENADOR
+  ADMINISTRADOR
+}
+
 enum ExtracaoStatus {
   PENDENTE
   CONCLUIDA
@@ -142,4 +149,25 @@ model LgpdErasureLog {
   criadoEm          DateTime @default(now()) @map("criado_em")
 
   @@map("lgpd_erasure_log")
+}
+
+// Quem usa o sistema (RNF02). Não há auto-cadastro: um administrador cria o usuário, que
+// entra com senha e/ou com a conta Google do mesmo e-mail (googleSub é preenchido no
+// primeiro login Google). Usuário nunca é apagado, só desativado, para que a trilha de
+// auditoria continue apontando para alguém que existiu.
+model Usuario {
+  id                  Int       @id @default(autoincrement())
+  email               String    @unique
+  nome                String
+  senhaHash           String?   @map("senha_hash")
+  googleSub           String?   @unique @map("google_sub")
+  papel               Papel     @default(ANALISTA)
+  ativo               Boolean   @default(true)
+  criadoEm            DateTime  @default(now()) @map("criado_em")
+  ultimoLoginEm       DateTime? @map("ultimo_login_em")
+  // Sessões emitidas antes deste instante são recusadas — atualizado ao trocar/redefinir a
+  // senha, para encerrar logins abertos em outros lugares.
+  sessoesValidasDesde DateTime  @default(now()) @map("sessoes_validas_desde")
+
+  @@map("usuario")
 }

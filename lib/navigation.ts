@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react"
-import { LayoutDashboard, ListTree, Table2, FileSpreadsheet, Percent, Sparkles, Gavel } from "lucide-react"
+import { LayoutDashboard, ListTree, Table2, FileSpreadsheet, Percent, Sparkles, Gavel, Users } from "lucide-react"
 
 export type ScreenId =
   | "dashboard"
@@ -9,6 +9,7 @@ export type ScreenId =
   | "indices"
   | "opiniao-de-venda"
   | "extracao-ia"
+  | "usuarios"
 
 export interface NavItem {
   id: ScreenId
@@ -30,3 +31,6 @@ export const DETALHADO_NAV: NavItem[] = [
   { id: "demonstracoes", label: "Balanço · DRE · DFC", icon: FileSpreadsheet },
   { id: "extracao-ia", label: "Extração via IA", icon: Sparkles, badge: "beta" },
 ]
+
+// Só aparece para quem tem a permissão "gerir-usuarios" (ver lib/permissions.ts).
+export const ADMIN_NAV: NavItem[] = [{ id: "usuarios", label: "Usuários", icon: Users }]

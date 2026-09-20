@@ -1,8 +1,10 @@
 "use client"
 
 import { Search } from "lucide-react"
+import { AccountMenu } from "@/components/account-menu"
+import { can } from "@/lib/permissions"
 import { useFinancialStore } from "@/lib/store"
-import { INICIO_NAV, ANALISE_NAV, DETALHADO_NAV, type NavItem, type ScreenId } from "@/lib/navigation"
+import { INICIO_NAV, ANALISE_NAV, DETALHADO_NAV, ADMIN_NAV, type NavItem, type ScreenId } from "@/lib/navigation"
 import { cn } from "@/lib/utils"
 
 interface AppSidebarProps {
@@ -11,7 +13,7 @@ interface AppSidebarProps {
 }
 
 export function AppSidebar({ active, onNavigate }: AppSidebarProps) {
-  const { companyName, cnpj } = useFinancialStore()
+  const { companyName, cnpj, user } = useFinancialStore()
   return (
     <aside className="flex h-dvh w-60 shrink-0 flex-col border-r border-border bg-sidebar">
       {/* Marca */}
@@ -76,20 +78,24 @@ export function AppSidebar({ active, onNavigate }: AppSidebarProps) {
             </li>
           ))}
         </ul>
+
+        {can(user.papel, "gerir-usuarios") && (
+          <>
+            <p className="px-2 pb-1 pt-5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+              Administração
+            </p>
+            <ul className="flex flex-col gap-0.5">
+              {ADMIN_NAV.map((item) => (
+                <li key={item.id}>
+                  <NavButton item={item} active={active === item.id} onClick={() => onNavigate(item.id)} />
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
       </nav>
 
-      {/* Rodapé usuário */}
-      <div className="mt-auto border-t border-border p-3">
-        <div className="flex items-center gap-2.5">
-          <div className="flex size-8 items-center justify-center rounded-full bg-primary/90 text-xs font-medium text-primary-foreground">
-            RA
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium text-foreground">Renata Alves</p>
-            <p className="truncate text-xs text-muted-foreground">Analista de Crédito</p>
-          </div>
-        </div>
-      </div>
+      <AccountMenu />
     </aside>
   )
 }

@@ -1,10 +1,21 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
+import { requirePermission } from "@/lib/server/authz"
+import { handleRouteError } from "@/lib/server/http"
 
 // DFC é somente leitura e fora do escopo funcional do RFC (ver a nota em
 // lib/financial-data.ts sobre createSeedDfc) — todas as linhas, inclusive
 // subtotais, já têm valor fixo lançado no seed; nada é calculado aqui.
 export async function GET() {
+  try {
+    await requirePermission("consultar")
+    return await buildDfc()
+  } catch (error) {
+    return handleRouteError(error)
+  }
+}
+
+async function buildDfc() {
   const contas = await prisma.conta.findMany({
     where: { tipo: "DFC" },
     include: { valores: { include: { exercicio: true } } },
