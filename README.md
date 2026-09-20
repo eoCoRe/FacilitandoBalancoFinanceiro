@@ -1,11 +1,11 @@
 # Central de Balanços
 
-Frontend da Central de Balanços: cadastro do Plano de Contas, tabulação do
-Balanço/DRE por exercício, demonstrações consolidadas, índices financeiros
-calculados automaticamente, parecer de crédito (Opinião de Venda) e a tela de
-revisão da extração por IA (Extração IA) — onde o analista confere os valores
-que o LLM extraiu de um Balanço/DRE em PDF antes de confirmá-los para a
-Tabulação (fluxo *human-in-the-loop*).
+Plataforma de análise de balanços para analistas de crédito: cadastro do Plano de Contas,
+tabulação do Balanço/DRE por exercício, demonstrações consolidadas, índices financeiros
+calculados automaticamente, parecer de crédito (Opinião de Venda) e a tela de **Extração via IA**,
+onde o analista confere os valores lidos de um Balanço/DRE em PDF antes de confirmá-los para a
+Tabulação (fluxo *human-in-the-loop*). Hoje a leitura do PDF é feita por um leitor local, no próprio
+navegador (`lib/extraction/`), sem LLM e sem enviar o documento a terceiros.
 
 ## Stack
 
@@ -20,32 +20,53 @@ Tabulação (fluxo *human-in-the-loop*).
 
 ```
 app/
-├── api/                     # backend: rotas do App Router (empresa, exercicios,
-│                            #   plano-de-contas, valores, dre, dfc, indices,
-│                            #   extracoes, auditoria, health, lgpd/exportacao,
-│                            #   lgpd/eliminacao) — cada uma com route.test.ts ao lado
-├── layout.tsx / page.tsx
+├── api/                      # backend (rotas do App Router), cada uma com route.test.ts ao lado:
+│   ├── auth/                 #   login, logout, me, senha, recuperar-senha, redefinir-senha, google/, 2fa/
+│   ├── usuarios/             #   gestão de usuários (só administrador)
+│   ├── seguranca/            #   política de 2FA por perfil (só administrador)
+│   ├── empresa/ exercicios/ plano-de-contas/ valores/ dre/ dfc/ indices/ extracoes/ auditoria/
+│   ├── lgpd/                 #   exportacao e eliminacao (só administrador)
+│   ├── health/               #   verificação de saúde (pública)
+│   └── authorization.test.ts #   matriz de permissões: falha se uma rota nova ficar sem proteção
+├── login/ esqueci-senha/ redefinir-senha/   # páginas públicas
+├── layout.tsx / page.tsx     # o app (o provider de dados mora em page.tsx, não no layout)
+proxy.ts                      # checagem otimista de páginas (cookie assinado); a defesa real está em cada rota
 components/
-├── screens/                # telas: dashboard, plano-de-contas, tabulacao,
-│                            #   demonstracoes, indices, opiniao-de-venda,
-│                            #   extracao-ia
-└── ui/                     # componentes genéricos (botão, etc.)
+├── screens/                  # telas: dashboard, plano-de-contas, tabulacao, demonstracoes, indices,
+│                             #   opiniao-de-venda, extracao-ia, usuarios
+├── ui/                       # componentes genéricos (botão, tooltip)
+└── *.tsx                     # sidebar, menu da conta, formulários de login/recuperação, 2FA, avisos
 lib/
-├── financial-data.ts       # modelo de dados e motor de cálculo (puro, sem estado)
-├── redaction.ts            # anonimização de CNPJ/CPF/razão social (pronto para RF02)
-├── store.tsx               # FinancialDataProvider / useFinancialStore (estado da UI, sincronizado com a API)
-├── api-client.ts            # fetch das rotas de /api com erros já traduzidos para o usuário
-├── api-mapping.ts           # resposta da API (ids, Decimal) → modelo que as telas consomem (puro, testado)
-├── db.ts                    # cliente Prisma (usado só pelas rotas de api/)
-├── server/                  # validação, auditoria, erro HTTP, retenção, LGPD — compartilhado entre rotas
-├── navigation.ts
-└── utils.ts
+├── financial-data.ts         # modelo de dados e motor de cálculo (puro, sem estado)
+├── permissions.ts            # perfis e permissões (usado no servidor E na tela)
+├── store.tsx                 # FinancialDataProvider / useFinancialStore (estado da UI sincronizado com a API)
+├── api-client.ts             # fetch das rotas de /api, com erros traduzidos e tratamento de sessão expirada
+├── api-mapping.ts            # resposta da API (ids, Decimal) -> modelo das telas (puro, testado)
+├── extraction/               # leitor local de PDF (texto -> linhas -> rótulo/valor -> conta do plano)
+├── redaction.ts              # anonimização de CNPJ/CPF/razão social (pronta para uma futura chamada a LLM)
+├── db.ts                     # cliente Prisma (só as rotas e scripts usam)
+└── server/                   # só servidor: sessão, senha, e-mail, 2FA, rate-limit, auditoria, LGPD, validação
 prisma/
-├── schema.prisma            # Empresa, Exercicio, Conta, Valor, Indice, Extracao, AuditLog, LgpdErasureLog
-└── seed.ts                  # popula o Postgres com os dados de exemplo de lib/financial-data.ts
+├── schema.prisma             # Empresa, Exercicio, Conta, Valor, Indice, Extracao, ValorExtraido, AuditLog,
+│                             #   LgpdErasureLog, Usuario, TokenVerificacao, PoliticaSeguranca
+├── migrations/               # histórico versionado do banco
+└── seed.ts                   # dados de exemplo + primeiro administrador (SEED_ADMIN_*)
 scripts/
-└── purge-expired-data.ts    # expurgo de dados por retenção (LGPD) — roda via cron externo, não HTTP
+└── purge-expired-data.ts     # expurgo por retenção (LGPD) — roda via cron externo, não HTTP
+vitest.setup.ts               # testes de rota: usuário logado padrão (administrador) e getCurrentUser simulado
+.github/workflows/            # CI (tipos, lint, testes, build) e CodeQL
 ```
+
+## Comandos
+
+| Comando | O que faz |
+|---|---|
+| `pnpm dev` | servidor de desenvolvimento |
+| `pnpm build` / `pnpm start` | build e execução de produção |
+| `pnpm test` / `pnpm test:watch` | testes (Vitest; Prisma simulado, não precisam do banco) |
+| `pnpm lint` | ESLint |
+| `npx tsc --noEmit` | checagem de tipos (o build do Next não a exige) |
+| `pnpm purge:data` | expurgo de AuditLog/Extracao antigos (ver SECURITY.md) |
 
 ## Acesso e perfis
 
@@ -75,8 +96,7 @@ npx prisma db seed
 pnpm dev
 ```
 
-Acesse `http://localhost:3000` e entre com `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` (o `db seed` cria esse administrador; troque a senha em "Senha", no rodapé da barra lateral). Depois, crie os demais acessos em **Usuários** (só administrador). `pnpm test` roda a suíte com Prisma mockado —
-não precisa do banco no ar.
+Acesse `http://localhost:3000` e entre com `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` (o `db seed` cria esse administrador; troque a senha em "Senha", no rodapé da barra lateral). Depois, crie os demais acessos em **Usuários** (só administrador).
 
 `GET /api/lgpd/exportacao` e `DELETE /api/lgpd/eliminacao` (direitos do titular —
 LGPD Art. 18) exigem sessão de **administrador**. O expurgo por
