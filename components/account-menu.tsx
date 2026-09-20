@@ -1,12 +1,13 @@
 "use client"
 
 import { useEffect, useState, type FormEvent } from "react"
-import { KeyRound, LogOut, MonitorX } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import { FileDown, KeyRound, LogOut, MonitorX } from "lucide-react"
+import { Button, buttonVariants } from "@/components/ui/button"
 import { TwoFactorSection } from "@/components/two-factor-section"
 import { api, errorMessage } from "@/lib/api-client"
 import { PAPEL_LABEL } from "@/lib/permissions"
 import { useFinancialStore } from "@/lib/store"
+import { cn } from "@/lib/utils"
 
 function initials(nome: string): string {
   const parts = nome.trim().split(/\s+/).filter(Boolean)
@@ -127,17 +128,29 @@ export function AccountMenu() {
       )}
 
       {!changing && (
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          disabled={busy}
-          className="mt-1 w-full justify-start"
-          onClick={() => void handleEndOtherSessions()}
-        >
-          <MonitorX />
-          Encerrar outras sessões
-        </Button>
+        <details className="mt-1 text-sm">
+          <summary className="flex min-h-7 cursor-pointer items-center px-2.5 text-xs text-muted-foreground hover:text-foreground">
+            Privacidade e segurança
+          </summary>
+          <div className="mt-1 flex flex-col gap-0.5">
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              disabled={busy}
+              className="w-full justify-start"
+              onClick={() => void handleEndOtherSessions()}
+            >
+              <MonitorX />
+              Encerrar outras sessões
+            </Button>
+            {/* Direito de acesso (LGPD): o arquivo com os dados que o sistema guarda sobre esta pessoa. */}
+            <a href="/api/auth/meus-dados" className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "w-full justify-start")}>
+              <FileDown />
+              Baixar meus dados
+            </a>
+          </div>
+        </details>
       )}
 
       {!changing && (

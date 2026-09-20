@@ -109,3 +109,5 @@ LGPD Art. 18) exigem sessão de **administrador**. O expurgo por
 retenção (`AUDIT_LOG_RETENTION_DAYS`/`EXTRACAO_RETENTION_DAYS`) roda com
 `pnpm purge:data` — ver `SECURITY.md` para detalhes e para o motivo de não ser uma
 rota HTTP.
+
+Cada usuário, de qualquer perfil, baixa os próprios dados pessoais em **Privacidade e segurança → Baixar meus dados** (`GET /api/auth/meus-dados`).

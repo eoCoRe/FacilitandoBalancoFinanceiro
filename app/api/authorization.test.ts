@@ -27,6 +27,7 @@ import * as lgpdExportacao from "./lgpd/exportacao/route"
 import * as lgpdEliminacao from "./lgpd/eliminacao/route"
 import * as me from "./auth/me/route"
 import * as senha from "./auth/senha/route"
+import * as meusDados from "./auth/meus-dados/route"
 import * as sessoesEncerrar from "./auth/sessoes/encerrar-outras/route"
 import * as tfaAtivar from "./auth/2fa/ativar/route"
 import * as tfaConfirmar from "./auth/2fa/confirmar/route"
@@ -63,6 +64,7 @@ const ROTAS: { nome: string; min: Papel; chamar: () => Promise<Response> }[] = [
   { nome: "GET /api/lgpd/exportacao", min: "ADMINISTRADOR", chamar: () => lgpdExportacao.GET() },
   { nome: "DELETE /api/lgpd/eliminacao", min: "ADMINISTRADOR", chamar: () => lgpdEliminacao.DELETE(json("DELETE")) },
   { nome: "GET /api/auth/me", min: "ANALISTA", chamar: () => me.GET() },
+  { nome: "GET /api/auth/meus-dados", min: "ANALISTA", chamar: () => meusDados.GET() },
   { nome: "POST /api/auth/senha", min: "ANALISTA", chamar: () => senha.POST(json("POST", {})) },
   { nome: "POST /api/auth/sessoes/encerrar-outras", min: "ANALISTA", chamar: () => sessoesEncerrar.POST() },
   { nome: "POST /api/auth/2fa/ativar", min: "ANALISTA", chamar: () => tfaAtivar.POST() },
