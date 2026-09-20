@@ -1,0 +1,3 @@
+# Texto sempre com LF no repositório E no checkout: sem isso, no Windows (core.autocrlf) uma parte dos arquivos fica com CRLF e
+# outra com LF, e um script com "#!/usr/bin/env node" (scripts/smoke.mjs) quebraria se fosse extraído com CRLF num Linux.
+* text=auto eol=lf

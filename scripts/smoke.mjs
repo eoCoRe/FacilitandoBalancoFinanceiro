@@ -10,7 +10,7 @@ import assert from "node:assert/strict"
 import { createHmac } from "node:crypto"
 
 const BASE = (process.env.SMOKE_BASE_URL || "http://localhost:3000").replace(/\/+$/, "")
-const ADMIN_EMAIL = process.env.SMOKE_ADMIN_EMAIL || process.env.SEED_ADMIN_EMAIL
+const ADMIN_EMAIL = (process.env.SMOKE_ADMIN_EMAIL || process.env.SEED_ADMIN_EMAIL || "").trim().toLowerCase()
 const ADMIN_PASSWORD = process.env.SMOKE_ADMIN_PASSWORD || process.env.SEED_ADMIN_PASSWORD
 if (!ADMIN_EMAIL || !ADMIN_PASSWORD) {
   console.error("Defina SMOKE_ADMIN_EMAIL/SMOKE_ADMIN_PASSWORD (ou SEED_ADMIN_EMAIL/SEED_ADMIN_PASSWORD).")

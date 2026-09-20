@@ -27,7 +27,7 @@ Modelo comentado em [`.env.example`](../.env.example). Nunca commite valores rea
 5. Entre, troque a senha, ligue a verificação em 2 etapas, cadastre a empresa/plano de contas e crie os demais acessos em **Usuários**.
 6. Agende o expurgo (`pnpm purge:data`) num cron externo — não é uma rota HTTP de propósito.
 7. Se esta instalação **já tinha registros de auditoria antes** da selagem (atualização de uma versão anterior), entre como administrador, abra **Auditoria → Verificar integridade** e use "selar os pendentes" uma vez: o servidor nunca sela histórico sozinho. Instalação nova não precisa disso.
-8. Confirme com o teste de fumaça contra o ambiente: `SMOKE_BASE_URL=https://… SMOKE_ADMIN_EMAIL=… SMOKE_ADMIN_PASSWORD=… pnpm smoke` (cria e desativa um usuário de teste; use num ambiente de homologação).
+8. (Só em HOMOLOGAÇÃO, nunca no ambiente de verdade) o teste de fumaça: `SMOKE_BASE_URL=https://… SMOKE_ADMIN_EMAIL=… SMOKE_ADMIN_PASSWORD=… pnpm smoke`. Ele faz login com um administrador **sem 2FA** (o teste não sabe digitar código), então rode-o ANTES do passo 5 ou com um administrador de teste. Deixa rastro: cria dois usuários de teste (um analista e um segundo administrador, ambos terminam desativados), uma extração `smoke.pdf` no histórico e linhas na auditoria; o valor que altera é devolvido.
 
 ## 3. Rotinas
 
@@ -56,6 +56,8 @@ Modelo comentado em [`.env.example`](../.env.example). Nunca commite valores rea
 
 ## 6. Limites conhecidos de infraestrutura
 
+- **Estado só na memória do processo** (perde-se num reinício e não é compartilhado entre instâncias): o limite de tentativas e a lista de registros de auditoria que aquele processo gravou e ainda não conseguiu selar (com a impressão do conteúdo).
+- O banco tem um **índice parcial** (`audit_log_pendentes_idx`, em uma migração SQL) que o `schema.prisma` não descreve. O Prisma o tolera; se um dia `prisma migrate dev` propuser `DROP INDEX "audit_log_pendentes_idx"`, **não aceite** (a selagem voltaria a varrer a tabela inteira sob trava).
 - O limite de tentativas de login e de códigos fica **em memória** de cada instância (com teto de 50 mil chaves). O limite **por IP** só vale atrás de um proxy que sobrescreva `X-Forwarded-For`; sem ele, só o limite por e-mail protege as contas. Com mais de uma instância (ou reinício), o contador zera/divide; para produção com várias instâncias, troque por um armazenamento compartilhado (ex.: Redis) — está descrito no topo de `lib/server/auth/rate-limit.ts`.
 - A trilha de auditoria detecta edição e apagamento no meio, mas **não** o apagamento dos registros mais recentes (sem âncora externa).
 - O leitor de PDF roda no navegador e não usa IA; a chave `LLM_API_KEY` ainda não é usada.

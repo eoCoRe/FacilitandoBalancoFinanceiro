@@ -10,6 +10,10 @@ env:
   # Só usado por `prisma generate` (não conecta de verdade) — CI não tem banco.
   DATABASE_URL: "postgresql://ci:ci@localhost:5432/ci"
 
+# O CI só lê o repositório: sem este bloco o GITHUB_TOKEN recebe as permissões padrão do repositório (que podem ser de escrita).
+permissions:
+  contents: read
+
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
@@ -92,6 +96,18 @@ jobs:
 
       - name: Seed
         run: npx prisma db seed
+
+      # O caminho de produção para criar/restabelecer o administrador (não apaga nada) roda no Postgres de verdade, duas
+      # vezes (precisa ser idempotente) — e o seed, que apaga dados de negócio, tem de se RECUSAR a rodar em produção.
+      - name: admin:ensure is idempotent
+        run: pnpm admin:ensure && pnpm admin:ensure
+
+      - name: Seed refuses to wipe data in production
+        run: |
+          if NODE_ENV=production npx prisma db seed; then
+            echo "O seed deveria ter recusado rodar com NODE_ENV=production"
+            exit 1
+          fi
 
       - name: Build
         run: pnpm build

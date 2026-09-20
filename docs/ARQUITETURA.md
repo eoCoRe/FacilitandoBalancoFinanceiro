@@ -33,8 +33,8 @@ flowchart LR
   extra (não é a defesa): manda quem não tem cookie para `/login` e barra mutações de outra origem.
 - **A tela edita no otimismo.** `lib/store.tsx` aplica a mudança na hora, envia por `PUT` (com espera de 600 ms e fila
   serial) e, se falhar, refaz a leitura do servidor. Sessão expirada (401) encerra uma vez só e leva ao login.
-- **Sem estado no servidor** além do banco (a única exceção é o contador de tentativas de login, em memória — ver
-  [`OPERACAO.md`](OPERACAO.md) §6).
+- **Sem estado no servidor** além do banco, com duas exceções em memória: o contador de tentativas de login e a lista de
+  registros de auditoria que aquele processo gravou e ainda não conseguiu selar (ver [`OPERACAO.md`](OPERACAO.md) §6).
 
 ## 2. Modelo de dados
 
@@ -57,7 +57,7 @@ erDiagram
 - `Valor` é único por (exercício, conta). `ValorExtraido` guarda **todas** as linhas que o leitor viu — inclusive as sem
   conta — com texto original, página e confiança (RF06); só as mapeadas viram `Valor`.
 - `Usuario` nunca é apagado, só desativado (a trilha aponta para o e-mail de quem existiu).
-- `AuditLog` tem `selo`/`selo_anterior` (integridade encadeada). `TokenVerificacao` guarda só hash/HMAC de links e códigos;
+- `AuditLog` tem `selo`, `selo_anterior` e `selo_seq` (a posição na cadeia; integridade encadeada — o selo cobre também a posição). `TokenVerificacao` guarda só hash/HMAC de links e códigos;
   `CodigoRecuperacao`, só HMAC.
 - `PoliticaSeguranca` é uma linha por `Papel` (exigir 2 etapas), sem relação com `Usuario` — vale para todos do perfil.
 - `LgpdErasureLog` fica de fora do desenho de propósito: sobrevive à eliminação da empresa que documenta.
