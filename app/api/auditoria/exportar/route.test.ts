@@ -59,7 +59,7 @@ describe("GET /api/auditoria/exportar", () => {
     await get("usuario=ana&cursor=50&limite=5")
     const args = prisma.auditLog.findMany.mock.calls[0][0]
     expect(args.where).toEqual({ empresaId: 1, usuario: { contains: "ana", mode: "insensitive" } })
-    expect(args.take).toBe(10_000)
+    expect(args.take).toBe(10_001) // um a mais que o limite, só para saber se há mais
   })
 
   it("registra a exportação na própria auditoria (quem, quantos, com quais filtros)", async () => {
@@ -73,10 +73,22 @@ describe("GET /api/auditoria/exportar", () => {
     })
   })
 
-  it("avisa na auditoria quando o resultado foi cortado no limite de 10 mil linhas", async () => {
+  it("quando há MAIS de 10 mil registros: o arquivo traz só 10 mil E um aviso na última linha; a auditoria também anota", async () => {
+    prisma.auditLog.findMany.mockResolvedValue(Array.from({ length: 10_001 }, (_, i) => linha(10_001 - i)))
+    const response = await get()
+    const csv = new TextDecoder().decode(await response.arrayBuffer())
+    const linhas = csv.trim().split("\r\n")
+    expect(linhas).toHaveLength(1 + 10_000 + 1) // cabeçalho + 10 mil + aviso
+    expect(linhas.at(-1)).toContain("AVISO")
+    expect(linhas.at(-1)).toContain("limitada aos 10000 registros mais recentes")
+    expect(prisma.auditLog.create.mock.calls[0][0].data.detalhe).toContain("limitado a 10000; há mais")
+  })
+
+  it("exatamente 10 mil registros cabem inteiros: sem aviso (nada foi cortado)", async () => {
     prisma.auditLog.findMany.mockResolvedValue(Array.from({ length: 10_000 }, (_, i) => linha(10_000 - i)))
-    await get()
-    expect(prisma.auditLog.create.mock.calls[0][0].data.detalhe).toContain("limitado a 10000")
+    const csv = new TextDecoder().decode(await (await get()).arrayBuffer())
+    expect(csv).not.toContain("AVISO")
+    expect(prisma.auditLog.create.mock.calls[0][0].data.detalhe).not.toContain("limitado")
   })
 
   it("só coordenador ou acima baixa a trilha: analista leva 403 e nada é consultado", async () => {

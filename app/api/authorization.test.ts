@@ -20,6 +20,7 @@ import * as indices from "./indices/route"
 import * as auditoria from "./auditoria/route"
 import * as auditoriaExportar from "./auditoria/exportar/route"
 import * as auditoriaIntegridade from "./auditoria/integridade/route"
+import * as auditoriaSelar from "./auditoria/selar-pendentes/route"
 import * as extracoes from "./extracoes/route"
 import * as extracoesId from "./extracoes/[id]/route"
 import * as usuarios from "./usuarios/route"
@@ -61,6 +62,7 @@ const ROTAS: { nome: string; min: Papel; chamar: () => Promise<Response> }[] = [
   { nome: "GET /api/auditoria", min: "ANALISTA", chamar: () => auditoria.GET(new Request("http://localhost/api/auditoria")) },
   { nome: "GET /api/auditoria/exportar", min: "COORDENADOR", chamar: () => auditoriaExportar.GET(new Request("http://localhost/api/auditoria/exportar")) },
   { nome: "POST /api/auditoria/integridade", min: "COORDENADOR", chamar: () => auditoriaIntegridade.POST() },
+  { nome: "POST /api/auditoria/selar-pendentes", min: "ADMINISTRADOR", chamar: () => auditoriaSelar.POST() },
   { nome: "GET /api/extracoes", min: "ANALISTA", chamar: () => extracoes.GET() },
   { nome: "GET /api/extracoes/:id", min: "ANALISTA", chamar: () => extracoesId.GET(new Request("http://localhost/api/extracoes/1"), params) },
   { nome: "POST /api/extracoes", min: "ANALISTA", chamar: () => extracoes.POST(json("POST", {})) },

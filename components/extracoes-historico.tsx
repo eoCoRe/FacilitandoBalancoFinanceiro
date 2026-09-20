@@ -50,7 +50,9 @@ export function ExtracoesHistorico({ refreshKey }: { refreshKey: number }) {
     let cancelled = false
     api<{ extracoes: ResumoExtracao[] }>("/api/extracoes")
       .then((data) => {
-        if (!cancelled) setExtracoes(data.extracoes)
+        if (cancelled) return
+        setExtracoes(data.extracoes)
+        setError(null) // um erro de antes não pode ficar na tela depois de a lista carregar
       })
       .catch((err) => {
         if (!cancelled) setError(errorMessage(err))
@@ -66,7 +68,8 @@ export function ExtracoesHistorico({ refreshKey }: { refreshKey: number }) {
       return
     }
     setAberta(id)
-    if (detalhes[id]) return
+    // Só dá para pular a busca se os itens JÁ chegaram: uma falha anterior ("erro") não pode ficar em cache para sempre.
+    if (Array.isArray(detalhes[id])) return
     try {
       const data = await api<DetalheExtracao>(`/api/extracoes/${id}`)
       setDetalhes((prev) => ({ ...prev, [id]: data.itens }))

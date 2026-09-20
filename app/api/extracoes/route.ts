@@ -21,7 +21,7 @@ interface ExtracaoItemInput {
   rotulo?: string
 }
 
-const MAX_ITENS = 200
+const MAX_ITENS = 500
 
 function parseItem(raw: unknown, index: number): ExtracaoItemInput {
   if (typeof raw !== "object" || raw === null) {
@@ -67,34 +67,48 @@ export async function POST(request: Request) {
     }
     const itens = rawItens.map(parseItem)
 
-    const extracao = await prisma.extracao.create({
-      data: {
-        exercicioId,
-        arquivoOrigem,
-        modeloLlm: modeloLlm ? requireNonEmptyString(modeloLlm, "modeloLlm") : "mock-demo-v1",
-        status: "CONCLUIDA",
-      },
-    })
-
-    await prisma.valorExtraido.createMany({
-      data: itens.map((item) => ({
-        extracaoId: extracao.id,
-        contaId: item.contaId,
-        valor: item.valor,
-        paginaOrigem: item.paginaOrigem,
-        confianca: item.confianca,
-        rotuloOrigem: item.rotulo,
-      })),
-    })
-
-    let gravados = 0
-    for (const item of itens) {
-      if (item.contaId === null) continue
-      await upsertOrDeleteValor(item.contaId, exercicioId, item.valor)
-      gravados++
-    }
-
     const empresa = await getDefaultEmpresa()
+    // O exercício precisa ser da empresa e as contas precisam existir: sem isso o banco recusaria no meio da
+    // gravação com um erro de chave estrangeira (500), depois de parte do trabalho já feito.
+    const exercicio = await prisma.exercicio.findUnique({ where: { id: exercicioId } })
+    if (!exercicio || exercicio.empresaId !== empresa.id) throw new ValidationError("Exercício não encontrado.")
+    const contaIds = [...new Set(itens.flatMap((item) => (item.contaId === null ? [] : [item.contaId])))]
+    if (contaIds.length > 0) {
+      const existentes = await prisma.conta.findMany({ where: { id: { in: contaIds } }, select: { id: true } })
+      if (existentes.length !== contaIds.length) {
+        throw new ValidationError("Alguma conta do Plano de Contas não existe mais. Atualize a página e revise a extração.")
+      }
+    }
+    const modelo = modeloLlm ? requireNonEmptyString(modeloLlm, "modeloLlm") : "mock-demo-v1"
+
+    // Tudo ou nada: a extração, as linhas lidas e os valores lançados entram juntos. Uma falha no meio não deixa
+    // uma extração "concluída" no histórico com itens faltando, nem valores gravados sem o registro de auditoria.
+    const { extracao, gravados } = await prisma.$transaction(
+      async (tx) => {
+        const criada = await tx.extracao.create({
+          data: { exercicioId, arquivoOrigem, modeloLlm: modelo, status: "CONCLUIDA" },
+        })
+        await tx.valorExtraido.createMany({
+          data: itens.map((item) => ({
+            extracaoId: criada.id,
+            contaId: item.contaId,
+            valor: item.valor,
+            paginaOrigem: item.paginaOrigem,
+            confianca: item.confianca,
+            rotuloOrigem: item.rotulo,
+          })),
+        })
+        let lancados = 0
+        for (const item of itens) {
+          if (item.contaId === null) continue
+          await upsertOrDeleteValor(item.contaId, exercicioId, item.valor, tx)
+          lancados++
+        }
+        return { extracao: criada, gravados: lancados }
+      },
+      { timeout: 30_000, maxWait: 10_000 },
+    )
+
     await logAudit(
       empresa.id,
       "Extração confirmada",
@@ -111,7 +125,10 @@ export async function POST(request: Request) {
 export async function GET() {
   try {
     await requirePermission("consultar")
+    const empresa = await getDefaultEmpresa()
     const extracoes = await prisma.extracao.findMany({
+      // Só as da empresa (igual ao detalhe /api/extracoes/:id, que recusa extração de outra empresa).
+      where: { exercicio: { empresaId: empresa.id } },
       orderBy: { criadoEm: "desc" },
       take: 20,
       include: { _count: { select: { valoresExtraidos: true } }, exercicio: true },

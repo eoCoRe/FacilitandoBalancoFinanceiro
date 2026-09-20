@@ -20,13 +20,18 @@ export async function GET(request: Request) {
     params.delete("limite")
     const { where, resumo } = parseAuditQuery(params, empresa.id)
 
-    const logs = await prisma.auditLog.findMany({ where, orderBy: { id: "desc" }, take: AUDIT_EXPORT_MAX })
-    const csv = toCsv(
-      ["Data/hora (UTC)", "Usuário", "Ação", "Detalhe"],
-      logs.map((l) => [l.criadoEm.toISOString(), l.usuario, l.acao, l.detalhe]),
-    )
+    // Busca UM a mais que o limite só para saber se há mais registros do que couberam no arquivo.
+    const encontrados = await prisma.auditLog.findMany({ where, orderBy: { id: "desc" }, take: AUDIT_EXPORT_MAX + 1 })
+    const cortado = encontrados.length > AUDIT_EXPORT_MAX
+    const logs = encontrados.slice(0, AUDIT_EXPORT_MAX)
+    const linhas = logs.map((l) => [l.criadoEm.toISOString(), l.usuario, l.acao, l.detalhe])
+    // O aviso vai DENTRO do arquivo: quem receber o CSV (um auditor, por exemplo) não pode achar que é a trilha inteira.
+    if (cortado) {
+      linhas.push(["", "", "AVISO", `Exportação limitada aos ${AUDIT_EXPORT_MAX} registros mais recentes; existem mais registros com estes filtros.`])
+    }
+    const csv = toCsv(["Data/hora (UTC)", "Usuário", "Ação", "Detalhe"], linhas)
 
-    const truncado = logs.length === AUDIT_EXPORT_MAX ? ` (limitado a ${AUDIT_EXPORT_MAX})` : ""
+    const truncado = cortado ? ` (limitado a ${AUDIT_EXPORT_MAX}; há mais)` : ""
     await logAudit(empresa.id, "Auditoria exportada", `${logs.length} registro(s)${truncado}; ${resumo}.`, user.email)
 
     const dia = new Date().toISOString().slice(0, 10)

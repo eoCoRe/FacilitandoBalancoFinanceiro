@@ -180,6 +180,17 @@ describe("prazo para selar (quem tem só o banco não pode fazer o servidor cari
     expect(r.quebra?.id).toBe(4)
   })
 
+  it("ação explícita do administrador (ignoreGrace): sela também os velhos e a verificação volta a ficar íntegra", async () => {
+    add(3)
+    await sealPending()
+    add(1, { criadoEm: new Date(AGORA.getTime() - 2 * 3600_000) }) // ficou 2 h sem selo (falha passageira de selagem)
+    expect(await sealPending()).toBe(0)
+    expect((await verifyAuditIntegrity()).integra).toBe(false)
+
+    expect(await sealPending({ ignoreGrace: true })).toBe(1)
+    expect(await verifyAuditIntegrity()).toMatchObject({ integra: true, verificados: 4, naoSelados: 0 })
+  })
+
   it("registro recente sem selo (acabou de ser gravado) é selado normalmente", async () => {
     add(2)
     await sealPending()

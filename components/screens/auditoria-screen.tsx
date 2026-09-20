@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, type FormEvent } from "react"
+import { useEffect, useRef, useState, type FormEvent } from "react"
 import { AlertTriangle, CheckCircle2, Download, Loader2, Search, ShieldCheck } from "lucide-react"
 import { PageHeader } from "@/components/page-header"
 import { Button, buttonVariants } from "@/components/ui/button"
@@ -70,12 +70,17 @@ export function AuditoriaScreen() {
   const [error, setError] = useState<string | null>(null)
   const [integridade, setIntegridade] = useState<Integridade | null>(null)
   const [verificando, setVerificando] = useState(false)
+  const [selando, setSelando] = useState(false)
+  // Numera as buscas de página inicial/filtro: só a MAIS RECENTE pode preencher a tela. Sem isso, a carga inicial
+  // (lenta) chegaria depois de um filtro já aplicado e sobrescreveria a tabela com dados sem filtro.
+  const buscaAtual = useRef(0)
 
   useEffect(() => {
     let cancelled = false
+    const busca = ++buscaAtual.current
     fetchPage(SEM_FILTROS, { opcoes: "1" })
       .then((pagina) => {
-        if (cancelled) return
+        if (cancelled || busca !== buscaAtual.current) return
         setRegistros(pagina.logs)
         setCursor(pagina.proximoCursor)
         setAcoes(pagina.acoes ?? [])
@@ -93,9 +98,11 @@ export function AuditoriaScreen() {
     if (carregando) return
     setCarregando(true)
     setError(null)
+    const busca = ++buscaAtual.current
     try {
       // Pede também as ações existentes: podem ter surgido novas (ex.: "Auditoria exportada") desde a abertura.
       const pagina = await fetchPage(filtros, { opcoes: "1" })
+      if (busca !== buscaAtual.current) return // outra busca (mais nova) já assumiu a tela
       setAplicados(filtros)
       setRegistros(pagina.logs)
       setCursor(pagina.proximoCursor)
@@ -127,6 +134,30 @@ export function AuditoriaScreen() {
   }
 
   const podeExportar = can(user.papel, "exportar-auditoria")
+  const podeSelar = can(user.papel, "selar-auditoria")
+
+  // Recuperação de uma falha PASSAGEIRA de selagem: o servidor não sela sozinho um registro velho (seria uma brecha para
+  // quem só tem o banco), então o administrador decide. A ação fica registrada na trilha.
+  async function selarPendentes() {
+    if (selando) return
+    if (
+      !window.confirm(
+        "O sistema vai selar agora os registros que estão sem selo há mais de 15 minutos, atestando que estão corretos. Só faça isso se tiver certeza de que ninguém mexeu neles no banco. A ação fica registrada na trilha. Continuar?",
+      )
+    ) {
+      return
+    }
+    setSelando(true)
+    setError(null)
+    try {
+      await api("/api/auditoria/selar-pendentes", { method: "POST" })
+      await verificarIntegridade()
+    } catch (err) {
+      setError(errorMessage(err))
+    } finally {
+      setSelando(false)
+    }
+  }
 
   // Confere o selo de cada registro (nenhum alterado, apagado no meio ou inserido). O servidor também sela
   // o que ainda faltar e registra a própria verificação na trilha.
@@ -250,6 +281,19 @@ export function AuditoriaScreen() {
               <AlertTriangle className="mt-0.5 size-4 shrink-0" />
               <span>
                 <strong>A trilha foi adulterada.</strong> Problema no registro #{integridade.quebra?.id}: {integridade.quebra?.motivo}
+                {podeSelar && integridade.quebra?.motivo.includes("sem selo há mais de") && (
+                  <>
+                    {" "}
+                    <button
+                      type="button"
+                      onClick={() => void selarPendentes()}
+                      disabled={selando}
+                      className="font-medium underline underline-offset-2 disabled:opacity-60"
+                    >
+                      {selando ? "Selando…" : "Foi só uma falha de selagem: selar os pendentes"}
+                    </button>
+                  </>
+                )}
               </span>
             </div>
           ))}

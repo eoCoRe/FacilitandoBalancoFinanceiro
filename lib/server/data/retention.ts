@@ -6,11 +6,15 @@ import { prisma } from "@/lib/db"
 export const DEFAULT_AUDIT_LOG_RETENTION_DAYS = 730
 export const DEFAULT_EXTRACAO_RETENTION_DAYS = 180
 
+// Teto de 100 anos: um valor absurdo (ex.: 1e12) faria a data de corte cair fora do intervalo que o JavaScript
+// representa ("Invalid Date") e o expurgo inteiro falharia. Acima disso, volta ao padrão como qualquer valor inválido.
+export const MAX_RETENTION_DAYS = 36_500
+
 function retentionDaysFromEnv(envVar: string, fallback: number): number {
   const raw = process.env[envVar]
   if (!raw) return fallback
   const parsed = Number(raw)
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
+  return Number.isFinite(parsed) && parsed > 0 && parsed <= MAX_RETENTION_DAYS ? parsed : fallback
 }
 
 function daysBefore(days: number, now: Date): Date {

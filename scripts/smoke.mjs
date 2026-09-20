@@ -88,6 +88,11 @@ async function waitForServer() {
 }
 
 console.log(`Teste de fumaça contra ${BASE}`)
+
+// O teste ALTERA um valor de verdade (e cria um usuário de teste, que termina DESATIVADO — não há como apagar
+// usuário pela API). Se uma verificação falhar no meio, o valor é devolvido antes de sair.
+let restaurarValor = async () => {}
+
 try {
   await waitForServer()
   const anon = client()
@@ -182,11 +187,41 @@ try {
     const periodo = (await admin.call("GET", "/api/empresa")).json.exercicios.at(-1).periodo
     const original = achar(antes.contas).valores[periodo]
     valorOriginal = original
+    restaurarValor = () => admin.call("PUT", "/api/valores", { contaId, exercicioId, valor: original ?? null })
     const put = await admin.call("PUT", "/api/valores", { contaId, exercicioId, valor: 4242 })
     assert.equal(put.status, 200, JSON.stringify(put.json))
     const depois = achar((await admin.call("GET", "/api/plano-de-contas")).json.contas).valores[periodo]
     assert.equal(depois, 4242)
     await admin.call("PUT", "/api/valores", { contaId, exercicioId, valor: original ?? null })
+  })
+
+  await check("extração: grava tudo numa transação (histórico, linhas lidas e valor) e recusa conta inexistente sem deixar rastro", async () => {
+    // conta inexistente: 400 claro e NADA gravado
+    const antes = (await admin.call("GET", "/api/extracoes")).json.extracoes.length
+    const ruim = await admin.call("POST", "/api/extracoes", {
+      exercicioId,
+      arquivoOrigem: "smoke-invalido.pdf",
+      itens: [{ contaId: 2_000_000_000, valor: 1, confianca: 90 }],
+    })
+    assert.equal(ruim.status, 400, JSON.stringify(ruim.json))
+    assert.equal((await admin.call("GET", "/api/extracoes")).json.extracoes.length, antes)
+
+    // caminho feliz: uma linha com conta (vira valor) e uma sem conta (só histórico)
+    const ok = await admin.call("POST", "/api/extracoes", {
+      exercicioId,
+      arquivoOrigem: "smoke.pdf",
+      itens: [
+        { contaId, valor: 777, confianca: 91, paginaOrigem: 1, rotulo: "Linha lida" },
+        { contaId: null, valor: 5, confianca: 60, paginaOrigem: 2, rotulo: "Linha sem conta" },
+      ],
+    })
+    assert.equal(ok.status, 201, JSON.stringify(ok.json))
+    assert.equal(ok.json.gravados, 1)
+    const detalhe = (await admin.call("GET", `/api/extracoes/${ok.json.extracaoId}`)).json
+    assert.equal(detalhe.itens.length, 2)
+    assert.ok(detalhe.itens.some((i) => i.conta === null && i.rotulo === "Linha sem conta"))
+    assert.ok((await admin.call("GET", "/api/extracoes")).json.extracoes.some((e) => e.id === ok.json.extracaoId))
+    await restaurarValor() // a extração alterou o valor da conta
   })
 
   await check("administrador cria um analista; a auditoria registra o e-mail real", async () => {
@@ -264,6 +299,7 @@ try {
 
   console.log(`\nTeste de fumaça: ${passed} verificações passaram.`)
 } catch (error) {
+  await restaurarValor().catch(() => {})
   console.error(`\nTeste de fumaça FALHOU: ${error.message.split("\n")[0]}`)
   process.exit(1)
 }

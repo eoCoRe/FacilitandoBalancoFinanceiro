@@ -10,7 +10,7 @@ const { prisma } = vi.hoisted(() => ({
 
 vi.mock("@/lib/db", () => ({ prisma }))
 
-import { DEFAULT_AUDIT_LOG_RETENTION_DAYS, DEFAULT_EXTRACAO_RETENTION_DAYS, purgeExpiredData } from "@/lib/server/data/retention"
+import { DEFAULT_AUDIT_LOG_RETENTION_DAYS, DEFAULT_EXTRACAO_RETENTION_DAYS, MAX_RETENTION_DAYS, purgeExpiredData } from "@/lib/server/data/retention"
 
 const NOW = new Date("2026-06-01T00:00:00.000Z")
 
@@ -60,6 +60,19 @@ describe("purgeExpiredData", () => {
 
     expect(prisma.auditLog.deleteMany).toHaveBeenCalledWith({ where: { criadoEm: { lt: auditCutoff } } })
     expect(prisma.extracao.deleteMany).toHaveBeenCalledWith({ where: { criadoEm: { lt: extracaoCutoff } } })
+  })
+
+  it("valor absurdo (acima de 100 anos) também cai no padrão, em vez de gerar data inválida e derrubar o expurgo", async () => {
+    vi.stubEnv("AUDIT_LOG_RETENTION_DAYS", "1e12")
+    vi.stubEnv("EXTRACAO_RETENTION_DAYS", String(MAX_RETENTION_DAYS + 1))
+    const agora = new Date("2026-09-20T12:00:00Z")
+    await purgeExpiredData(agora)
+    const corteAuditoria = prisma.auditLog.deleteMany.mock.calls[0][0].where.criadoEm.lt as Date
+    expect(Number.isNaN(corteAuditoria.getTime())).toBe(false)
+    expect(Math.round((agora.getTime() - corteAuditoria.getTime()) / 86_400_000)).toBe(DEFAULT_AUDIT_LOG_RETENTION_DAYS)
+    vi.stubEnv("AUDIT_LOG_RETENTION_DAYS", String(MAX_RETENTION_DAYS))
+    await purgeExpiredData(agora) // o próprio teto é aceito
+    expect(Number.isNaN((prisma.auditLog.deleteMany.mock.calls[1][0].where.criadoEm.lt as Date).getTime())).toBe(false)
   })
 
   it("devolve a contagem de registros apagados", async () => {

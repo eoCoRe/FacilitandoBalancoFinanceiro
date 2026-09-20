@@ -116,9 +116,10 @@ export function ExtracaoIaScreen({ onNavigate }: { onNavigate: (id: "tabulacao")
   async function handleConfirm() {
     const mapped = rows.filter((r) => r.mappedCode)
     if (mapped.length === 0 || !exercicioId || !fileName || confirming) return
-    // As linhas SEM conta também vão (rastreabilidade, RF06): ficam no histórico, mas não lançam valor. As
-    // mapeadas vêm primeiro, porque o servidor aceita no máximo 200 itens por extração.
-    const entries = [...mapped, ...rows.filter((r) => !r.mappedCode)].slice(0, 200).map((r) => ({
+    // As linhas SEM conta também vão (rastreabilidade, RF06): ficam no histórico, mas não lançam valor. Vão TODAS: se
+    // passar do limite do servidor, ele recusa com um aviso visível — cortar aqui em silêncio perderia valores sem
+    // ninguém saber.
+    const entries = [...mapped, ...rows.filter((r) => !r.mappedCode)].map((r) => ({
       code: r.mappedCode,
       value: r.confirmedValue,
       confidence: r.confidence,

@@ -3,6 +3,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 const { prisma } = vi.hoisted(() => ({
   prisma: {
     extracao: { create: vi.fn(), findMany: vi.fn() },
+    exercicio: { findUnique: vi.fn() },
+    conta: { findMany: vi.fn() },
+    $transaction: vi.fn(),
     valorExtraido: { createMany: vi.fn(), groupBy: vi.fn() },
     valor: { upsert: vi.fn(), deleteMany: vi.fn() },
     empresa: { findFirst: vi.fn() },
@@ -17,6 +20,10 @@ import { GET, POST } from "./route"
 beforeEach(() => {
   vi.clearAllMocks()
   prisma.empresa.findFirst.mockResolvedValue({ id: 1 })
+  prisma.exercicio.findUnique.mockResolvedValue({ id: 1, empresaId: 1, periodo: "1T2026" })
+  // todas as contas pedidas existem, salvo o teste dizer o contrário
+  prisma.conta.findMany.mockImplementation(async ({ where }: { where: { id: { in: number[] } } }) => where.id.in.map((id) => ({ id })))
+  prisma.$transaction.mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) => fn(prisma))
 })
 
 function buildRequest(body: unknown) {
@@ -30,7 +37,7 @@ describe("POST /api/extracoes", () => {
     expect(prisma.extracao.create).not.toHaveBeenCalled()
   })
 
-  it("rejeita itens vazio ou além do limite de 200", async () => {
+  it("rejeita itens vazio ou além do limite de 500", async () => {
     const empty = await POST(buildRequest({ exercicioId: 1, arquivoOrigem: "a.pdf", itens: [] }))
     expect(empty.status).toBe(400)
 
@@ -38,7 +45,7 @@ describe("POST /api/extracoes", () => {
       buildRequest({
         exercicioId: 1,
         arquivoOrigem: "a.pdf",
-        itens: Array.from({ length: 201 }, () => ({ contaId: 1, valor: 10, confianca: 90 })),
+        itens: Array.from({ length: 501 }, () => ({ contaId: 1, valor: 10, confianca: 90 })),
       }),
     )
     expect(tooMany.status).toBe(400)
@@ -101,6 +108,46 @@ describe("POST /api/extracoes", () => {
         data: expect.objectContaining({ empresaId: 1, acao: "Extração confirmada" }),
       }),
     )
+  })
+
+  it("exercício que não existe (ou é de outra empresa): 400 claro, nada gravado", async () => {
+    prisma.exercicio.findUnique.mockResolvedValue(null)
+    const inexistente = await POST(buildRequest({ exercicioId: 99, arquivoOrigem: "a.pdf", itens: [{ contaId: 1, valor: 10, confianca: 90 }] }))
+    expect(inexistente.status).toBe(400)
+    prisma.exercicio.findUnique.mockResolvedValue({ id: 2, empresaId: 7, periodo: "1T2026" })
+    const deOutra = await POST(buildRequest({ exercicioId: 2, arquivoOrigem: "a.pdf", itens: [{ contaId: 1, valor: 10, confianca: 90 }] }))
+    expect(deOutra.status).toBe(400)
+    expect(prisma.extracao.create).not.toHaveBeenCalled()
+  })
+
+  it("conta que sumiu do Plano de Contas (apagada em outra aba): 400 claro, nada gravado (não um 500 no meio da gravação)", async () => {
+    prisma.conta.findMany.mockResolvedValue([{ id: 1 }]) // pediu as contas 1 e 2, só a 1 existe
+    const response = await POST(
+      buildRequest({
+        exercicioId: 1,
+        arquivoOrigem: "a.pdf",
+        itens: [
+          { contaId: 1, valor: 10, confianca: 90 },
+          { contaId: 2, valor: 20, confianca: 90 },
+        ],
+      }),
+    )
+    expect(response.status).toBe(400)
+    expect((await response.json()).error).toMatch(/não existe mais/)
+    expect(prisma.extracao.create).not.toHaveBeenCalled()
+    expect(prisma.valor.upsert).not.toHaveBeenCalled()
+  })
+
+  it("tudo ou nada: extração, linhas lidas e valores entram numa transação; se a gravação falhar no meio, não fica registro de auditoria", async () => {
+    prisma.extracao.create.mockResolvedValue({ id: 8 })
+    prisma.valor.upsert.mockRejectedValueOnce(new Error("banco caiu"))
+    vi.spyOn(console, "error").mockImplementation(() => {})
+    // erro inesperado sobe para o tratamento padrão do Next (500)
+    await expect(
+      POST(buildRequest({ exercicioId: 1, arquivoOrigem: "a.pdf", itens: [{ contaId: 1, valor: 10, confianca: 90 }] })),
+    ).rejects.toThrow("banco caiu")
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1)
+    expect(prisma.auditLog.create).not.toHaveBeenCalled()
   })
 
   it("usa 'mock-demo-v1' como modeloLlm padrão quando não informado", async () => {

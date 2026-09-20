@@ -48,7 +48,9 @@ export function computeSeal(previousSeal: string | null, row: SealFields): strin
 // Sela os registros que ainda não têm selo e devolve quantos selou. A cadeia segue a ORDEM EM QUE OS SELOS SÃO GERADOS
 // (selo_seq), não o id: se um registro de id menor só for confirmado depois de outro mais novo já selado (duas
 // requisições simultâneas), ele entra no fim da cadeia no próximo lote — nunca fica sem selo.
-export async function sealPending(): Promise<number> {
+// `ignoreGrace` (só a ação explícita do administrador, que fica registrada na trilha) sela também os registros sem
+// selo mais velhos que o prazo — o caminho para se recuperar de uma falha PASSAGEIRA de selagem sem mexer no banco.
+export async function sealPending({ ignoreGrace = false }: { ignoreGrace?: boolean } = {}): Promise<number> {
   let sealed = 0
   for (let batch = 0; batch < SEAL_MAX_BATCHES; batch++) {
     const count = await prisma.$transaction(async (tx) => {
@@ -60,7 +62,7 @@ export async function sealPending(): Promise<number> {
         select: { selo: true, seloSeq: true },
       })
       const pending = await tx.auditLog.findMany({
-        where: { selo: null, ...(last ? { criadoEm: { gte: new Date(Date.now() - SEAL_GRACE_MS) } } : {}) },
+        where: { selo: null, ...(last && !ignoreGrace ? { criadoEm: { gte: new Date(Date.now() - SEAL_GRACE_MS) } } : {}) },
         orderBy: { id: "asc" },
         take: SEAL_BATCH,
       })

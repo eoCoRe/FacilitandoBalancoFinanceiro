@@ -53,7 +53,7 @@ describe("extractRowsFromLines", () => {
     expect(rows).toHaveLength(1)
   })
 
-  it("dedupe: mantém só a ocorrência de maior confiança quando a mesma conta aparece 2x", () => {
+  it("conta repetida: só a leitura de maior confiança fica COM a conta; a outra continua na lista, sem conta (RF06: nada lido se perde)", () => {
     const rows = extractRowsFromLines(
       [
         { text: "1.1.1 Disponibilidade 850,00", page: 1 }, // singular, casamento mais fraco
@@ -64,6 +64,36 @@ describe("extractRowsFromLines", () => {
     const disponibilidades = rows.filter((r) => r.code === "1.1.1")
     expect(disponibilidades).toHaveLength(1)
     expect(disponibilidades[0].value).toBe(900)
+
+    // a leitura descartada da conta segue na lista: mesmo valor, página e texto originais, mas SEM conta
+    expect(rows).toHaveLength(2)
+    const perdida = rows.find((r) => r.code === null)!
+    expect(perdida).toMatchObject({ value: 850, page: 1, sourceLabel: expect.stringContaining("Disponibilidade") })
+    expect(perdida.suggestedName).toBe(perdida.sourceLabel)
+  })
+
+  it("conta repetida com a de maior confiança vindo PRIMEIRO: a segunda é que fica sem conta", () => {
+    const rows = extractRowsFromLines(
+      [
+        { text: "1.1.1 Disponibilidades 900,00", page: 1 },
+        { text: "1.1.1 Disponibilidade 850,00", page: 2 },
+      ],
+      buildAccounts(),
+    )
+    expect(rows.find((r) => r.code === "1.1.1")!.value).toBe(900)
+    expect(rows.find((r) => r.code === null)).toMatchObject({ value: 850, page: 2 })
+  })
+
+  it("os ids das linhas continuam únicos (a tela usa o id como chave)", () => {
+    const rows = extractRowsFromLines(
+      [
+        { text: "1.1.1 Disponibilidade 850,00", page: 1 },
+        { text: "1.1.1 Disponibilidades 900,00", page: 1 },
+        { text: "1.1.1 Disponibilidades 910,00", page: 2 },
+      ],
+      buildAccounts(),
+    )
+    expect(new Set(rows.map((r) => r.id)).size).toBe(rows.length)
   })
 
   it("retorna lista vazia quando nenhuma linha tem conteúdo extraível", () => {
