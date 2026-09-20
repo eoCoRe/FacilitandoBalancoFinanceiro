@@ -6,10 +6,13 @@ const { prisma, verification } = vi.hoisted(() => ({
     empresa: { findFirst: vi.fn() },
     auditLog: { create: vi.fn() },
   },
-  verification: { consumeResetToken: vi.fn() },
+  verification: { consumeResetToken: vi.fn(), releaseResetToken: vi.fn() },
 }))
 vi.mock("@/lib/db", () => ({ prisma }))
-vi.mock("@/lib/server/verification", () => ({ consumeResetToken: verification.consumeResetToken }))
+vi.mock("@/lib/server/verification", () => ({
+  consumeResetToken: verification.consumeResetToken,
+  releaseResetToken: verification.releaseResetToken,
+}))
 
 import { resetRateLimits } from "@/lib/server/rate-limit"
 import { verifyPassword } from "@/lib/server/password"
@@ -29,6 +32,7 @@ beforeEach(() => {
   resetRateLimits()
   prisma.empresa.findFirst.mockResolvedValue({ id: 1 })
   prisma.usuario.update.mockResolvedValue({ id: 5, email: "ana@teste.com" })
+  verification.releaseResetToken.mockResolvedValue(undefined)
 })
 
 describe("POST /api/auth/redefinir-senha", () => {
@@ -69,5 +73,28 @@ describe("POST /api/auth/redefinir-senha", () => {
     verification.consumeResetToken.mockClear()
     expect((await post({ token: "ID.SEGREDO", novaSenha: "nova-senha-segura-1" })).status).toBe(429)
     expect(verification.consumeResetToken).not.toHaveBeenCalled()
+  })
+
+  it("se a gravação da senha falhar DEPOIS de gastar o link, o link é devolvido (a pessoa não fica sem)", async () => {
+    verification.consumeResetToken.mockResolvedValue(5)
+    prisma.usuario.update.mockRejectedValue(new Error("banco fora"))
+
+    await expect(post({ token: "ID.SEGREDO", novaSenha: "nova-senha-segura-1" })).rejects.toThrow("banco fora")
+
+    expect(verification.releaseResetToken).toHaveBeenCalledWith("ID.SEGREDO")
+  })
+
+  it("o hash da senha é calculado ANTES de gastar o link", async () => {
+    const ordem: string[] = []
+    verification.consumeResetToken.mockImplementation(async () => {
+      ordem.push("consome")
+      return 5
+    })
+    prisma.usuario.update.mockImplementation(async ({ data }: { data: { senhaHash: string } }) => {
+      ordem.push(data.senhaHash.startsWith("scrypt$") ? "grava-com-hash-pronto" : "grava-sem-hash")
+      return { id: 5, email: "ana@teste.com" }
+    })
+    await post({ token: "ID.SEGREDO", novaSenha: "nova-senha-segura-1" })
+    expect(ordem).toEqual(["consome", "grava-com-hash-pronto"])
   })
 })

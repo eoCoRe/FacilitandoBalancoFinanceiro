@@ -6,7 +6,7 @@ import { handleRouteError } from "@/lib/server/http"
 import { hashPassword, requireValidPassword } from "@/lib/server/password"
 import { isRateLimited, recordFailure } from "@/lib/server/rate-limit"
 import { TooManyRequestsError, ValidationError } from "@/lib/server/validation"
-import { consumeResetToken } from "@/lib/server/verification"
+import { consumeResetToken, releaseResetToken } from "@/lib/server/verification"
 
 const IP_MAX = 10
 
@@ -24,16 +24,26 @@ export async function POST(request: Request) {
     // A senha é validada ANTES de gastar o link: senha fraca não deve queimar o único uso.
     const novaSenha = requireValidPassword(body.novaSenha, "Nova senha")
 
+    // O hash (a parte lenta e que mais pode falhar) sai ANTES de gastar o link.
+    const senhaHash = await hashPassword(novaSenha)
+
     const usuarioId = await consumeResetToken(body.token)
     if (usuarioId === null) {
       recordFailure(ipKey)
       throw new ValidationError("Link inválido ou expirado. Peça uma nova recuperação de senha.")
     }
 
-    const usuario = await prisma.usuario.update({
-      where: { id: usuarioId },
-      data: { senhaHash: await hashPassword(novaSenha), sessoesValidasDesde: new Date() },
-    })
+    let usuario
+    try {
+      usuario = await prisma.usuario.update({
+        where: { id: usuarioId },
+        data: { senhaHash, sessoesValidasDesde: new Date() },
+      })
+    } catch (error) {
+      // Falha ao gravar (ex.: banco fora): devolve o link para a pessoa poder tentar de novo.
+      await releaseResetToken(body.token).catch(() => {})
+      throw error
+    }
     await logAuditSafe("Senha redefinida por e-mail", "Nova senha definida pelo link de recuperação.", usuario.email)
 
     return NextResponse.json({ ok: true })

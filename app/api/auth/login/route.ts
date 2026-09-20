@@ -11,6 +11,7 @@ import {
   sendLoginCode,
   setTwoFactorCookie,
   signTwoFactorToken,
+  TWO_FACTOR_CHALLENGE_KEY,
   TWO_FACTOR_CHALLENGE_MAX,
 } from "@/lib/server/two-factor"
 import { requireEmail, TooManyRequestsError, UnauthorizedError, ValidationError } from "@/lib/server/validation"
@@ -56,7 +57,7 @@ export async function POST(request: Request) {
     clearFailures(emailKey)
 
     if (await isTwoFactorRequired(usuario)) {
-      const challengeKey = `2fa:login:${usuario.id}`
+      const challengeKey = TWO_FACTOR_CHALLENGE_KEY(usuario.id)
       if (isRateLimited(challengeKey, TWO_FACTOR_CHALLENGE_MAX)) {
         throw new TooManyRequestsError("Muitos códigos solicitados. Aguarde 15 minutos e tente novamente.")
       }

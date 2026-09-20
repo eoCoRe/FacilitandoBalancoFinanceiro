@@ -5,7 +5,8 @@ import { requireUser } from "@/lib/server/authz"
 import { getDefaultEmpresa } from "@/lib/server/empresa"
 import { handleRouteError } from "@/lib/server/http"
 import { PASSWORD_MAX_LENGTH, verifyPassword } from "@/lib/server/password"
-import { ValidationError } from "@/lib/server/validation"
+import { clearFailures, isRateLimited, PASSWORD_CHECK_KEY, recordFailure } from "@/lib/server/rate-limit"
+import { TooManyRequestsError, ValidationError } from "@/lib/server/validation"
 
 // Desliga o 2FA da própria conta. Exige a senha (uma sessão emprestada não basta para
 // enfraquecer a conta) e é recusado se o perfil do usuário for obrigado a usar 2 etapas.
@@ -27,9 +28,15 @@ export async function POST(request: Request) {
     if (typeof senha !== "string" || !senha || senha.length > PASSWORD_MAX_LENGTH) {
       throw new ValidationError("Informe a sua senha para confirmar.")
     }
+    const key = PASSWORD_CHECK_KEY(user.id)
+    if (isRateLimited(key)) {
+      throw new TooManyRequestsError("Muitas tentativas com a senha. Aguarde 15 minutos e tente novamente.")
+    }
     if (!usuario.senhaHash || !(await verifyPassword(senha, usuario.senhaHash))) {
+      recordFailure(key)
       throw new ValidationError("Senha incorreta.")
     }
+    clearFailures(key)
 
     await prisma.usuario.update({ where: { id: user.id }, data: { doisFatoresAtivo: false } })
     const empresa = await getDefaultEmpresa()

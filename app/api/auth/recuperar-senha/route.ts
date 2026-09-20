@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
 import { logAuditSafe } from "@/lib/server/audit"
 import { afterResponse } from "@/lib/server/after-response"
-import { appOrigin } from "@/lib/server/app-url"
+import { publicOrigin } from "@/lib/server/app-url"
 import { clientIp } from "@/lib/server/client-ip"
 import { handleRouteError } from "@/lib/server/http"
 import { mailAvailable, sendMail } from "@/lib/server/mail"
@@ -23,6 +23,9 @@ export async function POST(request: Request) {
     if (!mailAvailable()) {
       throw new ServiceUnavailableError("A recuperação de senha não está disponível. Fale com um administrador.")
     }
+    // Antes de tudo (igual para qualquer e-mail): em produção sem APP_URL o link seria montado com o Host
+    // da requisição, que o atacante controla.
+    const origin = publicOrigin(request)
     const body = (await request.json()) as { email?: unknown }
     const email = requireEmail(body.email)
 
@@ -36,9 +39,11 @@ export async function POST(request: Request) {
 
     const usuario = await prisma.usuario.findUnique({ where: { email } })
     if (usuario?.ativo) {
-      const token = await createResetToken(usuario.id)
-      const link = `${appOrigin(request)}/redefinir-senha?token=${encodeURIComponent(token)}`
+      // Token e e-mail saem DEPOIS da resposta: o caminho síncrono é o mesmo (um SELECT) exista a
+      // conta ou não, então nem o corpo nem o tempo de resposta revelam quem está cadastrado.
       afterResponse(async () => {
+        const token = await createResetToken(usuario.id)
+        const link = `${origin}/redefinir-senha?token=${encodeURIComponent(token)}`
         await sendMail(resetPasswordMail(usuario.email, link, RESET_TTL_MS / 60_000))
         await logAuditSafe("Recuperação de senha solicitada", "Link de redefinição enviado por e-mail.", usuario.email)
       })

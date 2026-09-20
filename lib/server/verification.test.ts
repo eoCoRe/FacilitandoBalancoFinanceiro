@@ -51,7 +51,7 @@ const { prisma, rows } = vi.hoisted(() => {
           if (!matches(row, where)) continue
           count++
           if (data.tentativas?.increment) row.tentativas += data.tentativas.increment
-          if (data.usadoEm) row.usadoEm = data.usadoEm
+          if ("usadoEm" in data) row.usadoEm = data.usadoEm
         }
         return { count }
       },
@@ -66,6 +66,7 @@ import {
   checkCode,
   consumeResetToken,
   createCodeChallenge,
+  releaseResetToken,
   createResetToken,
   latestPendingChallengeId,
   MAX_CODE_ATTEMPTS,
@@ -129,6 +130,27 @@ describe("link de recuperação de senha", () => {
   it("um código de 2 etapas não serve como link de recuperação", async () => {
     const { id } = await createCodeChallenge(7, "LOGIN_2FA")
     expect(await consumeResetToken(`${id}.qualquer`)).toBeNull()
+  })
+})
+
+describe("releaseResetToken", () => {
+  it("devolve um link já gasto ao estado de 'não usado' (falha ao gravar a senha)", async () => {
+    const token = await createResetToken(7)
+    expect(await consumeResetToken(token)).toBe(7)
+    expect(await consumeResetToken(token)).toBeNull()
+
+    await releaseResetToken(token)
+
+    expect(await consumeResetToken(token)).toBe(7)
+  })
+
+  it("ignora entradas inválidas e não mexe em códigos de 2 etapas", async () => {
+    await releaseResetToken(undefined)
+    await releaseResetToken("")
+    const { id, code } = await createCodeChallenge(7, "LOGIN_2FA")
+    await checkCode(id, 7, "LOGIN_2FA", code)
+    await releaseResetToken(`${id}.qualquer`)
+    expect(await checkCode(id, 7, "LOGIN_2FA", code)).toBe("invalido") // continua gasto
   })
 })
 

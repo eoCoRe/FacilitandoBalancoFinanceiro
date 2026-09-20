@@ -70,6 +70,15 @@ export async function consumeResetToken(token: unknown): Promise<number | null> 
   return claimed.count === 1 ? row.usuarioId : null
 }
 
+// Devolve o link ao estado "não usado". Só para o caso de a gravação da nova senha falhar DEPOIS de
+// o link ter sido gasto (falha de banco): a pessoa não deve ficar sem link por um erro que não foi dela.
+export async function releaseResetToken(token: unknown): Promise<void> {
+  if (typeof token !== "string") return
+  const [id] = token.split(".")
+  if (!id) return
+  await prisma.tokenVerificacao.updateMany({ where: { id, tipo: "RECUPERACAO_SENHA" }, data: { usadoEm: null } })
+}
+
 // ---- Código de 6 dígitos (2 etapas no login e confirmação ao ligar o 2FA) ----
 
 export type CodeTipo = Extract<TokenTipo, "LOGIN_2FA" | "ATIVACAO_2FA">

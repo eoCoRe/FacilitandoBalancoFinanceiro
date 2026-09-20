@@ -19,6 +19,7 @@ export const TWO_FACTOR_COOKIE_PATH = "/api/auth"
 // 5 desafios por usuário a cada 15 min: quem já sabe a senha não pode pedir códigos sem fim
 // (cada um teria 5 tentativas) nem encher a caixa de e-mail da vítima.
 export const TWO_FACTOR_CHALLENGE_MAX = 5
+export const TWO_FACTOR_CHALLENGE_KEY = (userId: number) => `2fa:login:${userId}`
 
 export async function isTwoFactorRequired(usuario: { doisFatoresAtivo: boolean; papel: Papel }): Promise<boolean> {
   if (usuario.doisFatoresAtivo) return true

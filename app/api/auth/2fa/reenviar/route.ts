@@ -6,6 +6,7 @@ import {
   sendLoginCode,
   setTwoFactorCookie,
   signTwoFactorToken,
+  TWO_FACTOR_CHALLENGE_KEY,
   TWO_FACTOR_CHALLENGE_MAX,
   TWO_FACTOR_COOKIE,
   verifyTwoFactorToken,
@@ -23,7 +24,7 @@ export async function POST(request: NextRequest) {
     const usuario = await prisma.usuario.findUnique({ where: { id: pending.userId } })
     if (!usuario || !usuario.ativo) throw new UnauthorizedError("A verificação expirou. Entre novamente com a sua senha.")
 
-    const challengeKey = `2fa:login:${usuario.id}`
+    const challengeKey = TWO_FACTOR_CHALLENGE_KEY(usuario.id)
     if (isRateLimited(challengeKey, TWO_FACTOR_CHALLENGE_MAX)) {
       throw new TooManyRequestsError("Muitos códigos solicitados. Aguarde 15 minutos e tente novamente.")
     }

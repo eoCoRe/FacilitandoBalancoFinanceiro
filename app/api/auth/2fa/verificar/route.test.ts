@@ -15,7 +15,8 @@ vi.mock("@/lib/server/verification", async (importOriginal) => ({
   checkCode: verification.checkCode,
 }))
 
-import { signTwoFactorToken } from "@/lib/server/two-factor"
+import { isRateLimited, recordFailure, resetRateLimits } from "@/lib/server/rate-limit"
+import { signTwoFactorToken, TWO_FACTOR_CHALLENGE_KEY, TWO_FACTOR_CHALLENGE_MAX } from "@/lib/server/two-factor"
 import { POST } from "./route"
 
 const usuario = (over = {}) => ({ id: 5, nome: "Ana", email: "ana@teste.com", papel: "ANALISTA", ativo: true, ...over })
@@ -36,6 +37,7 @@ const cookies = (r: Response) => r.headers.getSetCookie().join(";")
 
 beforeEach(() => {
   vi.clearAllMocks()
+  resetRateLimits()
   vi.stubEnv("AUTH_SECRET", "t".repeat(40))
   prisma.empresa.findFirst.mockResolvedValue({ id: 1 })
   prisma.usuario.findUnique.mockResolvedValue(usuario())
@@ -100,5 +102,21 @@ describe("POST /api/auth/2fa/verificar", () => {
     const response = await verificar("123456")
     expect(response.status).toBe(401)
     expect(cookies(response)).not.toMatch(/cb_session=[^;]/)
+  })
+
+  it("login concluído zera o teto de desafios (quem entra e sai várias vezes não é bloqueado)", async () => {
+    for (let i = 0; i < TWO_FACTOR_CHALLENGE_MAX; i++) recordFailure(TWO_FACTOR_CHALLENGE_KEY(5))
+    expect(isRateLimited(TWO_FACTOR_CHALLENGE_KEY(5), TWO_FACTOR_CHALLENGE_MAX)).toBe(true)
+
+    expect((await verificar("123456")).status).toBe(200)
+
+    expect(isRateLimited(TWO_FACTOR_CHALLENGE_KEY(5), TWO_FACTOR_CHALLENGE_MAX)).toBe(false)
+  })
+
+  it("código errado NÃO zera o teto (só o sucesso zera)", async () => {
+    for (let i = 0; i < TWO_FACTOR_CHALLENGE_MAX; i++) recordFailure(TWO_FACTOR_CHALLENGE_KEY(5))
+    verification.checkCode.mockResolvedValue("invalido")
+    await verificar("000000")
+    expect(isRateLimited(TWO_FACTOR_CHALLENGE_KEY(5), TWO_FACTOR_CHALLENGE_MAX)).toBe(true)
   })
 })

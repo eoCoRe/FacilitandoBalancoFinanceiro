@@ -4,7 +4,8 @@ import { logAuditSafe } from "@/lib/server/audit"
 import { codeCheckMessage } from "@/lib/server/code-messages"
 import { handleRouteError } from "@/lib/server/http"
 import { issueSession } from "@/lib/server/login-session"
-import { clearTwoFactorCookie, TWO_FACTOR_COOKIE, verifyTwoFactorToken } from "@/lib/server/two-factor"
+import { clearFailures } from "@/lib/server/rate-limit"
+import { clearTwoFactorCookie, TWO_FACTOR_CHALLENGE_KEY, TWO_FACTOR_COOKIE, verifyTwoFactorToken } from "@/lib/server/two-factor"
 import { UnauthorizedError } from "@/lib/server/validation"
 import { checkCode } from "@/lib/server/verification"
 
@@ -35,6 +36,8 @@ export async function POST(request: NextRequest) {
     // A conta pode ter sido desativada entre a senha e o código.
     if (!usuario || !usuario.ativo) throw new UnauthorizedError("A verificação expirou. Entre novamente com a sua senha.")
 
+    // Login concluído: o teto de desafios é contra quem pede códigos e NUNCA os usa, não contra quem entra.
+    clearFailures(TWO_FACTOR_CHALLENGE_KEY(usuario.id))
     const response = await issueSession(usuario, "Entrada com e-mail, senha e código de verificação.")
     clearTwoFactorCookie(response)
     return response

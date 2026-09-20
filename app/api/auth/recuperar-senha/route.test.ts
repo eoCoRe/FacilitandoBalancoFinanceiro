@@ -123,4 +123,27 @@ describe("POST /api/auth/recuperar-senha", () => {
     expect((await post({ email: "nao-eh-email" })).status).toBe(400)
     expect((await post({})).status).toBe(400)
   })
+
+  it("nem a criação do token roda antes da resposta (o caminho síncrono é o mesmo exista a conta ou não)", async () => {
+    prisma.usuario.findUnique.mockResolvedValue({ id: 5, email: "ana@teste.com", ativo: true })
+    let liberar!: (t: string) => void
+    verification.createResetToken.mockReturnValue(new Promise<string>((resolve) => (liberar = resolve)))
+
+    const response = await post({ email: "ana@teste.com" }) // não pode esperar o token
+    expect(response.status).toBe(200)
+    expect(mail.sendMail).not.toHaveBeenCalled()
+
+    liberar("ID.SEGREDO")
+    await flush()
+    expect(mail.sendMail).toHaveBeenCalledTimes(1)
+  })
+
+  it("em PRODUÇÃO sem APP_URL: 503 e nada é feito (o link usaria o Host, que o atacante controla)", async () => {
+    vi.stubEnv("NODE_ENV", "production")
+    vi.stubEnv("APP_URL", "")
+    const response = await post({ email: "ana@teste.com" })
+    expect(response.status).toBe(503)
+    expect(prisma.usuario.findUnique).not.toHaveBeenCalled()
+    expect(mail.sendMail).not.toHaveBeenCalled()
+  })
 })

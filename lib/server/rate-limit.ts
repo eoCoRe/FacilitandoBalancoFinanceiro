@@ -12,6 +12,10 @@ const buckets = new Map<string, Bucket>()
 export const LOGIN_MAX_FAILURES = 5
 export const LOGIN_WINDOW_MS = 15 * 60 * 1000
 
+// Conferir a SENHA ATUAL de quem já está logado (trocar senha, desligar o 2FA): sem limite, uma
+// sessão emprestada/roubada serviria para adivinhar a senha sem passar pelo bloqueio do login.
+export const PASSWORD_CHECK_KEY = (userId: number) => `pwcheck:${userId}`
+
 function current(key: string, now: number, windowMs: number): Bucket | undefined {
   const bucket = buckets.get(key)
   if (bucket && now - bucket.windowStart >= windowMs) {

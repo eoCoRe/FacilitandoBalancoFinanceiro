@@ -4,8 +4,9 @@ import { logAuditSafe } from "@/lib/server/audit"
 import { requireUser } from "@/lib/server/authz"
 import { handleRouteError } from "@/lib/server/http"
 import { hashPassword, PASSWORD_MAX_LENGTH, requireValidPassword, verifyPassword } from "@/lib/server/password"
+import { clearFailures, isRateLimited, PASSWORD_CHECK_KEY, recordFailure } from "@/lib/server/rate-limit"
 import { setSessionCookie, signSessionToken } from "@/lib/server/session"
-import { ValidationError } from "@/lib/server/validation"
+import { TooManyRequestsError, ValidationError } from "@/lib/server/validation"
 
 // Troca a própria senha. Exige a senha atual (quem só entra pelo Google e ainda não tem senha
 // pode definir a primeira sem ela). Encerra as sessões abertas em outros lugares e reemite a
@@ -24,9 +25,15 @@ export async function POST(request: Request) {
       if (typeof atual !== "string" || !atual || atual.length > PASSWORD_MAX_LENGTH) {
         throw new ValidationError("Informe a senha atual.")
       }
+      const key = PASSWORD_CHECK_KEY(user.id)
+      if (isRateLimited(key)) {
+        throw new TooManyRequestsError("Muitas tentativas com a senha atual. Aguarde 15 minutos e tente novamente.")
+      }
       if (!(await verifyPassword(atual, usuario.senhaHash))) {
+        recordFailure(key)
         throw new ValidationError("A senha atual está incorreta.")
       }
+      clearFailures(key)
     }
 
     await prisma.usuario.update({

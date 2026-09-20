@@ -139,4 +139,11 @@ describe("desligar o 2FA: POST /api/auth/2fa/desativar", () => {
     prisma.usuario.findUnique.mockResolvedValue({ id: 5, email: "ana@teste.com", papel: "ANALISTA", doisFatoresAtivo: false })
     expect((await post(desativar, { senha: "minha-senha-123" })).status).toBe(400)
   })
+
+  it("desligar: sessão roubada não adivinha a senha (5 erros → 429, mesmo acertando depois)", async () => {
+    for (let i = 0; i < 5; i++) expect((await post(desativar, { senha: `errada-errada-${i}` })).status).toBe(400)
+    const response = await post(desativar, { senha: "minha-senha-123" })
+    expect(response.status).toBe(429)
+    expect(prisma.usuario.update).not.toHaveBeenCalled()
+  })
 })
