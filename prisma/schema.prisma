@@ -1,6 +1,5 @@
 // Schema fiel ao DER do TCC (§5.2 em diagramas_modelo_proprio.md), com um adicional:
-// AuditLog, para persistir a trilha de auditoria (RF08) que hoje só existe no
-// localStorage do frontend. CONTA cobre Balanço, DRE e DFC — o campo `tipo`
+// AuditLog, para persistir a trilha de auditoria (RF08). CONTA cobre Balanço, DRE e DFC — o campo `tipo`
 // distingue qual demonstração cada conta pertence, como o DER especifica.
 
 generator client {

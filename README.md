@@ -69,6 +69,7 @@ vitest.setup.ts               # testes de rota: usuário logado padrão (adminis
 
 ## Documentação
 
+- [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md) — camadas, modelo de dados, ciclo de uma requisição, login com 2 etapas e onde mexer para cada tarefa (com diagramas).
 - [`docs/OPERACAO.md`](docs/OPERACAO.md) — colocar no ar e manter: variáveis, checklist de publicação, backup, troca de segredos, emergências.
 - [`SECURITY.md`](SECURITY.md) — o que o sistema protege (e o que não), mapeado ao RNF02/RNF03 e à LGPD.
 - [`.env.example`](.env.example) — todas as variáveis de ambiente, comentadas.
