@@ -80,7 +80,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       mudancas.push("2FA desligado (e-mail e aplicativo)")
     }
     if (body.senha !== undefined) {
-      data.senhaHash = await hashPassword(requireValidPassword(body.senha))
+      data.senhaHash = await hashPassword(requireValidPassword(body.senha, "Senha", { email: alvo.email }))
       // Encerra as sessões abertas dessa pessoa: redefinir a senha costuma ser resposta a
       // uma suspeita de acesso indevido.
       data.sessoesValidasDesde = new Date()

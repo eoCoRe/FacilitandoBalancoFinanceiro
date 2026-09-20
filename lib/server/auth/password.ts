@@ -53,13 +53,55 @@ export async function verifyAgainstDummy(password: string): Promise<false> {
   return false
 }
 
-export function requireValidPassword(value: unknown, field = "Senha"): string {
+// Senhas que aparecem em todas as listas de vazamentos e de tentativas automáticas (só as de 10+ caracteres,
+// porque as menores já caem no mínimo). Comparação sem maiúsculas/minúsculas e sem separadores.
+const COMMON_PASSWORDS = new Set([
+  "1234567890", "12345678901", "123456789012", "0123456789", "1234567891", "9876543210", "0987654321",
+  "1q2w3e4r5t", "1q2w3e4r5t6y", "qwertyuiop", "qwerty1234", "qwerty12345", "qwertyuiop123", "asdfghjkl1", "asdfghjklç",
+  "zxcvbnm123", "abcdefghij", "abcd123456", "abc1234567", "password12", "password123", "password1234", "passw0rd123",
+  "p@ssw0rd123", "iloveyou12", "iloveyou123", "welcome123", "welcome1234", "letmein1234", "administrador", "administrador1",
+  "administrator", "admin12345", "admin123456", "adminadmin", "mudar12345", "mudar123456", "trocar12345", "senha12345",
+  "senha123456", "senha1234567", "minhasenha", "minhasenha1", "minhasenha123", "senhasegura", "senhaforte1", "brasil1234",
+  "brasil12345", "brasil2024", "brasil2025", "brasil2026", "corinthians", "flamengo123", "palmeiras1", "saopaulo123",
+  "gremio12345", "internacional", "1111111111", "0000000000", "aaaaaaaaaa", "123123123123", "123456123456", "112233445566",
+  "147258369147", "1234512345", "12345abcde", "123456789a", "123456789q", "a123456789", "q123456789", "central123",
+  "centraldebalancos", "balancos123", "empresa1234", "empresa12345", "contabilidade",
+])
+
+function normalizeForCheck(value: string): string {
+  return value.toLowerCase().replace(/[\s\-_.]/g, "")
+}
+
+// Previsível demais mesmo passando no tamanho: uma só repetição ("aaaaaaaaaa"), um bloco repetido ("abcabcabcabc")
+// ou uma sequência corrida de números/letras ("12345678901", "abcdefghijk").
+function isPredictable(normalized: string): boolean {
+  if (new Set(normalized).size <= 2) return true
+  if (/^(.{1,4})\1{2,}$/.test(normalized)) return true
+  // Sequência corrida: dígitos contam em círculo (…8, 9, 0, 1…), letras não.
+  const onlyDigits = /^\d+$/.test(normalized)
+  const codes = [...normalized].map((c) => c.charCodeAt(0))
+  const diffs = codes.slice(1).map((c, i) => (onlyDigits ? (c - codes[i] + 10) % 10 : c - codes[i]))
+  const down = onlyDigits ? 9 : -1
+  return diffs.every((d) => d === 1) || diffs.every((d) => d === down)
+}
+
+export interface PasswordContext {
+  // Quem vai usar a senha: ela não pode ser o próprio e-mail nem conter a parte antes do @.
+  email?: string
+}
+
+export function requireValidPassword(value: unknown, field = "Senha", context: PasswordContext = {}): string {
   if (typeof value !== "string") throw new ValidationError(`${field} é obrigatória.`)
   if (value.length < PASSWORD_MIN_LENGTH) {
     throw new ValidationError(`${field} deve ter pelo menos ${PASSWORD_MIN_LENGTH} caracteres.`)
   }
   if (value.length > PASSWORD_MAX_LENGTH) {
     throw new ValidationError(`${field} deve ter no máximo ${PASSWORD_MAX_LENGTH} caracteres.`)
+  }
+  const normalized = normalizeForCheck(value)
+  const local = context.email ? normalizeForCheck(context.email.split("@")[0]) : ""
+  if (COMMON_PASSWORDS.has(normalized) || isPredictable(normalized) || (local.length >= 4 && normalized.includes(local))) {
+    throw new ValidationError(`${field} é muito comum ou previsível (ou parecida com o e-mail). Escolha outra.`)
   }
   return value
 }

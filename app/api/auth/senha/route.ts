@@ -15,7 +15,7 @@ export async function POST(request: Request) {
   try {
     const user = await requireUser()
     const body = (await request.json()) as { senhaAtual?: unknown; novaSenha?: unknown }
-    const novaSenha = requireValidPassword(body.novaSenha, "Nova senha")
+    const novaSenha = requireValidPassword(body.novaSenha, "Nova senha", { email: user.email })
 
     const usuario = await prisma.usuario.findUnique({ where: { id: user.id } })
     if (!usuario) throw new ValidationError("Usuário não encontrado.")

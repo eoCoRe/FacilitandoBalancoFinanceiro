@@ -23,7 +23,7 @@ export async function ensureAdmin(
     )
     return null
   }
-  requireValidPassword(senha, "SEED_ADMIN_PASSWORD")
+  requireValidPassword(senha, "SEED_ADMIN_PASSWORD", { email })
   const senhaHash = await hashPassword(senha)
   const nome = env.SEED_ADMIN_NAME?.trim() || "Administrador"
   await prisma.usuario.upsert({

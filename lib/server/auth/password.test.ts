@@ -47,4 +47,32 @@ describe("requireValidPassword", () => {
     expect(() => requireValidPassword(undefined)).toThrow(ValidationError)
     expect(() => requireValidPassword(12345678901)).toThrow(ValidationError)
   })
+
+  it.each([
+    "1234567890", "Password123", "qwertyuiop", "SENHA-12345", "1q2w3e4r5t", "Brasil 12345", "administrador",
+    "aaaaaaaaaaaa", "abababababab", "abcabcabcabc", "1111111111", "abcdefghijkl", "98765432109876", "123456789012345",
+  ])("recusa senha comum ou previsível: %j", (fraca) => {
+    expect(() => requireValidPassword(fraca)).toThrow(/comum ou previsível/)
+  })
+
+  it("aceita frases e senhas que só PARECEM fracas (não bloqueia por engano)", () => {
+    for (const boa of ["cavalo-bateria-grampo", "Minha senha é longa mesmo!", "ana.2026.Balanco#Q3", "tomate7 mesa 91 rio", "uma-senha-forte-123"]) {
+      expect(requireValidPassword(boa)).toBe(boa)
+    }
+  })
+
+  it("com o e-mail de contexto: não pode ser o e-mail nem conter a parte antes do @", () => {
+    const ctx = { email: "joaquim.silva@empresa.com" }
+    expect(() => requireValidPassword("joaquim.silva@empresa.com", "Senha", ctx)).toThrow(/comum ou previsível/)
+    expect(() => requireValidPassword("Joaquim.Silva-2026!", "Senha", ctx)).toThrow(/comum ou previsível/)
+    expect(requireValidPassword("cavalo-bateria-grampo", "Senha", ctx)).toBe("cavalo-bateria-grampo")
+  })
+
+  it("parte local curta (menos de 4 caracteres) não bloqueia: 'ana' apareceria em muita frase legítima", () => {
+    expect(requireValidPassword("banana-mesa-caneta-42", "Senha", { email: "ana@empresa.com" })).toBe("banana-mesa-caneta-42")
+  })
+
+  it("a mensagem indica o campo", () => {
+    expect(() => requireValidPassword("1234567890", "Nova senha")).toThrow(/^Nova senha é muito comum/)
+  })
 })

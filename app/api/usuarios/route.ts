@@ -33,7 +33,7 @@ export async function POST(request: Request) {
     const senhaHash =
       body.senha === undefined || body.senha === null || body.senha === ""
         ? null
-        : await hashPassword(requireValidPassword(body.senha))
+        : await hashPassword(requireValidPassword(body.senha, "Senha", { email }))
 
     if (await prisma.usuario.findUnique({ where: { email } })) {
       throw new ValidationError("Já existe um usuário com este e-mail.")
