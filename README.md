@@ -4,7 +4,7 @@ Plataforma de análise de balanços para analistas de crédito: cadastro do Plan
 tabulação do Balanço/DRE por exercício, demonstrações consolidadas, índices financeiros
 calculados automaticamente, parecer de crédito (Opinião de Venda) e a tela de **Extração via IA**,
 onde o analista confere os valores lidos de um Balanço/DRE em PDF antes de confirmá-los para a
-Tabulação (fluxo *human-in-the-loop*), com histórico de cada extração (o que foi lido, de onde e a que conta foi ligado). Hoje a leitura do PDF é feita por um leitor local, no próprio
+Tabulação (fluxo *human-in-the-loop*), com histórico de cada extração (o que foi lido, de onde e a que conta foi ligado). Balanço, DRE, DFC, Balancete e Índices exportam em CSV (`Exportar CSV`, na escala escolhida na tela) e o Parecer de Crédito imprime ou salva em PDF (`Exportar parecer`). Hoje a leitura do PDF é feita por um leitor local, no próprio
 navegador (`lib/extraction/`), sem LLM e sem enviar o documento a terceiros.
 
 ## Stack
@@ -44,6 +44,8 @@ lib/
 ├── api-client.ts             # fetch das rotas de /api, com erros traduzidos e tratamento de sessão expirada
 ├── api-mapping.ts            # resposta da API (ids, Decimal) -> modelo das telas (puro, testado)
 ├── extraction/               # leitor local de PDF (texto -> linhas -> rótulo/valor -> conta do plano)
+├── export-csv.ts             # exportações em CSV das demonstrações e índices (puro, roda no navegador)
+├── csv.ts                    # montagem do CSV (BOM, separador `;` para o Excel em português, anti-injeção de fórmula)
 ├── redaction.ts              # anonimização de CNPJ/CPF/razão social (pronta para uma futura chamada a LLM)
 ├── db.ts                     # cliente Prisma (só as rotas e scripts usam)
 └── server/                   # só servidor: sessão, senha, e-mail, 2FA, rate-limit, auditoria, LGPD, validação

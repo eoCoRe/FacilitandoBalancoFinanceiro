@@ -3,7 +3,7 @@ import { prisma } from "@/lib/db"
 import { logAudit } from "@/lib/server/audit"
 import { AUDIT_EXPORT_MAX, parseAuditQuery } from "@/lib/server/auditoria"
 import { requirePermission } from "@/lib/server/authz"
-import { toCsv } from "@/lib/server/csv"
+import { toCsv } from "@/lib/csv"
 import { getDefaultEmpresa } from "@/lib/server/empresa"
 import { handleRouteError } from "@/lib/server/http"
 

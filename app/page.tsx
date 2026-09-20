@@ -35,7 +35,7 @@ function App() {
   return (
     <div className="flex min-h-dvh bg-background">
       <MutationErrorBanner />
-      <div className="sticky top-0 h-dvh">
+      <div className="sticky top-0 h-dvh print:hidden">
         <AppSidebar active={screen} onNavigate={setScreen} />
       </div>
 

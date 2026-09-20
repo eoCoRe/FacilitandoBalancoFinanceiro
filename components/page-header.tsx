@@ -15,7 +15,7 @@ export function PageHeader({ eyebrow, title, subtitle, actions }: PageHeaderProp
         <h1 className="mt-1 font-display text-2xl font-bold tracking-tight text-foreground text-balance">{title}</h1>
         <p className="mt-1 text-sm text-muted-foreground text-pretty">{subtitle}</p>
       </div>
-      {actions && <div className="flex items-center gap-2">{actions}</div>}
+      {actions && <div className="flex items-center gap-2 print:hidden">{actions}</div>}
     </header>
   )
 }

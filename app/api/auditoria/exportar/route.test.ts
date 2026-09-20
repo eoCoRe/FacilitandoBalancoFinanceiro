@@ -40,9 +40,9 @@ describe("GET /api/auditoria/exportar", () => {
     expect(response.headers.get("content-disposition")).toMatch(/^attachment; filename="auditoria-\d{4}-\d{2}-\d{2}\.csv"$/)
     expect(csv.startsWith("﻿")).toBe(true)
     const linhas = csv.replace("﻿", "").trim().split("\r\n")
-    expect(linhas[0]).toBe('"Data/hora (UTC)","Usuário","Ação","Detalhe"')
+    expect(linhas[0]).toBe('"Data/hora (UTC)";"Usuário";"Ação";"Detalhe"')
     expect(linhas).toHaveLength(3)
-    expect(linhas[1]).toBe('"2026-09-20T12:00:00.000Z","ana@teste.com","Valor lançado","1.1.1 · 1T2026 = 945"')
+    expect(linhas[1]).toBe('"2026-09-20T12:00:00.000Z";"ana@teste.com";"Valor lançado";"1.1.1 · 1T2026 = 945"')
   })
 
   it("neutraliza injeção de fórmula em textos digitados por usuários (nome de conta etc.)", async () => {
@@ -52,7 +52,7 @@ describe("GET /api/auditoria/exportar", () => {
     const csv = await (await get()).text()
     expect(csv).toContain(`"'=HYPERLINK(`)
     expect(csv).toContain(`"'@cmd"`)
-    expect(csv).not.toMatch(/,"=HYPERLINK/)
+    expect(csv).not.toMatch(/;"=HYPERLINK/)
   })
 
   it("aplica os filtros, mas ignora cursor e limite (exportar é tudo o que bate, não uma página)", async () => {

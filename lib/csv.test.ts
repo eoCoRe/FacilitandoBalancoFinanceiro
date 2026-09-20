@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { csvCell, toCsv } from "./csv"
+import { CSV_DELIMITER, csvCell, toCsv } from "./csv"
 
 describe("csvCell", () => {
   it("envolve em aspas e duplica as aspas internas", () => {
@@ -34,10 +34,19 @@ describe("toCsv", () => {
   it("começa com BOM UTF-8, usa CRLF e termina com quebra de linha", () => {
     const csv = toCsv(["A", "B"], [["1", "2"]])
     expect(csv.startsWith("﻿")).toBe(true)
-    expect(csv).toBe('﻿"A","B"\r\n"1","2"\r\n')
+    expect(csv).toBe('﻿"A";"B"\r\n"1";"2"\r\n')
   })
 
   it("aplica a proteção também nas linhas de dados", () => {
     expect(toCsv(["Detalhe"], [["=cmd|' /C calc'!A0"]])).toContain(`"'=cmd`)
+  })
+
+  it("usa ponto e vírgula (o Excel em português abre com vírgula tudo numa coluna só)", () => {
+    expect(CSV_DELIMITER).toBe(";")
+    expect(toCsv(["a", "b"], [["1,5", "2"]])).toContain('"1,5";"2"') // vírgula decimal continua dentro das aspas
+  })
+
+  it("aceita outro separador quando pedido", () => {
+    expect(toCsv(["a", "b"], [], ",")).toBe('\uFEFF"a","b"\r\n')
   })
 })
