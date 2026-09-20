@@ -1,15 +1,21 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-const { prisma } = vi.hoisted(() => ({
+// As ESCRITAS (extração, linhas lidas, valores) só existem em `tx` — o cliente da transação. O `prisma` global não tem
+// esses métodos: se a rota escrevesse fora da transação, o teste quebraria.
+const { prisma, tx } = vi.hoisted(() => ({
   prisma: {
-    extracao: { create: vi.fn(), findMany: vi.fn() },
+    extracao: { findMany: vi.fn() },
+    valorExtraido: { groupBy: vi.fn() },
     exercicio: { findUnique: vi.fn() },
     conta: { findMany: vi.fn() },
-    $transaction: vi.fn(),
-    valorExtraido: { createMany: vi.fn(), groupBy: vi.fn() },
-    valor: { upsert: vi.fn(), deleteMany: vi.fn() },
     empresa: { findFirst: vi.fn() },
     auditLog: { create: vi.fn() },
+    $transaction: vi.fn(),
+  },
+  tx: {
+    extracao: { create: vi.fn() },
+    valorExtraido: { createMany: vi.fn() },
+    valor: { upsert: vi.fn(), deleteMany: vi.fn() },
   },
 }))
 
@@ -23,7 +29,7 @@ beforeEach(() => {
   prisma.exercicio.findUnique.mockResolvedValue({ id: 1, empresaId: 1, periodo: "1T2026" })
   // todas as contas pedidas existem, salvo o teste dizer o contrário
   prisma.conta.findMany.mockImplementation(async ({ where }: { where: { id: { in: number[] } } }) => where.id.in.map((id) => ({ id })))
-  prisma.$transaction.mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) => fn(prisma))
+  prisma.$transaction.mockImplementation(async (fn: (client: unknown) => Promise<unknown>) => fn(tx))
 })
 
 function buildRequest(body: unknown) {
@@ -34,7 +40,7 @@ describe("POST /api/extracoes", () => {
   it("rejeita quando faltam campos obrigatórios", async () => {
     const response = await POST(buildRequest({ exercicioId: 1 }))
     expect(response.status).toBe(400)
-    expect(prisma.extracao.create).not.toHaveBeenCalled()
+    expect(tx.extracao.create).not.toHaveBeenCalled()
   })
 
   it("rejeita itens vazio ou além do limite de 500", async () => {
@@ -49,7 +55,7 @@ describe("POST /api/extracoes", () => {
       }),
     )
     expect(tooMany.status).toBe(400)
-    expect(prisma.extracao.create).not.toHaveBeenCalled()
+    expect(tx.extracao.create).not.toHaveBeenCalled()
   })
 
   it("rejeita item que não é objeto (ex.: string ou null na lista de itens)", async () => {
@@ -57,7 +63,7 @@ describe("POST /api/extracoes", () => {
     const body = await response.json()
     expect(response.status).toBe(400)
     expect(body.error).toMatch(/itens\[0\] inválido/)
-    expect(prisma.extracao.create).not.toHaveBeenCalled()
+    expect(tx.extracao.create).not.toHaveBeenCalled()
   })
 
   it("rejeita confiança fora de 0–100", async () => {
@@ -69,11 +75,11 @@ describe("POST /api/extracoes", () => {
       }),
     )
     expect(response.status).toBe(400)
-    expect(prisma.extracao.create).not.toHaveBeenCalled()
+    expect(tx.extracao.create).not.toHaveBeenCalled()
   })
 
   it("grava a extração, os itens extraídos e só lança Valor para os itens mapeados", async () => {
-    prisma.extracao.create.mockResolvedValue({ id: 99 })
+    tx.extracao.create.mockResolvedValue({ id: 99 })
 
     const response = await POST(
       buildRequest({
@@ -90,7 +96,7 @@ describe("POST /api/extracoes", () => {
     expect(response.status).toBe(201)
     expect(body).toEqual({ extracaoId: 99, gravados: 1 })
 
-    expect(prisma.valorExtraido.createMany).toHaveBeenCalledWith({
+    expect(tx.valorExtraido.createMany).toHaveBeenCalledWith({
       data: [
         { extracaoId: 99, contaId: 10, valor: 945, paginaOrigem: 1, confianca: 97 },
         { extracaoId: 99, contaId: null, valor: 640, paginaOrigem: 2, confianca: 68 },
@@ -98,8 +104,8 @@ describe("POST /api/extracoes", () => {
     })
 
     // só a linha com contaId mapeado vira Valor
-    expect(prisma.valor.upsert).toHaveBeenCalledTimes(1)
-    expect(prisma.valor.upsert).toHaveBeenCalledWith(
+    expect(tx.valor.upsert).toHaveBeenCalledTimes(1)
+    expect(tx.valor.upsert).toHaveBeenCalledWith(
       expect.objectContaining({ create: { exercicioId: 2, contaId: 10, valor: 945 } }),
     )
 
@@ -117,7 +123,7 @@ describe("POST /api/extracoes", () => {
     prisma.exercicio.findUnique.mockResolvedValue({ id: 2, empresaId: 7, periodo: "1T2026" })
     const deOutra = await POST(buildRequest({ exercicioId: 2, arquivoOrigem: "a.pdf", itens: [{ contaId: 1, valor: 10, confianca: 90 }] }))
     expect(deOutra.status).toBe(400)
-    expect(prisma.extracao.create).not.toHaveBeenCalled()
+    expect(tx.extracao.create).not.toHaveBeenCalled()
   })
 
   it("conta que sumiu do Plano de Contas (apagada em outra aba): 400 claro, nada gravado (não um 500 no meio da gravação)", async () => {
@@ -134,13 +140,13 @@ describe("POST /api/extracoes", () => {
     )
     expect(response.status).toBe(400)
     expect((await response.json()).error).toMatch(/não existe mais/)
-    expect(prisma.extracao.create).not.toHaveBeenCalled()
-    expect(prisma.valor.upsert).not.toHaveBeenCalled()
+    expect(tx.extracao.create).not.toHaveBeenCalled()
+    expect(tx.valor.upsert).not.toHaveBeenCalled()
   })
 
   it("tudo ou nada: extração, linhas lidas e valores entram numa transação; se a gravação falhar no meio, não fica registro de auditoria", async () => {
-    prisma.extracao.create.mockResolvedValue({ id: 8 })
-    prisma.valor.upsert.mockRejectedValueOnce(new Error("banco caiu"))
+    tx.extracao.create.mockResolvedValue({ id: 8 })
+    tx.valor.upsert.mockRejectedValueOnce(new Error("banco caiu"))
     vi.spyOn(console, "error").mockImplementation(() => {})
     // erro inesperado sobe para o tratamento padrão do Next (500)
     await expect(
@@ -151,15 +157,15 @@ describe("POST /api/extracoes", () => {
   })
 
   it("usa 'mock-demo-v1' como modeloLlm padrão quando não informado", async () => {
-    prisma.extracao.create.mockResolvedValue({ id: 1 })
+    tx.extracao.create.mockResolvedValue({ id: 1 })
     await POST(buildRequest({ exercicioId: 1, arquivoOrigem: "a.pdf", itens: [{ contaId: null, valor: 1, confianca: 50 }] }))
-    expect(prisma.extracao.create).toHaveBeenCalledWith(
+    expect(tx.extracao.create).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ modeloLlm: "mock-demo-v1" }) }),
     )
   })
 
   it("respeita o modeloLlm informado explicitamente", async () => {
-    prisma.extracao.create.mockResolvedValue({ id: 1 })
+    tx.extracao.create.mockResolvedValue({ id: 1 })
     await POST(
       buildRequest({
         exercicioId: 1,
@@ -168,7 +174,7 @@ describe("POST /api/extracoes", () => {
         itens: [{ contaId: null, valor: 1, confianca: 50 }],
       }),
     )
-    expect(prisma.extracao.create).toHaveBeenCalledWith(
+    expect(tx.extracao.create).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ modeloLlm: "gpt-vision-teste" }) }),
     )
   })
@@ -176,7 +182,7 @@ describe("POST /api/extracoes", () => {
   it("rejeita corpo com JSON malformado", async () => {
     const response = await POST(new Request("http://localhost/api/extracoes", { method: "POST", body: "{ não é json" }))
     expect(response.status).toBe(400)
-    expect(prisma.extracao.create).not.toHaveBeenCalled()
+    expect(tx.extracao.create).not.toHaveBeenCalled()
   })
 })
 
@@ -184,8 +190,8 @@ describe("POST /api/extracoes: rótulo de origem (rastreabilidade)", () => {
   const corpo = (itens: unknown[]) => ({ exercicioId: 1, arquivoOrigem: "a.pdf", itens })
 
   beforeEach(() => {
-    prisma.extracao.create.mockResolvedValue({ id: 50 })
-    prisma.valorExtraido.createMany.mockResolvedValue({ count: 1 })
+    tx.extracao.create.mockResolvedValue({ id: 50 })
+    tx.valorExtraido.createMany.mockResolvedValue({ count: 1 })
   })
 
   it("grava o texto lido no documento, para linhas mapeadas e não mapeadas", async () => {
@@ -198,7 +204,7 @@ describe("POST /api/extracoes: rótulo de origem (rastreabilidade)", () => {
       ),
     )
     expect(response.status).toBe(201)
-    expect(prisma.valorExtraido.createMany).toHaveBeenCalledWith({
+    expect(tx.valorExtraido.createMany).toHaveBeenCalledWith({
       data: [
         expect.objectContaining({ contaId: 10, rotuloOrigem: "Disponibilidades" }),
         expect.objectContaining({ contaId: null, rotuloOrigem: "Diversos a classificar" }),
@@ -215,8 +221,8 @@ describe("POST /api/extracoes: rótulo de origem (rastreabilidade)", () => {
         ]),
       ),
     )
-    expect(prisma.valor.upsert).toHaveBeenCalledTimes(1)
-    expect(prisma.valor.upsert).toHaveBeenCalledWith(expect.objectContaining({ create: expect.objectContaining({ contaId: 10 }) }))
+    expect(tx.valor.upsert).toHaveBeenCalledTimes(1)
+    expect(tx.valor.upsert).toHaveBeenCalledWith(expect.objectContaining({ create: expect.objectContaining({ contaId: 10 }) }))
   })
 
   it("rótulo é opcional (extrações antigas não tinham)", async () => {
@@ -226,7 +232,7 @@ describe("POST /api/extracoes: rótulo de origem (rastreabilidade)", () => {
   it("recusa rótulo com mais de 200 caracteres", async () => {
     const response = await POST(buildRequest(corpo([{ contaId: 10, valor: 1, confianca: 90, rotulo: "x".repeat(201) }])))
     expect(response.status).toBe(400)
-    expect(prisma.extracao.create).not.toHaveBeenCalled()
+    expect(tx.extracao.create).not.toHaveBeenCalled()
   })
 })
 

@@ -13,7 +13,7 @@ vi.mock("@/lib/server/auth/current-user", () => ({ getCurrentUser: vi.fn() }))
 // testes do próprio audit-seal.ts usam vi.unmock para exercitar o código de verdade.
 vi.mock("@/lib/server/audit/audit-seal", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/server/audit/audit-seal")>()),
-  sealPending: vi.fn().mockResolvedValue(0),
+  sealOwn: vi.fn().mockResolvedValue(undefined),
 }))
 
 beforeEach(() => {

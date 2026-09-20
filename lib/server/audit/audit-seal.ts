@@ -9,26 +9,29 @@ import { getAuthSecret } from "@/lib/server/auth/session"
 //  - apagar (ou inserir) um registro no meio quebra o encadeamento no registro seguinte;
 //  - quem só tem acesso ao banco não consegue refazer os selos, porque a chave (AUDIT_SEAL_SECRET, ou
 //    AUTH_SECRET se ela não existir) não está no banco.
-// Limites assumidos (também em SECURITY.md): apagar os registros mais RECENTES não é detectável sem uma
-// âncora externa; o expurgo por retenção apaga os mais antigos e a verificação recomeça do primeiro que
-// sobrou; registros que já existiam quando o recurso entrou foram selados na primeira execução, então o
-// selo deles atesta o estado daquele momento, não o da criação.
+//
+// QUEM SELA O QUÊ. O servidor só sela os registros que ELE MESMO acabou de gravar (o id vem do `create`, guardado na
+// memória do processo até a selagem dar certo). Nada de "selar tudo que está sem selo": isso deixaria quem tem só o banco
+// zerar os selos, editar os registros e fazer o próprio servidor carimbar o resultado — e nenhum critério guardado no banco
+// (como a data do registro) serve para distinguir, porque quem escreve no banco também escreve nele. Registro sem selo
+// que o servidor não gravou agora é PROBLEMA a apontar; quem decide selar um registro assim é o ADMINISTRADOR, por uma
+// ação explícita que fica na trilha (POST /api/auditoria/selar-pendentes) — a recuperação de uma falha de selagem depois
+// de reiniciar o processo, ou o histórico de uma instalação anterior à selagem (uma vez).
+//
+// Limites assumidos (também em SECURITY.md): apagar os registros mais RECENTES não é detectável sem uma âncora externa; o
+// expurgo por retenção só apaga o começo da cadeia (ver retention.ts) e a verificação recomeça do primeiro que sobrou.
 
 // Trava que serializa a selagem entre requisições simultâneas (dois selando ao mesmo tempo bifurcariam a cadeia).
 const SEAL_LOCK_KEY = 7_310_442
 const SEAL_BATCH = 100
-// Um registro SEM selo só é selado pelo servidor se for recente (sem exceção). Sem esse limite, quem tivesse acesso só
-// ao banco poderia zerar os selos (de um trecho ou da trilha toda), alterar o conteúdo e deixar o próprio servidor
-// "carimbar" o resultado. Passado o prazo, registro sem selo é problema a apontar (a selagem está falhando, ou mexeram
-// no banco), não algo a consertar em silêncio; quem decide selar um registro velho é o ADMINISTRADOR, por uma ação
-// explícita que fica na trilha (POST /api/auditoria/selar-pendentes) — inclusive para selar o histórico que já existia
-// quando este recurso entrou (uma vez, ao atualizar uma instalação antiga).
-export const SEAL_GRACE_MS = 15 * 60 * 1000
 // Cada lote é uma transação interativa (padrão do Prisma: 5 s). O tempo folgado evita que um banco lento ou remoto
 // aborte o lote no meio e o refaça para sempre; a trava só é mantida enquanto o lote roda.
 const SEAL_TX_OPTIONS = { timeout: 30_000, maxWait: 10_000 }
 // Limite de lotes por chamada: quem grava um evento não deve ficar preso selando um histórico enorme.
 const SEAL_MAX_BATCHES = 25
+// Na VERIFICAÇÃO, registro sem selo mais novo que isto ainda pode estar sendo selado (por este ou por outro servidor);
+// mais velho que isto é problema. O tempo só decide o que APONTAR — nunca o que o servidor carimba.
+export const UNSEALED_TOLERANCE_MS = 2 * 60 * 1000
 
 type SealFields = { id: number; empresaId: number; usuario: string; acao: string; detalhe: string; criadoEm: Date }
 
@@ -46,24 +49,27 @@ export function computeSeal(previousSeal: string | null, row: SealFields): strin
   return createHmac("sha256", sealKey()).update(`auditoria:v1:${canonical}`).digest("hex")
 }
 
-// Sela os registros que ainda não têm selo e devolve quantos selou. A cadeia segue a ORDEM EM QUE OS SELOS SÃO GERADOS
-// (selo_seq), não o id: se um registro de id menor só for confirmado depois de outro mais novo já selado (duas
-// requisições simultâneas), ele entra no fim da cadeia no próximo lote — nunca fica sem selo.
-// `ignoreGrace` (só a ação explícita do administrador, que fica registrada na trilha) sela também os registros sem
-// selo mais velhos que o prazo — o caminho para se recuperar de uma falha PASSAGEIRA de selagem sem mexer no banco.
-export async function sealPending({ ignoreGrace = false }: { ignoreGrace?: boolean } = {}): Promise<number> {
+// Sela registros ainda sem selo e devolve quantos selou. A cadeia segue a ORDEM EM QUE OS SELOS SÃO GERADOS (selo_seq),
+// não o id: se um registro de id menor só for confirmado depois de outro mais novo já selado (duas requisições
+// simultâneas), ele entra no fim da cadeia — nunca fica sem selo.
+//  - `ids`: só estes registros (o caminho normal: o que este processo acabou de gravar);
+//  - `all`: TODOS os que estão sem selo (só a ação explícita do administrador, que fica registrada na trilha).
+export async function sealPending({ ids, all = false }: { ids?: readonly number[]; all?: boolean } = {}): Promise<number> {
+  if (!all && (!ids || ids.length === 0)) return 0
   let sealed = 0
   for (let batch = 0; batch < SEAL_MAX_BATCHES; batch++) {
     const count = await prisma.$transaction(async (tx) => {
       // ::text porque o retorno da função é "void", que o driver não sabe ler.
       await tx.$queryRaw`SELECT pg_advisory_xact_lock(${SEAL_LOCK_KEY})::text`
+      // Só posições preenchidas: no Postgres, ORDER BY ... DESC põe NULL primeiro, e um registro com selo mas sem posição
+      // viraria o "último" e bagunçaria a cadeia.
       const last = await tx.auditLog.findFirst({
-        where: { selo: { not: null } },
+        where: { selo: { not: null }, seloSeq: { not: null } },
         orderBy: { seloSeq: "desc" },
         select: { selo: true, seloSeq: true },
       })
       const pending = await tx.auditLog.findMany({
-        where: { selo: null, ...(ignoreGrace ? {} : { criadoEm: { gte: new Date(Date.now() - SEAL_GRACE_MS) } }) },
+        where: { selo: null, ...(all ? {} : { id: { in: [...(ids ?? [])] } }) },
         orderBy: { id: "asc" },
         take: SEAL_BATCH,
       })
@@ -83,6 +89,29 @@ export async function sealPending({ ignoreGrace = false }: { ignoreGrace?: boole
   return sealed
 }
 
+// Registros que ESTE processo gravou e ainda não conseguiu selar. Vive na memória do processo de propósito: é a única
+// prova de "fui eu que gravei" que quem só tem acesso ao banco não consegue forjar.
+const ownUnsealed = new Set<number>()
+const OWN_UNSEALED_MAX = 1000
+
+// Sela o registro que acabou de ser gravado (e, de carona, os que este processo gravou antes e não conseguiu selar).
+// Se falhar, os ids ficam guardados para a próxima tentativa — e a exceção sobe para quem chamou registrar o aviso.
+export async function sealOwn(id: number): Promise<void> {
+  ownUnsealed.add(id)
+  if (ownUnsealed.size > OWN_UNSEALED_MAX) {
+    // Falhando há muito tempo: guarda só os mais recentes (o Map/Set mantém a ordem de inserção).
+    for (const antigo of [...ownUnsealed].slice(0, ownUnsealed.size - OWN_UNSEALED_MAX)) ownUnsealed.delete(antigo)
+  }
+  const ids = [...ownUnsealed]
+  await sealPending({ ids })
+  for (const selado of ids) ownUnsealed.delete(selado)
+}
+
+// Só para testes.
+export function resetOwnUnsealed(): void {
+  ownUnsealed.clear()
+}
+
 export interface IntegrityReport {
   integra: boolean
   // Registros com selo conferidos (do primeiro ao último selado).
@@ -97,10 +126,8 @@ export interface IntegrityReport {
 
 const VERIFY_PAGE = 1000
 
-// Sela o que faltar e confere a cadeia inteira, do primeiro ao último registro selado.
+// Confere a cadeia inteira, do primeiro ao último registro selado. Não sela nada (ver "quem sela o quê" acima).
 export async function verifyAuditIntegrity(): Promise<IntegrityReport> {
-  await sealPending()
-
   let verificados = 0
   let primeiroId: number | null = null
   let ultimoId: number | null = null
@@ -149,18 +176,19 @@ export async function verifyAuditIntegrity(): Promise<IntegrityReport> {
     }
   }
 
-  // Registro sem selo e velho demais para ser selado: a selagem está falhando ou mexeram no banco (ou é o histórico
-  // de uma instalação anterior, que o administrador precisa selar uma vez).
+  // Registro sem selo há tempo demais: a selagem está falhando, ou mexeram no banco, ou é o histórico de uma instalação
+  // anterior (o administrador precisa selar uma vez). Os mais novos podem estar sendo selados agora, então só contam
+  // em `naoSelados`.
   if (!quebra) {
     const velho = await prisma.auditLog.findFirst({
-      where: { selo: null, criadoEm: { lt: new Date(Date.now() - SEAL_GRACE_MS) } },
+      where: { selo: null, criadoEm: { lt: new Date(Date.now() - UNSEALED_TOLERANCE_MS) } },
       orderBy: { id: "asc" },
       select: { id: true },
     })
     if (velho) {
       quebra = {
         id: velho.id,
-        motivo: `Este registro está sem selo há mais de ${SEAL_GRACE_MS / 60_000} minutos: a selagem está falhando ou o registro foi mexido diretamente no banco.`,
+        motivo: `Este registro está sem selo há mais de ${UNSEALED_TOLERANCE_MS / 60_000} minutos: a selagem está falhando ou o registro foi mexido diretamente no banco.`,
       }
     }
   }

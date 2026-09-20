@@ -136,13 +136,13 @@ export function AuditoriaScreen() {
   const podeExportar = can(user.papel, "exportar-auditoria")
   const podeSelar = can(user.papel, "selar-auditoria")
 
-  // Recuperação de uma falha PASSAGEIRA de selagem: o servidor não sela sozinho um registro velho (seria uma brecha para
-  // quem só tem o banco), então o administrador decide. A ação fica registrada na trilha.
+  // Recuperação de uma falha de selagem (ou histórico anterior à selagem): o servidor só sela o que ele mesmo acabou de
+  // gravar (senão seria uma brecha para quem só tem o banco), então o administrador decide. A ação fica registrada na trilha.
   async function selarPendentes() {
     if (selando) return
     if (
       !window.confirm(
-        "O sistema vai selar agora os registros que estão sem selo há mais de 15 minutos, atestando que estão corretos. Só faça isso se tiver certeza de que ninguém mexeu neles no banco. A ação fica registrada na trilha. Continuar?",
+        "O sistema vai selar agora TODOS os registros que estão sem selo, atestando que estão corretos. Só faça isso se tiver certeza de que ninguém mexeu neles no banco. A ação fica registrada na trilha. Continuar?",
       )
     ) {
       return

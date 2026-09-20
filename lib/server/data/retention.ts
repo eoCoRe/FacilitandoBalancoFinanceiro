@@ -7,14 +7,18 @@ export const DEFAULT_AUDIT_LOG_RETENTION_DAYS = 730
 export const DEFAULT_EXTRACAO_RETENTION_DAYS = 180
 
 // Teto de 100 anos: um valor absurdo (ex.: 1e12) faria a data de corte cair fora do intervalo que o JavaScript
-// representa ("Invalid Date") e o expurgo inteiro falharia. Acima disso, volta ao padrão como qualquer valor inválido.
+// representa ("Invalid Date") e o expurgo inteiro falharia. Acima do teto vale o TETO (quem escreve 99999 quer dizer
+// "praticamente nunca apagar"; voltar ao padrão de 2 anos apagaria justamente o que ele quis guardar). Valor inválido
+// (não numérico, zero ou negativo) volta ao padrão.
 export const MAX_RETENTION_DAYS = 36_500
 
 function retentionDaysFromEnv(envVar: string, fallback: number): number {
   const raw = process.env[envVar]
   if (!raw) return fallback
   const parsed = Number(raw)
-  return Number.isFinite(parsed) && parsed > 0 && parsed <= MAX_RETENTION_DAYS ? parsed : fallback
+  if (!Number.isFinite(parsed) && parsed !== Infinity) return fallback // NaN
+  if (!(parsed > 0)) return fallback
+  return Math.min(parsed, MAX_RETENTION_DAYS)
 }
 
 function daysBefore(days: number, now: Date): Date {
@@ -41,8 +45,22 @@ export async function purgeExpiredData(now: Date = new Date()): Promise<PurgeRes
   const auditLogRetentionDays = retentionDaysFromEnv("AUDIT_LOG_RETENTION_DAYS", DEFAULT_AUDIT_LOG_RETENTION_DAYS)
   const extracaoRetentionDays = retentionDaysFromEnv("EXTRACAO_RETENTION_DAYS", DEFAULT_EXTRACAO_RETENTION_DAYS)
 
+  // A trilha é uma CADEIA de selos (ver audit/audit-seal.ts), na ordem em que foram gerados (selo_seq), que pode ser
+  // diferente da ordem das datas (registro confirmado com atraso, ou selado à mão pelo administrador). Apagar por data
+  // poderia arrancar um registro do MEIO da cadeia e a verificação acusaria adulteração em dado honesto. Por isso só se
+  // apaga um PREFIXO da cadeia: o que vence E está antes do primeiro registro que continua guardado. Um registro velho
+  // que ficou depois de um registro ainda dentro do prazo espera o prefixo passar (some no expurgo seguinte).
+  const auditCutoff = daysBefore(auditLogRetentionDays, now)
+  const primeiroMantido = await prisma.auditLog.aggregate({
+    _min: { seloSeq: true },
+    where: { criadoEm: { gte: auditCutoff }, seloSeq: { not: null } },
+  })
+  const limiteDaCadeia = primeiroMantido._min.seloSeq
   const auditLogsApagados = await prisma.auditLog.deleteMany({
-    where: { criadoEm: { lt: daysBefore(auditLogRetentionDays, now) } },
+    where: {
+      criadoEm: { lt: auditCutoff },
+      ...(limiteDaCadeia === null ? {} : { OR: [{ selo: null }, { seloSeq: { lt: limiteDaCadeia } }] }),
+    },
   })
   const extracoesApagadas = await prisma.extracao.deleteMany({
     where: { criadoEm: { lt: daysBefore(extracaoRetentionDays, now) } },

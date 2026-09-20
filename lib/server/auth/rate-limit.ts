@@ -11,20 +11,26 @@ const buckets = new Map<string, Bucket>()
 
 // Teto de chaves rastreadas ao mesmo tempo. Sem ele, quem manda milhões de e-mails/IPs inventados (o cabeçalho de IP
 // pode ser forjado) encheria a memória do processo: um balde só some quando a MESMA chave é consultada de novo depois da
-// janela. Ao chegar no teto, primeiro se descartam os vencidos; se tudo ainda é da janela atual, os 10% mais antigos.
+// janela. Ao chegar no teto: primeiro se descartam os vencidos; se tudo ainda é da janela atual, os 10% mais antigos
+// que NÃO estão bloqueados. Um bloqueio ativo (falhas no máximo) nunca é apagado para abrir espaço — senão inundar de
+// chaves falsas zeraria o limite de quem está sendo atacado. Se não sobrar o que descartar, a chave NOVA deixa de ser
+// rastreada (o rastreio das já existentes, inclusive dos bloqueios, é preservado).
 export const MAX_BUCKETS = 50_000
 
-function makeRoom(now: number): void {
-  if (buckets.size < MAX_BUCKETS) return
+function makeRoom(now: number): boolean {
+  if (buckets.size < MAX_BUCKETS) return true
   for (const [key, bucket] of buckets) {
     if (now - bucket.windowStart >= LOGIN_WINDOW_MS) buckets.delete(key)
   }
-  if (buckets.size < MAX_BUCKETS) return
+  if (buckets.size < MAX_BUCKETS) return true
   let drop = Math.ceil(MAX_BUCKETS / 10)
-  for (const key of buckets.keys()) {
-    if (drop-- <= 0) break
-    buckets.delete(key) // o Map guarda a ordem de inserção: os primeiros são os mais antigos
+  for (const [key, bucket] of buckets) { // o Map guarda a ordem de inserção: os primeiros são os mais antigos
+    if (drop <= 0) break
+    if (bucket.failures >= LOGIN_MAX_FAILURES) continue // bloqueio ativo: fica
+    buckets.delete(key)
+    drop--
   }
+  return buckets.size < MAX_BUCKETS
 }
 
 // Só para testes.
@@ -57,8 +63,7 @@ export function recordFailure(key: string, windowMs = LOGIN_WINDOW_MS, now = Dat
   if (bucket) {
     bucket.failures++
   } else {
-    makeRoom(now)
-    buckets.set(key, { failures: 1, windowStart: now })
+    if (makeRoom(now)) buckets.set(key, { failures: 1, windowStart: now })
   }
 }
 

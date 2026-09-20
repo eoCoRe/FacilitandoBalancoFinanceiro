@@ -1,5 +1,6 @@
 "use client"
 
+import { EXTRACAO_ITENS_MAX, selectEntriesToSend } from "@/lib/extraction/limits"
 import { useRef, useState, type ChangeEvent, type DragEvent } from "react"
 import {
   AlertTriangle,
@@ -49,6 +50,7 @@ export function ExtracaoIaScreen({ onNavigate }: { onNavigate: (id: "tabulacao")
   const [rows, setRows] = useState<ReviewRow[]>([])
   const [exercicioId, setExercicioId] = useState<string>("")
   const [confirmedCount, setConfirmedCount] = useState(0)
+  const [omitidasCount, setOmitidasCount] = useState(0)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [confirming, setConfirming] = useState(false)
   const [historicoKey, setHistoricoKey] = useState(0)
@@ -116,10 +118,12 @@ export function ExtracaoIaScreen({ onNavigate }: { onNavigate: (id: "tabulacao")
   async function handleConfirm() {
     const mapped = rows.filter((r) => r.mappedCode)
     if (mapped.length === 0 || !exercicioId || !fileName || confirming) return
-    // As linhas SEM conta também vão (rastreabilidade, RF06): ficam no histórico, mas não lançam valor. Vão TODAS: se
-    // passar do limite do servidor, ele recusa com um aviso visível — cortar aqui em silêncio perderia valores sem
-    // ninguém saber.
-    const entries = [...mapped, ...rows.filter((r) => !r.mappedCode)].map((r) => ({
+    // As linhas SEM conta também vão (rastreabilidade, RF06): ficam no histórico, mas não lançam valor. Todas as COM conta
+    // sempre vão (são os valores a lançar; se só elas já passarem do limite, o servidor recusa com um aviso visível). As
+    // sem conta entram enquanto couber no limite do servidor, e o que não coube é AVISADO ao terminar — nada é cortado
+    // em silêncio.
+    const { enviar, omitidas } = selectEntriesToSend(mapped, rows.filter((r) => !r.mappedCode))
+    const entries = enviar.map((r) => ({
       code: r.mappedCode,
       value: r.confirmedValue,
       confidence: r.confidence,
@@ -132,6 +136,7 @@ export function ExtracaoIaScreen({ onNavigate }: { onNavigate: (id: "tabulacao")
     // Se o servidor recusou, o motivo aparece no aviso global e a revisão continua aberta.
     if (!saved) return
     setConfirmedCount(mapped.length)
+    setOmitidasCount(omitidas)
     setHistoricoKey((k) => k + 1)
     setStage("done")
   }
@@ -398,6 +403,12 @@ export function ExtracaoIaScreen({ onNavigate }: { onNavigate: (id: "tabulacao")
             <p className="text-xs text-ok/70">
               Os lançamentos aparecem na Tabulação e já entram no cálculo dos índices e da Opinião de Venda.
             </p>
+            {omitidasCount > 0 && (
+              <p role="status" className="text-xs text-ok/70">
+                {omitidasCount} linha(s) sem conta não couberam no histórico (limite de {EXTRACAO_ITENS_MAX} linhas por confirmação); os
+                valores lançados não foram afetados.
+              </p>
+            )}
             <div className="mt-2 flex gap-2">
               <Button variant="outline" size="sm" onClick={reset}>
                 Nova extração

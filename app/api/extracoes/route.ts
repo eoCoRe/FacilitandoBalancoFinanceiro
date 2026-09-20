@@ -12,6 +12,7 @@ import {
   ValidationError,
 } from "@/lib/server/validation"
 import { upsertOrDeleteValor } from "@/lib/server/data/valores"
+import { EXTRACAO_ITENS_MAX as MAX_ITENS } from "@/lib/extraction/limits"
 
 interface ExtracaoItemInput {
   contaId: number | null
@@ -21,7 +22,6 @@ interface ExtracaoItemInput {
   rotulo?: string
 }
 
-const MAX_ITENS = 500
 
 function parseItem(raw: unknown, index: number): ExtracaoItemInput {
   if (typeof raw !== "object" || raw === null) {

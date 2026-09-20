@@ -79,12 +79,28 @@ describe("teto de memória (chaves inventadas não enchem o processo)", () => {
     expect(bucketCount()).toBeLessThan(MAX_BUCKETS / 2)
   })
 
-  it("cheio só de chaves recentes: descarta as mais ANTIGAS, e uma falha nova ainda entra", () => {
+  it("cheio só de chaves recentes: descarta as mais ANTIGAS que não estão bloqueadas, e uma falha nova ainda entra", () => {
     for (let i = 0; i < MAX_BUCKETS; i++) recordFailure(`k-${i}`, 15 * 60 * 1000, 1000)
     recordFailure("nova", 15 * 60 * 1000, 1001)
     expect(bucketCount()).toBeLessThanOrEqual(MAX_BUCKETS)
     expect(isRateLimited("nova", 1, 15 * 60 * 1000, 1001)).toBe(true) // entrou
     expect(isRateLimited("k-0", 1, 15 * 60 * 1000, 1001)).toBe(false) // a mais antiga saiu
     expect(isRateLimited(`k-${MAX_BUCKETS - 1}`, 1, 15 * 60 * 1000, 1001)).toBe(true) // a mais nova ficou
+  })
+
+  it("INUNDAÇÃO de chaves falsas NÃO apaga um bloqueio ativo (o limite de quem está sendo atacado não é zerado)", () => {
+    for (let i = 0; i < 5; i++) recordFailure("login:email:vitima@x.com", 15 * 60 * 1000, 500) // bloqueada, e é a MAIS ANTIGA
+    expect(isRateLimited("login:email:vitima@x.com", 5, 15 * 60 * 1000, 600)).toBe(true)
+    for (let i = 0; i < MAX_BUCKETS * 2; i++) recordFailure(`login:email:lixo-${i}@x.com`, 15 * 60 * 1000, 600)
+    expect(bucketCount()).toBeLessThanOrEqual(MAX_BUCKETS)
+    expect(isRateLimited("login:email:vitima@x.com", 5, 15 * 60 * 1000, 700)).toBe(true) // continua bloqueada
+  })
+
+  it("se TUDO estiver bloqueado e não houver o que descartar, a chave nova simplesmente não é rastreada (nada existente se perde)", () => {
+    for (let i = 0; i < MAX_BUCKETS; i++) for (let f = 0; f < 5; f++) recordFailure(`b-${i}`, 15 * 60 * 1000, 1000)
+    recordFailure("recem-chegada", 15 * 60 * 1000, 1001)
+    expect(bucketCount()).toBe(MAX_BUCKETS)
+    expect(isRateLimited("recem-chegada", 1, 15 * 60 * 1000, 1001)).toBe(false)
+    expect(isRateLimited("b-0", 5, 15 * 60 * 1000, 1001)).toBe(true)
   })
 })

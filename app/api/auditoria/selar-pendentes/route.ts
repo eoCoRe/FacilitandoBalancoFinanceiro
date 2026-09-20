@@ -6,17 +6,17 @@ import { requirePermission } from "@/lib/server/auth/authz"
 import { getDefaultEmpresa } from "@/lib/server/data/empresa"
 import { handleRouteError } from "@/lib/server/http"
 
-// Selo à mão dos registros que ficaram SEM selo por mais tempo que o prazo (ver audit-seal.ts). É o caminho para se
-// recuperar de uma falha passageira de selagem (o servidor sozinho não sela um registro velho: quem tivesse só o
-// banco poderia se aproveitar). Só administrador, e é uma decisão: ele atesta que os registros pendentes estão certos.
-// A ação — com quantos registros e quais ids — entra na própria trilha, já selada.
+// Selo à mão dos registros que estão SEM selo (ver "quem sela o quê" em audit-seal.ts). O servidor só sela o que ele mesmo
+// acabou de gravar; este é o caminho para o resto: uma falha de selagem seguida de reinício, ou o histórico anterior à
+// selagem. Só administrador, e é uma decisão: ele atesta que os registros pendentes estão certos (quem tivesse só o banco
+// não pode fazer isso). A ação — com quantos registros e a faixa de ids — entra na própria trilha, já selada.
 export async function POST() {
   try {
     const admin = await requirePermission("selar-auditoria")
     const empresa = await getDefaultEmpresa()
 
     const pendentes = await prisma.auditLog.findMany({ where: { selo: null }, orderBy: { id: "asc" }, select: { id: true } })
-    const selados = await sealPending({ ignoreGrace: true })
+    const selados = await sealPending({ all: true })
     if (pendentes.length > 0) {
       await logAudit(
         empresa.id,

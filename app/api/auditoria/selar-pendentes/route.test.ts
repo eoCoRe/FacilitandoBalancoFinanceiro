@@ -22,11 +22,11 @@ beforeEach(() => {
 })
 
 describe("POST /api/auditoria/selar-pendentes", () => {
-  it("sela ignorando o prazo e REGISTRA na trilha quem decidiu, quantos e quais ids", async () => {
+  it("sela TODOS os pendentes e REGISTRA na trilha quem decidiu, quantos e a faixa de ids", async () => {
     const response = await POST()
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual({ selados: 3 })
-    expect(seal.sealPending).toHaveBeenCalledWith({ ignoreGrace: true })
+    expect(seal.sealPending).toHaveBeenCalledWith({ all: true })
     expect(prisma.auditLog.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         acao: "Registros pendentes selados manualmente",
