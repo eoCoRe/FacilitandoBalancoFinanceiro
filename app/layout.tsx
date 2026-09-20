@@ -70,7 +70,8 @@ export default function RootLayout({
     >
       <body className="font-sans antialiased">
         {children}
-        {process.env.NODE_ENV === 'production' && <Analytics />}
+        {/* O script existe só na Vercel; fora dela daria 404 a cada página. */}
+        {process.env.VERCEL && <Analytics />}
       </body>
     </html>
   )
