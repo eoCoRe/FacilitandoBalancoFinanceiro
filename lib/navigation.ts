@@ -30,7 +30,7 @@ export const DETALHADO_NAV: NavItem[] = [
   { id: "plano-de-contas", label: "Plano de Contas", icon: ListTree },
   { id: "tabulacao", label: "Tabulação", icon: Table2 },
   { id: "demonstracoes", label: "Balanço · DRE · DFC", icon: FileSpreadsheet },
-  { id: "extracao-ia", label: "Extração via IA", icon: Sparkles, badge: "beta" },
+  { id: "extracao-ia", label: "Extração de PDF", icon: Sparkles, badge: "beta" },
   { id: "auditoria", label: "Auditoria", icon: ScrollText },
 ]
 

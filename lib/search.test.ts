@@ -42,7 +42,7 @@ describe("searchEntries", () => {
   })
 
   it("acha sem depender de acento nem de maiúsculas", () => {
-    expect(labels("EXTRACAO")).toContain("Extração via IA")
+    expect(labels("EXTRACAO")).toContain("Extração de PDF")
     expect(labels("balanco")).toContain("Balanço · DRE · DFC")
     expect(labels("liquidez corrente")).toContain("Liquidez Corrente")
   })

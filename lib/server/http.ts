@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { describeError, logEvent } from "@/lib/server/log"
-import { ForbiddenError, ServiceUnavailableError, TooManyRequestsError, UnauthorizedError, ValidationError } from "@/lib/server/validation"
+import { ForbiddenError, NoCompanyError, ServiceUnavailableError, TooManyRequestsError, UnauthorizedError, ValidationError } from "@/lib/server/validation"
 
 // Converte ValidationError em 400 com a mensagem já pronta para o cliente. JSON
 // malformado no corpo (SyntaxError de `request.json()`) também é entrada inválida do
@@ -11,6 +11,9 @@ import { ForbiddenError, ServiceUnavailableError, TooManyRequestsError, Unauthor
 export function handleRouteError(error: unknown): NextResponse {
   if (error instanceof ValidationError) {
     return NextResponse.json({ error: error.message }, { status: 400 })
+  }
+  if (error instanceof NoCompanyError) {
+    return NextResponse.json({ error: error.message, codigo: "SEM_EMPRESA" }, { status: 409 })
   }
   if (error instanceof UnauthorizedError) {
     return NextResponse.json({ error: error.message }, { status: 401 })

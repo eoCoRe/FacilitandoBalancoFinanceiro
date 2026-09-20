@@ -42,7 +42,7 @@ function parseItem(raw: unknown, index: number): ExtracaoItemInput {
   return { contaId, valor, confianca, paginaOrigem, rotulo }
 }
 
-// Registra o resultado de uma extração (Extração via IA) já revisada e
+// Registra o resultado de uma extração (Extração de PDF) já revisada e
 // confirmada pelo analista: grava a Extracao + um ValorExtraido por item
 // (rastreabilidade, inclusive dos não mapeados), e só os itens com conta
 // mapeada viram Valor de verdade — equivalente a store.confirmExtraction.
