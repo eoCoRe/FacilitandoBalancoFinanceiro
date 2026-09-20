@@ -298,7 +298,7 @@ export function DemonstracoesScreen() {
       />
 
       {/* Sub-abas */}
-      <div className="border-b border-border px-8">
+      <div className="border-b border-border px-4 md:px-8">
         <div className="flex gap-1" role="tablist" aria-label="Demonstração">
           {SUB_TABS.map((t) => (
             <button
@@ -320,7 +320,7 @@ export function DemonstracoesScreen() {
         </div>
       </div>
 
-      <div className="px-8 py-6">
+      <div className="px-4 md:px-8 py-6">
         {tab === "balanco" && <BalancoTable accounts={store.accounts} exercicioIds={exercicioIds} scale={scale} />}
         {tab === "dre" && <DreTable exercicioIds={exercicioIds} computedByPeriod={computedByPeriod} scale={scale} />}
         {tab === "dfc" && <StaticStatementTable lines={store.dfc} exercicioIds={exercicioIds} scale={scale} />}

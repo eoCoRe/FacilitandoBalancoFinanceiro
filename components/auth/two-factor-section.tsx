@@ -314,7 +314,7 @@ export function TwoFactorSection() {
           >
             {chave.segredo}
           </code>
-          <a href={chave.uri} className="text-xs text-primary underline underline-offset-2">
+          <a href={chave.uri} className="text-xs text-primary-text underline underline-offset-2">
             Abrir no aplicativo (no celular)
           </a>
           <input

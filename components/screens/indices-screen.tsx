@@ -190,7 +190,8 @@ export function IndicesScreen() {
               <Download className="size-3.5" />
               Exportar CSV
             </Button>
-            <Button size="sm" className="h-8 gap-1.5">
+            {/* Índices personalizados ainda não existem: em vez de um botão que não faz nada, fica desabilitado e diz o motivo. */}
+            <Button size="sm" className="h-8 gap-1.5" disabled title="Em breve: por enquanto o catálogo de índices é fixo">
               <Plus className="size-3.5" />
               Novo índice
             </Button>
@@ -198,7 +199,7 @@ export function IndicesScreen() {
         }
       />
 
-      <div className="flex flex-col gap-6 px-8 py-6">
+      <div className="flex flex-col gap-6 px-4 md:px-8 py-6">
         {groups.map(({ group, items }) => (
           <section key={group} className="flex flex-col gap-3">
             <h2 className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{group}</h2>

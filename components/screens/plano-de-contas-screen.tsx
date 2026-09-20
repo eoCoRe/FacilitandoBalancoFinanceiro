@@ -307,7 +307,7 @@ export function PlanoDeContasScreen() {
 
       <div className="grid grid-cols-1 gap-0 xl:grid-cols-[1fr_384px]">
         {/* Árvore */}
-        <div className="border-b border-border px-8 py-6 xl:border-b-0 xl:border-r">
+        <div className="border-b border-border px-4 md:px-8 py-6 xl:border-b-0 xl:border-r">
           <div className="rounded-md border border-border bg-card p-2">
             {store.accounts.map((account) => (
               <TreeRow
@@ -374,7 +374,7 @@ export function PlanoDeContasScreen() {
         </div>
 
         {/* Preview */}
-        <aside className="px-8 py-6 xl:px-6">
+        <aside className="px-4 md:px-8 py-6 xl:px-6">
           <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Preview da Tabulação</p>
           <h2 className="mt-1 text-sm font-semibold text-foreground">Estrutura como tabela — {latestPeriod || "sem exercício"}</h2>
           <div className="mt-4 overflow-hidden rounded-md border border-border bg-card">

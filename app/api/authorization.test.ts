@@ -48,6 +48,7 @@ const params = { params: Promise.resolve({ id: "1" }) }
 // RNF02; se alguém afrouxar uma permissão por engano, um caso daqui quebra.
 const ROTAS: { nome: string; min: Papel; chamar: () => Promise<Response> }[] = [
   { nome: "GET /api/empresa", min: "ANALISTA", chamar: () => empresa.GET() },
+  { nome: "POST /api/empresa", min: "ADMINISTRADOR", chamar: () => empresa.POST(json("POST", {})) },
   { nome: "PATCH /api/empresa", min: "COORDENADOR", chamar: () => empresa.PATCH(json("PATCH", { setor: "X" })) },
   { nome: "POST /api/exercicios", min: "ANALISTA", chamar: () => exercicios.POST(json("POST", { periodo: "1T2030" })) },
   { nome: "PATCH /api/exercicios/:id", min: "COORDENADOR", chamar: () => exerciciosId.PATCH(json("PATCH", { auditado: true }), params) },

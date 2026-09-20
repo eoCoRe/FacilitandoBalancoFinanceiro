@@ -87,7 +87,7 @@ export function TabulacaoScreen() {
       />
 
       {/* Sub-abas + seletor de exercício */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-8">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 md:px-8">
         <div className="flex gap-1" role="tablist" aria-label="Demonstração">
           {(
             [
@@ -181,7 +181,7 @@ export function TabulacaoScreen() {
         </div>
       </div>
 
-      <div className="px-8 py-6">
+      <div className="px-4 md:px-8 py-6">
         {tab === "balanco" && (
           <BalancoTab
             rows={rows}
@@ -204,7 +204,7 @@ export function TabulacaoScreen() {
 
       {/* Rodapé: verificação de consistência (RF05) */}
       {tab === "balanco" && (
-        <div className="px-8 pb-4">
+        <div className="px-4 md:px-8 pb-4">
           <div
             className={cn(
               "flex flex-col gap-2 rounded-md border px-4 py-3 sm:flex-row sm:items-center sm:justify-between",
