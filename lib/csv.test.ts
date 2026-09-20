@@ -24,6 +24,20 @@ describe("csvCell", () => {
     },
   )
 
+  it("número negativo NÃO é tratado como fórmula (prejuízo tem que continuar sendo número na planilha)", () => {
+    expect(csvCell("-1050,5")).toBe('"-1050,5"')
+    expect(csvCell("-1050.5")).toBe('"-1050.5"')
+    expect(csvCell(-3)).toBe('"-3"')
+    expect(csvCell("-0,25")).toBe('"-0,25"')
+  })
+
+  it.each(["-", "-1+2", "-1050,5abc", "-1e5", "-1,2,3", "--1", "- 1", "-1050,5\n=1+1", "-A1"])(
+    "mas o que só PARECE número continua neutralizado: %j",
+    (esperto) => {
+      expect(csvCell(esperto).startsWith(`"'`)).toBe(true)
+    },
+  )
+
   it("não mexe em texto normal que só CONTÉM esses símbolos no meio", () => {
     expect(csvCell("1.1.1 · 1T2026 = 945")).toBe('"1.1.1 · 1T2026 = 945"')
     expect(csvCell("ana@teste.com")).toBe('"ana@teste.com"')

@@ -54,6 +54,13 @@ describe("balancoCsv", () => {
     expect(linha.slice(3)).toEqual(["", "10"])
   })
 
+  it("valor NEGATIVO (prejuízo, patrimônio líquido negativo) sai como número, sem apóstrofo de texto", () => {
+    const negativa: Account[] = [{ code: "1", name: "Resultado", values: { "1T2026": -1050.5 } }]
+    const csv = balancoCsv(negativa, ["1T2026"], "milhares")
+    expect(csv).toContain('"-1050,5"')
+    expect(csv).not.toContain(`'-`)
+  })
+
   it("nome de conta digitado por um usuário não vira fórmula na planilha", () => {
     const perigosa: Account[] = [{ code: "1", name: "=HYPERLINK(\"http://evil.example\")", values: { "1T2026": 1 } }]
     expect(balancoCsv(perigosa, ["1T2026"], "milhares")).toContain(`"'=HYPERLINK(`)
