@@ -24,7 +24,8 @@ app/
 │   ├── auth/                 #   login, logout, me, senha, recuperar-senha, redefinir-senha, google/, 2fa/
 │   ├── usuarios/             #   gestão de usuários (só administrador)
 │   ├── seguranca/            #   política de 2FA por perfil (só administrador)
-│   ├── empresa/ exercicios/ plano-de-contas/ valores/ dre/ dfc/ indices/ extracoes/ auditoria/
+│   ├── empresa/ exercicios/ plano-de-contas/ valores/ dre/ dfc/ indices/ extracoes/
+│   ├── auditoria/            #   listagem com filtros/paginação e exportar/ (CSV)
 │   ├── lgpd/                 #   exportacao e eliminacao (só administrador)
 │   ├── health/               #   verificação de saúde (pública)
 │   └── authorization.test.ts #   matriz de permissões: falha se uma rota nova ficar sem proteção
@@ -33,7 +34,7 @@ app/
 proxy.ts                      # checagem otimista de páginas (cookie assinado); a defesa real está em cada rota
 components/
 ├── screens/                  # telas: dashboard, plano-de-contas, tabulacao, demonstracoes, indices,
-│                             #   opiniao-de-venda, extracao-ia, usuarios
+│                             #   opiniao-de-venda, extracao-ia, auditoria, usuarios
 ├── ui/                       # componentes genéricos (botão, tooltip)
 └── *.tsx                     # sidebar, menu da conta, formulários de login/recuperação, 2FA, avisos
 lib/
@@ -79,7 +80,7 @@ e-mail — opcional por usuário, com opção de o administrador exigir por perf
 SMTP (`SMTP_*` no `.env`); sem ele, em desenvolvimento o e-mail aparece no console do
 servidor e em produção esses recursos ficam desligados.
 Três perfis, cumulativos: **analista** (consulta e lança valores/extrações), **coordenador**
-(+ Plano de Contas e cadastro da empresa) e **administrador** (+ usuários e LGPD). A regra
+(+ Plano de Contas, cadastro da empresa e exportar a auditoria) e **administrador** (+ usuários e LGPD). A regra
 está em `lib/permissions.ts` e é imposta no servidor em toda rota de `app/api/`; detalhes e
 limitações em `SECURITY.md`.
 

@@ -17,6 +17,7 @@ import * as dre from "./dre/route"
 import * as dfc from "./dfc/route"
 import * as indices from "./indices/route"
 import * as auditoria from "./auditoria/route"
+import * as auditoriaExportar from "./auditoria/exportar/route"
 import * as extracoes from "./extracoes/route"
 import * as usuarios from "./usuarios/route"
 import * as usuariosId from "./usuarios/[id]/route"
@@ -47,7 +48,8 @@ const ROTAS: { nome: string; min: Papel; chamar: () => Promise<Response> }[] = [
   { nome: "GET /api/dre", min: "ANALISTA", chamar: () => dre.GET() },
   { nome: "GET /api/dfc", min: "ANALISTA", chamar: () => dfc.GET() },
   { nome: "GET /api/indices", min: "ANALISTA", chamar: () => indices.GET(new Request("http://localhost/api/indices")) },
-  { nome: "GET /api/auditoria", min: "ANALISTA", chamar: () => auditoria.GET() },
+  { nome: "GET /api/auditoria", min: "ANALISTA", chamar: () => auditoria.GET(new Request("http://localhost/api/auditoria")) },
+  { nome: "GET /api/auditoria/exportar", min: "COORDENADOR", chamar: () => auditoriaExportar.GET(new Request("http://localhost/api/auditoria/exportar")) },
   { nome: "GET /api/extracoes", min: "ANALISTA", chamar: () => extracoes.GET() },
   { nome: "POST /api/extracoes", min: "ANALISTA", chamar: () => extracoes.POST(json("POST", {})) },
   { nome: "GET /api/usuarios", min: "ADMINISTRADOR", chamar: () => usuarios.GET() },

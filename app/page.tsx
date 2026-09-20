@@ -11,6 +11,7 @@ import { OpiniaoDeVendaScreen } from "@/components/screens/opiniao-de-venda-scre
 import { ExtracaoIaScreen } from "@/components/screens/extracao-ia-screen"
 import { MutationErrorBanner, StoreLoadGate } from "@/components/store-status"
 import type { ScreenId } from "@/lib/navigation"
+import { AuditoriaScreen } from "@/components/screens/auditoria-screen"
 import { UsuariosScreen } from "@/components/screens/usuarios-screen"
 import { can } from "@/lib/permissions"
 import { FinancialDataProvider, useFinancialStore } from "@/lib/store"
@@ -46,6 +47,7 @@ function App() {
         {screen === "indices" && <IndicesScreen />}
         {screen === "opiniao-de-venda" && <OpiniaoDeVendaScreen onNavigate={setScreen} />}
         {screen === "extracao-ia" && <ExtracaoIaScreen onNavigate={setScreen} />}
+        {screen === "auditoria" && <AuditoriaScreen />}
         {screen === "usuarios" && can(user.papel, "gerir-usuarios") && <UsuariosScreen />}
       </main>
     </div>
