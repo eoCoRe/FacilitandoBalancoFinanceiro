@@ -44,6 +44,7 @@ export async function GET() {
         senha: usuario.senhaHash !== null,
         contaGoogleVinculada: usuario.googleSub !== null,
         verificacaoEmDuasEtapas: usuario.doisFatoresAtivo,
+        aplicativoAutenticador: usuario.totpAtivo,
       },
       acoesRegistradas: {
         total: acoes.length,

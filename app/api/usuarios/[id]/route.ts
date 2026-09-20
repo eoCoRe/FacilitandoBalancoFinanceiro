@@ -48,6 +48,9 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       senhaHash?: string
       sessoesValidasDesde?: Date
       doisFatoresAtivo?: boolean
+      totpAtivo?: boolean
+      totpSegredo?: null
+      totpUltimoPasso?: null
     } = {}
     const mudancas: string[] = []
 
@@ -66,11 +69,15 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       mudancas.push(body.ativo ? "reativado" : "desativado")
     }
     if (body.doisFatoresAtivo !== undefined) {
-      // Só desligar: ligar exige o código no e-mail do próprio usuário. O caso de uso é a pessoa
-      // ter perdido o acesso à caixa de e-mail e não conseguir mais entrar.
+      // Só desligar: ligar exige o código do próprio usuário (e-mail ou app). O caso de uso é a pessoa
+      // ter perdido o acesso à caixa de e-mail ou ao celular e não conseguir mais entrar — por isso
+      // desliga TODOS os fatores (e-mail e app autenticador, com os códigos de recuperação).
       if (body.doisFatoresAtivo !== false) throw new ValidationError("O administrador só pode desligar o 2FA de um usuário.")
       data.doisFatoresAtivo = false
-      mudancas.push("2FA desligado")
+      data.totpAtivo = false
+      data.totpSegredo = null
+      data.totpUltimoPasso = null
+      mudancas.push("2FA desligado (e-mail e aplicativo)")
     }
     if (body.senha !== undefined) {
       data.senhaHash = await hashPassword(requireValidPassword(body.senha))
@@ -96,6 +103,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     }
 
     const atualizado = await prisma.usuario.update({ where: { id: usuarioId }, data })
+    if (body.doisFatoresAtivo === false) await prisma.codigoRecuperacao.deleteMany({ where: { usuarioId } })
 
     const empresa = await getDefaultEmpresa()
     await logAudit(empresa.id, "Usuário atualizado", `${alvo.email}: ${mudancas.join(", ")}.`, admin.email)

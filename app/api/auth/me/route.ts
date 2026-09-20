@@ -10,7 +10,7 @@ export async function GET() {
   try {
     const { id, nome, email, papel } = await requireUser()
     const [usuario, politica] = await Promise.all([
-      prisma.usuario.findUnique({ where: { id }, select: { doisFatoresAtivo: true } }),
+      prisma.usuario.findUnique({ where: { id }, select: { doisFatoresAtivo: true, totpAtivo: true } }),
       prisma.politicaSeguranca.findUnique({ where: { papel } }),
     ])
     return NextResponse.json({
@@ -20,6 +20,7 @@ export async function GET() {
         email,
         papel,
         doisFatoresAtivo: usuario?.doisFatoresAtivo ?? false,
+        totpAtivo: usuario?.totpAtivo ?? false,
         doisFatoresObrigatorio: politica?.doisFatoresObrigatorio ?? false,
       },
       emailDisponivel: mailAvailable(),

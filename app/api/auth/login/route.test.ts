@@ -163,7 +163,7 @@ describe("POST /api/auth/login com verificação em 2 etapas", () => {
     const response = await login({ email: "ana@teste.com", senha: SENHA })
 
     expect(response.status).toBe(200)
-    expect(await response.json()).toEqual({ segundoFator: true })
+    expect(await response.json()).toEqual({ segundoFator: true, metodo: "email" })
     expect(cookies(response)).not.toMatch(/cb_session=[^;]/)
     expect(cookies(response)).toMatch(/cb_2fa=[^;]+/)
     expect(cookies(response)).toMatch(/HttpOnly/i)
@@ -182,8 +182,28 @@ describe("POST /api/auth/login com verificação em 2 etapas", () => {
 
     const response = await login({ email: "ana@teste.com", senha: SENHA })
 
-    expect(await response.json()).toEqual({ segundoFator: true })
+    expect(await response.json()).toEqual({ segundoFator: true, metodo: "email" })
     expect(prisma.politicaSeguranca.findUnique).toHaveBeenCalledWith({ where: { papel: "ANALISTA" } })
+  })
+
+  it("com o app autenticador ligado: pede o código do app (metodo 'app'), NÃO envia e-mail e não cria sessão", async () => {
+    prisma.usuario.findUnique.mockResolvedValue(await usuario({ totpAtivo: true, doisFatoresAtivo: true }))
+
+    const response = await login({ email: "ana@teste.com", senha: SENHA })
+
+    expect(await response.json()).toEqual({ segundoFator: true, metodo: "app" })
+    expect(cookies(response)).toMatch(/cb_2fa=[^;]+/)
+    expect(cookies(response)).not.toMatch(/cb_session=[^;]/)
+    expect(mail.sendMail).not.toHaveBeenCalled()
+    expect(verification.createCodeChallenge).not.toHaveBeenCalled()
+  })
+
+  it("o app funciona SEM e-mail configurado (é a vantagem: não depende do SMTP)", async () => {
+    mail.mailAvailable.mockReturnValue(false)
+    prisma.usuario.findUnique.mockResolvedValue(await usuario({ totpAtivo: true }))
+    const response = await login({ email: "ana@teste.com", senha: SENHA })
+    expect(response.status).toBe(200)
+    expect((await response.json()).metodo).toBe("app")
   })
 
   it("senha errada continua barrando ANTES do código: nenhum e-mail é enviado", async () => {

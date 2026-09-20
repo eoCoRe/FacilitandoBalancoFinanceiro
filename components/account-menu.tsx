@@ -88,8 +88,6 @@ export function AccountMenu() {
         </div>
       </div>
 
-      <TwoFactorSection />
-
       {changing && (
         <form onSubmit={handleChangePassword} className="mt-3 flex flex-col gap-2">
           <input
@@ -150,6 +148,7 @@ export function AccountMenu() {
               Baixar meus dados
             </a>
           </div>
+          <TwoFactorSection />
         </details>
       )}
 

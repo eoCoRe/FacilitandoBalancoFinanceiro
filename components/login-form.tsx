@@ -22,6 +22,8 @@ function goHome() {
 
 export function LoginForm({ googleEnabled, recoveryEnabled, initialError }: LoginFormProps) {
   const [step, setStep] = useState<"senha" | "codigo">("senha")
+  // De onde vem o código do 2º passo: e-mail, aplicativo autenticador, ou um código de recuperação.
+  const [metodo, setMetodo] = useState<"email" | "app" | "recuperacao">("email")
   const [email, setEmail] = useState("")
   const [senha, setSenha] = useState("")
   const [codigo, setCodigo] = useState("")
@@ -52,14 +54,15 @@ export function LoginForm({ googleEnabled, recoveryEnabled, initialError }: Logi
     event.preventDefault()
     void run(async () => {
       // 401 aqui é "credenciais inválidas", não sessão expirada: não redireciona.
-      const result = await api<{ segundoFator?: boolean }>("/api/auth/login", {
+      const result = await api<{ segundoFator?: boolean; metodo?: "email" | "app" }>("/api/auth/login", {
         method: "POST",
         body: { email, senha },
         redirectOn401: false,
       })
       if (result.segundoFator) {
         setStep("codigo")
-        setInfo("Enviamos um código de 6 dígitos para o seu e-mail.")
+        setMetodo(result.metodo === "app" ? "app" : "email")
+        setInfo(result.metodo === "app" ? null : "Enviamos um código de 6 dígitos para o seu e-mail.")
       } else {
         goHome()
       }
@@ -83,25 +86,37 @@ export function LoginForm({ googleEnabled, recoveryEnabled, initialError }: Logi
   }
 
   if (step === "codigo") {
+    const porEmail = metodo === "email"
+    const recuperacao = metodo === "recuperacao"
     return (
-      <AuthShell title="Verificação em 2 etapas" subtitle="Digite o código enviado ao seu e-mail.">
+      <AuthShell
+        title="Verificação em 2 etapas"
+        subtitle={
+          porEmail
+            ? "Digite o código enviado ao seu e-mail."
+            : recuperacao
+              ? "Digite um dos seus códigos de recuperação."
+              : "Digite o código do seu aplicativo autenticador."
+        }
+      >
         <form onSubmit={handleCode} className="flex flex-col gap-4">
           {error && <AuthMessage kind="error">{error}</AuthMessage>}
           {info && !error && <AuthMessage kind="success">{info}</AuthMessage>}
 
           <label className="flex flex-col gap-1.5 text-sm font-medium text-foreground">
-            Código de verificação
+            {recuperacao ? "Código de recuperação" : "Código de verificação"}
             <input
-              inputMode="numeric"
+              // Recuperação tem letras e hífen; os outros são 6 dígitos.
+              inputMode={recuperacao ? "text" : "numeric"}
               autoComplete="one-time-code"
-              pattern="[0-9 ]{6,7}"
-              maxLength={7}
+              pattern={recuperacao ? undefined : "[0-9 ]{6,7}"}
+              maxLength={recuperacao ? 12 : 7}
               required
               autoFocus
               ref={codigoRef}
               value={codigo}
               onChange={(e) => setCodigo(e.target.value)}
-              className={cn(authInputClass, "text-center font-mono text-lg tracking-[0.4em]")}
+              className={cn(authInputClass, "text-center font-mono text-lg", recuperacao ? "uppercase tracking-widest" : "tracking-[0.4em]")}
             />
           </label>
 
@@ -111,13 +126,29 @@ export function LoginForm({ googleEnabled, recoveryEnabled, initialError }: Logi
           </Button>
 
           <div className="flex justify-between text-sm">
-            <button type="button" onClick={handleResend} disabled={submitting} className={authLinkClass}>
-              Reenviar código
-            </button>
+            {porEmail ? (
+              <button type="button" onClick={handleResend} disabled={submitting} className={authLinkClass}>
+                Reenviar código
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  setMetodo(recuperacao ? "app" : "recuperacao")
+                  setCodigo("")
+                  setError(null)
+                  setTimeout(() => codigoRef.current?.focus(), 0)
+                }}
+                className={authLinkClass}
+              >
+                {recuperacao ? "Usar o aplicativo" : "Usar código de recuperação"}
+              </button>
+            )}
             <button
               type="button"
               onClick={() => {
                 setStep("senha")
+                setMetodo("email")
                 setSenha("")
                 setCodigo("")
                 setError(null)

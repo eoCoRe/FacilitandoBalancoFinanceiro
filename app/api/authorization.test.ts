@@ -32,6 +32,10 @@ import * as sessoesEncerrar from "./auth/sessoes/encerrar-outras/route"
 import * as tfaAtivar from "./auth/2fa/ativar/route"
 import * as tfaConfirmar from "./auth/2fa/confirmar/route"
 import * as tfaDesativar from "./auth/2fa/desativar/route"
+import * as totpCodigos from "./auth/2fa/totp/codigos/route"
+import * as totpConfirmar from "./auth/2fa/totp/confirmar/route"
+import * as totpDesativar from "./auth/2fa/totp/desativar/route"
+import * as totpIniciar from "./auth/2fa/totp/iniciar/route"
 import * as seguranca from "./seguranca/route"
 
 const json = (method: string, body: unknown = {}) =>
@@ -70,6 +74,10 @@ const ROTAS: { nome: string; min: Papel; chamar: () => Promise<Response> }[] = [
   { nome: "POST /api/auth/2fa/ativar", min: "ANALISTA", chamar: () => tfaAtivar.POST() },
   { nome: "POST /api/auth/2fa/confirmar", min: "ANALISTA", chamar: () => tfaConfirmar.POST(json("POST", {})) },
   { nome: "POST /api/auth/2fa/desativar", min: "ANALISTA", chamar: () => tfaDesativar.POST(json("POST", {})) },
+  { nome: "POST /api/auth/2fa/totp/iniciar", min: "ANALISTA", chamar: () => totpIniciar.POST(json("POST", {})) },
+  { nome: "POST /api/auth/2fa/totp/confirmar", min: "ANALISTA", chamar: () => totpConfirmar.POST(json("POST", {})) },
+  { nome: "POST /api/auth/2fa/totp/desativar", min: "ANALISTA", chamar: () => totpDesativar.POST(json("POST", {})) },
+  { nome: "POST /api/auth/2fa/totp/codigos", min: "ANALISTA", chamar: () => totpCodigos.POST(json("POST", {})) },
   { nome: "GET /api/seguranca", min: "ADMINISTRADOR", chamar: () => seguranca.GET() },
   { nome: "PUT /api/seguranca", min: "ADMINISTRADOR", chamar: () => seguranca.PUT(json("PUT", { papel: "ANALISTA", doisFatoresObrigatorio: true })) },
 ]

@@ -78,10 +78,11 @@ vitest.setup.ts               # testes de rota: usuário logado padrão (adminis
 Login com e-mail/senha e, opcionalmente, com Google (defina `GOOGLE_CLIENT_ID`,
 `GOOGLE_CLIENT_SECRET` e `APP_URL`; só entra quem um administrador já cadastrou).
 Sessão de 8 h renovada enquanto se usa (teto de 24 h) e botão "Encerrar outras sessões" no menu da conta.
-Recuperação de senha ("Esqueci minha senha") e verificação em 2 etapas por código enviado ao
-e-mail — opcional por usuário, com opção de o administrador exigir por perfil. Precisam de
+Recuperação de senha ("Esqueci minha senha") e verificação em 2 etapas — por código enviado ao
+e-mail ou por **aplicativo autenticador** (TOTP, com códigos de recuperação) —, opcional por usuário,
+com opção de o administrador exigir por perfil. Recuperação e código por e-mail precisam de
 SMTP (`SMTP_*` no `.env`); sem ele, em desenvolvimento o e-mail aparece no console do
-servidor e em produção esses recursos ficam desligados.
+servidor e em produção esses recursos ficam desligados. O aplicativo autenticador não depende de e-mail.
 Três perfis, cumulativos: **analista** (consulta e lança valores/extrações), **coordenador**
 (+ Plano de Contas, cadastro da empresa, marcar exercício como auditado e exportar a auditoria) e **administrador** (+ usuários e LGPD). A regra
 está em `lib/permissions.ts` e é imposta no servidor em toda rota de `app/api/`; detalhes e

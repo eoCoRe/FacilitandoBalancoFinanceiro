@@ -132,7 +132,7 @@ describe("sectorIdFromLabel", () => {
 describe("mapSnapshot", () => {
   it("monta o snapshot e o índice de ids a partir das respostas da API", () => {
     const { snapshot, ids } = mapSnapshot({
-      me: { user: { id: 3, nome: "Ana", email: "ana@teste.com", papel: "COORDENADOR", doisFatoresAtivo: false, doisFatoresObrigatorio: false } },
+      me: { user: { id: 3, nome: "Ana", email: "ana@teste.com", papel: "COORDENADOR", doisFatoresAtivo: false, totpAtivo: false, doisFatoresObrigatorio: false } },
       empresa: {
         id: 1,
         cnpj: "12.345.678/0001-90",

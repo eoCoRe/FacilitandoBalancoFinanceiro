@@ -29,6 +29,7 @@ export interface AuditEntry {
 
 export interface AuthUser extends UserIdentity {
   doisFatoresAtivo: boolean
+  totpAtivo: boolean
   doisFatoresObrigatorio: boolean
 }
 

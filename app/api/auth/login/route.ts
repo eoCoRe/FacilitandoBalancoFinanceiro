@@ -7,6 +7,7 @@ import { logEvent } from "@/lib/server/log"
 import { issueSession } from "@/lib/server/login-session"
 import { PASSWORD_MAX_LENGTH, verifyAgainstDummy, verifyPassword } from "@/lib/server/password"
 import { clearFailures, isRateLimited, recordFailure } from "@/lib/server/rate-limit"
+import { TOTP_CHALLENGE } from "@/lib/server/second-factor"
 import {
   isTwoFactorRequired,
   sendLoginCode,
@@ -24,8 +25,9 @@ const IP_MAX_FAILURES = 20
 // resposta não revelar quais e-mails estão cadastrados.
 //
 // Com verificação em 2 etapas (escolha do usuário ou exigência do perfil), acertar a senha NÃO
-// cria a sessão: responde `{ segundoFator: true }`, envia o código por e-mail e guarda só um
-// cookie temporário; a sessão nasce em /api/auth/2fa/verificar.
+// cria a sessão: responde `{ segundoFator: true, metodo }` e guarda só um cookie temporário; a
+// sessão nasce em /api/auth/2fa/verificar. Com o app autenticador ligado (`metodo: "app"`) o código
+// vem do celular; senão (`metodo: "email"`) é enviado por e-mail.
 export async function POST(request: Request) {
   try {
     const body = (await request.json()) as { email?: unknown; senha?: unknown }
@@ -60,13 +62,18 @@ export async function POST(request: Request) {
     clearFailures(emailKey)
 
     if (await isTwoFactorRequired(usuario)) {
+      if (usuario.totpAtivo) {
+        const response = NextResponse.json({ segundoFator: true, metodo: "app" })
+        setTwoFactorCookie(response, await signTwoFactorToken(usuario.id, TOTP_CHALLENGE))
+        return response
+      }
       const challengeKey = TWO_FACTOR_CHALLENGE_KEY(usuario.id)
       if (isRateLimited(challengeKey, TWO_FACTOR_CHALLENGE_MAX)) {
         throw new TooManyRequestsError("Muitos códigos solicitados. Aguarde 15 minutos e tente novamente.")
       }
       recordFailure(challengeKey)
       const challengeId = await sendLoginCode(usuario)
-      const response = NextResponse.json({ segundoFator: true })
+      const response = NextResponse.json({ segundoFator: true, metodo: "email" })
       setTwoFactorCookie(response, await signTwoFactorToken(usuario.id, challengeId))
       return response
     }

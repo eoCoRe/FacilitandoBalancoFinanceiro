@@ -165,22 +165,30 @@ model LgpdErasureLog {
 // primeiro login Google). Usuário nunca é apagado, só desativado, para que a trilha de
 // auditoria continue apontando para alguém que existiu.
 model Usuario {
-  id                  Int                @id @default(autoincrement())
-  email               String             @unique
+  id                  Int                 @id @default(autoincrement())
+  email               String              @unique
   nome                String
-  senhaHash           String?            @map("senha_hash")
-  googleSub           String?            @unique @map("google_sub")
-  papel               Papel              @default(ANALISTA)
-  ativo               Boolean            @default(true)
-  criadoEm            DateTime           @default(now()) @map("criado_em")
-  ultimoLoginEm       DateTime?          @map("ultimo_login_em")
+  senhaHash           String?             @map("senha_hash")
+  googleSub           String?             @unique @map("google_sub")
+  papel               Papel               @default(ANALISTA)
+  ativo               Boolean             @default(true)
+  criadoEm            DateTime            @default(now()) @map("criado_em")
+  ultimoLoginEm       DateTime?           @map("ultimo_login_em")
   // Sessões emitidas antes deste instante são recusadas — atualizado ao trocar/redefinir a
   // senha, para encerrar logins abertos em outros lugares.
-  sessoesValidasDesde DateTime           @default(now()) @map("sessoes_validas_desde")
+  sessoesValidasDesde DateTime            @default(now()) @map("sessoes_validas_desde")
   // Verificação em 2 etapas por código enviado ao e-mail. Além da escolha do usuário, um
   // administrador pode exigi-la por perfil (PoliticaSeguranca).
-  doisFatoresAtivo    Boolean            @default(false) @map("dois_fatores_ativo")
+  doisFatoresAtivo    Boolean             @default(false) @map("dois_fatores_ativo")
+  // Segundo fator por app autenticador (TOTP, RFC 6238). O segredo fica CIFRADO (AES-256-GCM, chave
+  // derivada de AUTH_SECRET); só vale depois de confirmado com um código (totpAtivo). O último passo
+  // de 30 s aceito impede reaproveitar o mesmo código. Coexiste com o 2FA por e-mail: se o TOTP está
+  // ativo, é ele que é pedido no login.
+  totpSegredo         String?             @map("totp_segredo")
+  totpAtivo           Boolean             @default(false) @map("totp_ativo")
+  totpUltimoPasso     Int?                @map("totp_ultimo_passo")
   tokens              TokenVerificacao[]
+  codigosRecuperacao  CodigoRecuperacao[]
 
   @@map("usuario")
 }
@@ -201,6 +209,19 @@ model TokenVerificacao {
 
   @@index([usuarioId, tipo])
   @@map("token_verificacao")
+}
+
+// Códigos de recuperação do TOTP (para quem perdeu o celular): uso único, guardados só como HMAC.
+model CodigoRecuperacao {
+  id         Int       @id @default(autoincrement())
+  usuarioId  Int       @map("usuario_id")
+  usuario    Usuario   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  codigoHash String    @map("codigo_hash")
+  usadoEm    DateTime? @map("usado_em")
+  criadoEm   DateTime  @default(now()) @map("criado_em")
+
+  @@index([usuarioId])
+  @@map("codigo_recuperacao")
 }
 
 // Exigência de 2 etapas por perfil, definida por um administrador. Sem linha = não exige.

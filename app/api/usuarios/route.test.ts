@@ -5,6 +5,7 @@ const { prisma } = vi.hoisted(() => ({
     usuario: { findMany: vi.fn(), findUnique: vi.fn(), create: vi.fn(), update: vi.fn(), count: vi.fn() },
     empresa: { findFirst: vi.fn() },
     auditLog: { create: vi.fn() },
+    codigoRecuperacao: { deleteMany: vi.fn() },
   },
 }))
 vi.mock("@/lib/db", () => ({ prisma }))
@@ -126,11 +127,16 @@ describe("PATCH /api/usuarios/:id", () => {
     expect((await patch(3, { papel: "COORDENADOR" })).status).toBe(200)
   })
 
-  it("admin pode DESLIGAR o 2FA de alguém (perdeu o e-mail), mas não ligar", async () => {
-    prisma.usuario.findUnique.mockResolvedValue(row({ doisFatoresAtivo: true }))
+  it("admin pode DESLIGAR o 2FA de alguém (perdeu o e-mail ou o celular), mas não ligar", async () => {
+    prisma.usuario.findUnique.mockResolvedValue(row({ doisFatoresAtivo: true, totpAtivo: true }))
     prisma.usuario.update.mockResolvedValue(row({ doisFatoresAtivo: false }))
     expect((await patch(2, { doisFatoresAtivo: false })).status).toBe(200)
-    expect(prisma.usuario.update).toHaveBeenCalledWith({ where: { id: 2 }, data: { doisFatoresAtivo: false } })
+    // desliga TODOS os fatores: e-mail e app (a chave some), e os códigos de recuperação são apagados
+    expect(prisma.usuario.update).toHaveBeenCalledWith({
+      where: { id: 2 },
+      data: { doisFatoresAtivo: false, totpAtivo: false, totpSegredo: null, totpUltimoPasso: null },
+    })
+    expect(prisma.codigoRecuperacao.deleteMany).toHaveBeenCalledWith({ where: { usuarioId: 2 } })
     prisma.usuario.update.mockClear()
     expect((await patch(2, { doisFatoresAtivo: true })).status).toBe(400)
     expect(prisma.usuario.update).not.toHaveBeenCalled()

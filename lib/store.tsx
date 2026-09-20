@@ -60,7 +60,7 @@ interface StoreApi extends FinancialSnapshot {
 
 const EMPTY: FinancialSnapshot = {
   // Placeholder de menor privilégio: o app só renderiza depois da carga (StoreLoadGate).
-  user: { id: 0, nome: "", email: "", papel: "ANALISTA", doisFatoresAtivo: false, doisFatoresObrigatorio: false } satisfies AuthUser,
+  user: { id: 0, nome: "", email: "", papel: "ANALISTA", doisFatoresAtivo: false, totpAtivo: false, doisFatoresObrigatorio: false } satisfies AuthUser,
   companyName: "",
   cnpj: "",
   sectorId: "",

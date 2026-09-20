@@ -60,4 +60,19 @@ describe("POST /api/auth/2fa/reenviar", () => {
     expect((await reenviar()).status).toBe(429)
     expect(mail.sendMail).not.toHaveBeenCalled()
   })
+
+  it("quem usa o app autenticador NÃO pode trocar para o código por e-mail: 400, nada enviado, cookie intacto", async () => {
+    prisma.usuario.findUnique.mockResolvedValue({ id: 5, email: "ana@teste.com", ativo: true, totpAtivo: true })
+    const response = await reenviar(await signTwoFactorToken(5, "totp"))
+    expect(response.status).toBe(400)
+    expect(mail.sendMail).not.toHaveBeenCalled()
+    expect(verification.createCodeChallenge).not.toHaveBeenCalled()
+    expect(response.headers.getSetCookie().join(";")).not.toMatch(/cb_2fa=[^;]/)
+  })
+
+  it("mesmo com um cookie de e-mail antigo, se a conta já usa o app, o reenvio é recusado", async () => {
+    prisma.usuario.findUnique.mockResolvedValue({ id: 5, email: "ana@teste.com", ativo: true, totpAtivo: true })
+    expect((await reenviar()).status).toBe(400)
+    expect(mail.sendMail).not.toHaveBeenCalled()
+  })
 })

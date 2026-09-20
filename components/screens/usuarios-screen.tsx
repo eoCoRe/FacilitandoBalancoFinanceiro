@@ -18,6 +18,7 @@ interface Usuario {
   temSenha: boolean
   temGoogle: boolean
   doisFatoresAtivo: boolean
+  totpAtivo: boolean
   ultimoLoginEm: string | null
 }
 
@@ -280,13 +281,13 @@ export function UsuariosScreen() {
                       </td>
                       <td className="px-3 py-3 text-xs text-muted-foreground">
                         <p>{[u.temSenha && "Senha", u.temGoogle && "Google"].filter(Boolean).join(" · ") || "Nenhum ainda"}</p>
-                        {u.doisFatoresAtivo ? (
+                        {u.doisFatoresAtivo || u.totpAtivo ? (
                           <p>
-                            2 etapas ligada ·{" "}
+                            2 etapas ligada ({[u.totpAtivo && "app", u.doisFatoresAtivo && "e-mail"].filter(Boolean).join(" + ")}) ·{" "}
                             <button
                               type="button"
                               className="text-primary hover:underline"
-                              title="Desligar o 2FA desta pessoa (ex.: perdeu o acesso ao e-mail)"
+                              title="Desligar o 2FA desta pessoa, e-mail e app (ex.: perdeu o acesso ao e-mail ou ao celular)"
                               onClick={() => void update(u.id, { doisFatoresAtivo: false })}
                             >
                               desligar

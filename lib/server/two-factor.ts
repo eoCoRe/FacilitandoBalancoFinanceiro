@@ -21,8 +21,12 @@ export const TWO_FACTOR_COOKIE_PATH = "/api/auth"
 export const TWO_FACTOR_CHALLENGE_MAX = 5
 export const TWO_FACTOR_CHALLENGE_KEY = (userId: number) => `2fa:login:${userId}`
 
-export async function isTwoFactorRequired(usuario: { doisFatoresAtivo: boolean; papel: Papel }): Promise<boolean> {
-  if (usuario.doisFatoresAtivo) return true
+export async function isTwoFactorRequired(usuario: {
+  doisFatoresAtivo: boolean
+  totpAtivo: boolean
+  papel: Papel
+}): Promise<boolean> {
+  if (usuario.doisFatoresAtivo || usuario.totpAtivo) return true
   const politica = await prisma.politicaSeguranca.findUnique({ where: { papel: usuario.papel } })
   return politica?.doisFatoresObrigatorio === true
 }
