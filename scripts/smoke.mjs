@@ -120,6 +120,21 @@ try {
     assert.match(api.headers.get("cache-control") ?? "", /no-store/)
   })
 
+  await check("CSRF: mutação vinda de outro site (Sec-Fetch-Site) é recusada com 403 antes de chegar na rota", async () => {
+    const forjada = await fetch(BASE + "/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Sec-Fetch-Site": "cross-site" },
+      body: JSON.stringify({ email: ADMIN_EMAIL, senha: "qualquer" }),
+    })
+    assert.equal(forjada.status, 403)
+    const mesmoSite = await fetch(BASE + "/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Sec-Fetch-Site": "same-site" },
+      body: JSON.stringify({ email: ADMIN_EMAIL, senha: "qualquer" }),
+    })
+    assert.equal(mesmoSite.status, 403)
+  })
+
   await check("login do administrador (cookie httpOnly) e /api/auth/me", async () => {
     const bad = await client().call("POST", "/api/auth/login", { email: ADMIN_EMAIL, senha: "senha-errada-123" })
     assert.equal(bad.status, 401)
