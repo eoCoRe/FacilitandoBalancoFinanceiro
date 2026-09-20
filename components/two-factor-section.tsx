@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, type FormEvent } from "react"
+import { useEffect, useState, type FormEvent } from "react"
 import { ShieldCheck } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { api, errorMessage } from "@/lib/api-client"
@@ -21,6 +21,14 @@ export function TwoFactorSection() {
   const [valor, setValor] = useState("")
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null)
   const [busy, setBusy] = useState(false)
+
+  // Confirmações ("Senha alterada.") somem sozinhas; erros ficam até a próxima ação.
+  useEffect(() => {
+    // Enquanto o campo do código está aberto, o aviso "enviamos um código" continua útil.
+    if (!message?.ok || step === "codigo") return
+    const timer = setTimeout(() => setMessage(null), 5000)
+    return () => clearTimeout(timer)
+  }, [message, step])
 
   // Perfil obrigado: o 2FA vale mesmo com a chave pessoal desligada.
   const obrigatorio = user.doisFatoresObrigatorio

@@ -24,18 +24,20 @@ export async function PUT(request: Request) {
     const exercicioId = requirePositiveInt(rawExercicioId, "exercicioId")
     const valor = rawValor === null || rawValor === undefined ? null : requireBoundedNumber(rawValor, "valor")
 
-    // Só valida existência ao gravar — apagar um lançamento de um par
+    // Só EXIGE que existam ao gravar — apagar um lançamento de um par
     // conta/exercício inexistente é inofensivo (deleteMany não acha nada e não
     // falha). Sem isso, um id inválido só apareceria como violação de FK do
-    // Postgres (500 cru) em vez de um 400 com mensagem clara.
+    // Postgres (500 cru) em vez de um 400 com mensagem clara. A consulta vale
+    // também ao apagar, para a auditoria mostrar código e período, não ids internos.
+    const [conta, exercicio] = await Promise.all([
+      prisma.conta.findUnique({ where: { id: contaId } }),
+      prisma.exercicio.findUnique({ where: { id: exercicioId } }),
+    ])
     if (valor !== null) {
-      const [conta, exercicio] = await Promise.all([
-        prisma.conta.findUnique({ where: { id: contaId } }),
-        prisma.exercicio.findUnique({ where: { id: exercicioId } }),
-      ])
       if (!conta) throw new ValidationError("Conta não encontrada.")
       if (!exercicio) throw new ValidationError("Exercício não encontrado.")
     }
+    const rotulo = `${conta?.codigo ?? `conta ${contaId}`} · ${exercicio?.periodo ?? `exercício ${exercicioId}`}`
 
     const registro = await upsertOrDeleteValor(contaId, exercicioId, valor)
 
@@ -43,7 +45,7 @@ export async function PUT(request: Request) {
     await logAudit(
       empresa.id,
       valor === null ? "Valor removido" : "Valor lançado",
-      valor === null ? `conta ${contaId} · exercício ${exercicioId} limpo.` : `conta ${contaId} · exercício ${exercicioId} = ${valor}`,
+      valor === null ? `${rotulo} limpo.` : `${rotulo} = ${valor}`,
       user.email,
     )
 

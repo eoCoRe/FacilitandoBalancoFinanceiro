@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, type FormEvent } from "react"
+import { useEffect, useState, type FormEvent } from "react"
 import { KeyRound, LogOut } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { TwoFactorSection } from "@/components/two-factor-section"
@@ -21,6 +21,13 @@ export function AccountMenu() {
   const [novaSenha, setNovaSenha] = useState("")
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null)
   const [busy, setBusy] = useState(false)
+
+  // Confirmações ("Senha alterada.") somem sozinhas; erros ficam até a próxima ação.
+  useEffect(() => {
+    if (!message?.ok) return
+    const timer = setTimeout(() => setMessage(null), 5000)
+    return () => clearTimeout(timer)
+  }, [message])
 
   async function handleLogout() {
     try {

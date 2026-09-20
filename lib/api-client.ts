@@ -6,8 +6,12 @@ export class ApiError extends Error {}
 // Sessão expirada, conta desativada ou cookie inválido: limpa o cookie ANTES de ir para /login.
 // Sem isso o proxy (que só confere a assinatura) veria um cookie ainda "válido" e devolveria o
 // usuário para a página inicial, que tomaria 401 de novo, em loop.
+// Várias chamadas em paralelo podem tomar 401 ao mesmo tempo; só a primeira encerra a sessão.
+let ending = false
+
 async function endSession(): Promise<void> {
-  if (typeof window === "undefined") return
+  if (typeof window === "undefined" || ending) return
+  ending = true
   try {
     await fetch("/api/auth/logout", { method: "POST" })
   } catch {
@@ -22,6 +26,9 @@ export async function api<T>(
   path: string,
   init: { method?: string; body?: unknown; keepalive?: boolean; redirectOn401?: boolean } = {},
 ): Promise<T> {
+  // Já está indo para o login: não adianta disparar mais requisições que só vão tomar 401.
+  if (ending) throw new ApiError("Sua sessão expirou. Faça login novamente.")
+
   let response: Response
   try {
     response = await fetch(path, {

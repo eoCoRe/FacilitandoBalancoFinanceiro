@@ -82,12 +82,16 @@ export function UsuariosScreen() {
     }
   }, [])
 
+  // Atualiza na hora e desfaz se o servidor recusar (ex.: sem SMTP não dá para exigir o 2FA).
   async function togglePolicy(papel: Papel, doisFatoresObrigatorio: boolean) {
     setError(null)
+    const set = (valor: boolean) =>
+      setPoliticas((prev) => prev.map((p) => (p.papel === papel ? { ...p, doisFatoresObrigatorio: valor } : p)))
+    set(doisFatoresObrigatorio)
     try {
       await api("/api/seguranca", { method: "PUT", body: { papel, doisFatoresObrigatorio } })
-      setPoliticas((prev) => prev.map((p) => (p.papel === papel ? { ...p, doisFatoresObrigatorio } : p)))
     } catch (err) {
+      set(!doisFatoresObrigatorio)
       setError(errorMessage(err))
     }
   }
@@ -238,13 +242,12 @@ export function UsuariosScreen() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border text-left text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                  <th className="px-4 py-3">Usuário</th>
-                  <th className="px-4 py-3">Perfil</th>
-                  <th className="px-4 py-3">Acesso</th>
-                  <th className="px-4 py-3">2 etapas</th>
-                  <th className="px-4 py-3">Último login</th>
-                  <th className="px-4 py-3">Situação</th>
-                  <th className="px-4 py-3 text-right">Ações</th>
+                  <th className="px-3 py-3">Usuário</th>
+                  <th className="px-3 py-3">Perfil</th>
+                  <th className="px-3 py-3">Acesso</th>
+                  <th className="px-3 py-3">Último login</th>
+                  <th className="px-3 py-3">Situação</th>
+                  <th className="px-3 py-3 text-right">Ações</th>
                 </tr>
               </thead>
               <tbody>
@@ -252,14 +255,14 @@ export function UsuariosScreen() {
                   const isMe = u.id === me.id
                   return (
                     <tr key={u.id} className={cn("border-b border-border last:border-0", !u.ativo && "opacity-60")}>
-                      <td className="px-4 py-3">
+                      <td className="px-3 py-3">
                         <p className="font-medium text-foreground">
                           {u.nome}
                           {isMe && <span className="ml-2 text-xs font-normal text-muted-foreground">(você)</span>}
                         </p>
                         <p className="text-xs text-muted-foreground">{u.email}</p>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-3 py-3">
                         <select
                           value={u.papel}
                           disabled={isMe}
@@ -275,25 +278,26 @@ export function UsuariosScreen() {
                           ))}
                         </select>
                       </td>
-                      <td className="px-4 py-3 text-xs text-muted-foreground">
-                        {[u.temSenha && "Senha", u.temGoogle && "Google"].filter(Boolean).join(" · ") || "Nenhum ainda"}
-                      </td>
-                      <td className="px-4 py-3 text-xs text-muted-foreground">
+                      <td className="px-3 py-3 text-xs text-muted-foreground">
+                        <p>{[u.temSenha && "Senha", u.temGoogle && "Google"].filter(Boolean).join(" · ") || "Nenhum ainda"}</p>
                         {u.doisFatoresAtivo ? (
-                          <button
-                            type="button"
-                            className="text-primary hover:underline"
-                            title="Desligar o 2FA desta pessoa (ex.: perdeu o acesso ao e-mail)"
-                            onClick={() => void update(u.id, { doisFatoresAtivo: false })}
-                          >
-                            Ligada · desligar
-                          </button>
+                          <p>
+                            2 etapas ligada ·{" "}
+                            <button
+                              type="button"
+                              className="text-primary hover:underline"
+                              title="Desligar o 2FA desta pessoa (ex.: perdeu o acesso ao e-mail)"
+                              onClick={() => void update(u.id, { doisFatoresAtivo: false })}
+                            >
+                              desligar
+                            </button>
+                          </p>
                         ) : (
-                          "Desligada"
+                          <p>2 etapas desligada</p>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-xs text-muted-foreground">{formatDate(u.ultimoLoginEm)}</td>
-                      <td className="px-4 py-3">
+                      <td className="px-3 py-3 text-xs text-muted-foreground">{formatDate(u.ultimoLoginEm)}</td>
+                      <td className="px-3 py-3">
                         <span
                           className={cn(
                             "rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide",
@@ -303,11 +307,11 @@ export function UsuariosScreen() {
                           {u.ativo ? "Ativo" : "Desativado"}
                         </span>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-3 py-3">
                         <div className="flex justify-end gap-1.5">
                           <Button type="button" size="sm" variant="outline" onClick={() => handleResetPassword(u)}>
                             <KeyRound />
-                            Redefinir senha
+                            Nova senha
                           </Button>
                           <Button
                             type="button"

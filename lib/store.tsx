@@ -75,6 +75,9 @@ const EXTRACTION_MODEL = "leitor-pdf-local"
 // e uma linha na trilha de auditoria.
 const VALUE_WRITE_DELAY_MS = 600
 
+// A cada quanto tempo (com a aba aberta) a sessão é reconferida no servidor.
+const SESSION_RECHECK_MS = 2 * 60 * 1000
+
 async function fetchSnapshot() {
   const [me, empresa, contas, dre, dfc, auditoria] = await Promise.all([
     api<{ user: AuthUser }>("/api/auth/me"),
@@ -131,6 +134,22 @@ export function FinancialDataProvider({ children }: { children: ReactNode }) {
       cancelled = true
     }
   }, [applySnapshot])
+
+  // Conta desativada, perfil rebaixado ou senha trocada em outro lugar só seriam notados na
+  // próxima gravação (mudar de tela não chama a API). Reconferir a sessão ao voltar para a aba e
+  // de tempos em tempos fecha essa brecha; um 401 aqui já leva ao login (ver lib/api-client.ts).
+  useEffect(() => {
+    if (status !== "ready") return
+    const recheck = () => {
+      if (document.visibilityState === "visible") api("/api/auth/me").catch(() => {})
+    }
+    const timer = setInterval(recheck, SESSION_RECHECK_MS)
+    document.addEventListener("visibilitychange", recheck)
+    return () => {
+      clearInterval(timer)
+      document.removeEventListener("visibilitychange", recheck)
+    }
+  }, [status])
 
   const reload = useCallback(() => {
     setStatus("loading")

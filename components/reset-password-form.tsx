@@ -73,7 +73,13 @@ export function ResetPasswordForm({ token }: { token: string | null }) {
           </Button>
         </form>
       )}
-      <Link href="/login" className="text-center text-sm text-primary hover:underline">
+      {/* Link vencido, usado ou ausente: o caminho natural é pedir outro. */}
+      {(!token || error?.startsWith("Link inválido")) && (
+        <Link href="/esqueci-senha" className="text-center text-sm font-medium text-primary hover:underline">
+          Pedir um novo link
+        </Link>
+      )}
+      <Link href="/login" className="text-center text-sm text-muted-foreground hover:underline">
         Ir para o login
       </Link>
     </AuthShell>
