@@ -11,7 +11,7 @@ export async function logAudit(empresaId: number, acao: string, detalhe: string,
   // novo na próxima gravação, e, se o processo reiniciar antes, um administrador sela à mão — nunca se perde nem se
   // recusa a ação.
   try {
-    await sealOwn(row.id)
+    await sealOwn(row)
   } catch (error) {
     logEvent("warn", "audit.seal.failed", describeError(error))
   }

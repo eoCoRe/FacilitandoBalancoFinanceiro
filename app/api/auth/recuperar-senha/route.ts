@@ -34,8 +34,10 @@ export async function POST(request: Request) {
     if (isRateLimited(emailKey, EMAIL_MAX) || isRateLimited(ipKey, IP_MAX)) {
       throw new TooManyRequestsError("Muitos pedidos de recuperação. Aguarde 15 minutos e tente novamente.")
     }
-    recordFailure(emailKey)
-    recordFailure(ipKey)
+    // Se o limitador não conseguir rastrear (tabela cheia de bloqueios), recusa: falha FECHADO.
+    if (!recordFailure(emailKey) || !recordFailure(ipKey)) {
+      throw new TooManyRequestsError("Muitos pedidos de recuperação. Aguarde 15 minutos e tente novamente.")
+    }
 
     const usuario = await prisma.usuario.findUnique({ where: { email } })
     if (usuario?.ativo) {

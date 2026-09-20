@@ -36,7 +36,7 @@ describe("logAudit + selagem (a ligação entre os dois)", () => {
     prisma.auditLog.create.mockResolvedValue({ id: 123 })
     await logAudit(1, "Valor lançado", "x")
     expect(sealOwn).toHaveBeenCalledTimes(1)
-    expect(sealOwn).toHaveBeenCalledWith(123)
+    expect(sealOwn).toHaveBeenCalledWith(expect.objectContaining({ id: 123 }))
     expect(prisma.auditLog.create.mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(sealOwn).mock.invocationCallOrder[0])
   })
 
@@ -60,7 +60,7 @@ describe("logAuditSafe", () => {
   it("grava com o e-mail (cortado em 254) e também sela", async () => {
     await logAuditSafe("Login realizado", "detalhe", "a".repeat(300))
     expect(prisma.auditLog.create.mock.calls[0][0].data.usuario).toHaveLength(254)
-    expect(sealOwn).toHaveBeenCalledWith(77)
+    expect(sealOwn).toHaveBeenCalledWith(expect.objectContaining({ id: 77 }))
   })
 
   it("engole o erro (não pode mascarar o resultado de quem chamou) MAS deixa uma linha de log com a causa", async () => {

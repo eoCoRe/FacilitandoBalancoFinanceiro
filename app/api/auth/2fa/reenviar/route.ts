@@ -32,7 +32,9 @@ export async function POST(request: NextRequest) {
     if (isRateLimited(challengeKey, TWO_FACTOR_CHALLENGE_MAX)) {
       throw new TooManyRequestsError("Muitos códigos solicitados. Aguarde 15 minutos e tente novamente.")
     }
-    recordFailure(challengeKey)
+    if (!recordFailure(challengeKey)) {
+      throw new TooManyRequestsError("Muitos códigos solicitados. Aguarde 15 minutos e tente novamente.")
+    }
 
     const challengeId = await sendLoginCode(usuario)
     const response = NextResponse.json({ ok: true })

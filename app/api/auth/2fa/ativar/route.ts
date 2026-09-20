@@ -24,7 +24,7 @@ export async function POST() {
 
     const key = `2fa:ativar:${usuario.id}`
     if (isRateLimited(key, 3)) throw new TooManyRequestsError("Muitos códigos solicitados. Aguarde 15 minutos.")
-    recordFailure(key)
+    if (!recordFailure(key)) throw new TooManyRequestsError("Muitos códigos solicitados. Aguarde 15 minutos.")
 
     const { code } = await createCodeChallenge(usuario.id, "ATIVACAO_2FA")
     try {

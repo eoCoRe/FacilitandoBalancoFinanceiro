@@ -42,8 +42,9 @@ const db = vi.hoisted(() => {
     })
   }
   const prisma = {
-    $transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => {
-      if (state.falhaTransacao) throw new Error("banco indisponível")
+    $transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>, options?: { isolationLevel?: string }) => {
+      // A falha simulada é a das transações de SELAGEM; a leitura da verificação (instantâneo) segue funcionando.
+      if (state.falhaTransacao && !options?.isolationLevel) throw new Error("banco indisponível")
       return fn(prisma)
     }),
     $queryRaw: vi.fn(async () => []),
@@ -62,7 +63,7 @@ const db = vi.hoisted(() => {
 })
 vi.mock("@/lib/db", () => ({ prisma: db.prisma }))
 
-import { computeSeal, resetOwnUnsealed, sealOwn, sealPending, verifyAuditIntegrity } from "@/lib/server/audit/audit-seal"
+import { computeSeal, contentFingerprint, resetOwnUnsealed, sealOwn, sealPending, sealPendingDetailed, verifyAuditIntegrity } from "@/lib/server/audit/audit-seal"
 
 // "Agora" fixo, poucos minutos depois dos registros criados por add().
 const AGORA = new Date("2026-09-20T10:05:00Z")
@@ -86,6 +87,8 @@ function add(n = 1, over: Partial<Row> = {}) {
 }
 // A ação explícita do administrador (ou a preparação de um cenário): sela todos os pendentes.
 const selarTodos = () => sealPending({ all: true })
+// O servidor sela o registro que ACABOU de gravar: aqui, o que está na "tabela" naquele momento.
+const sealOwnId = (id: number) => sealOwn(db.state.rows.find((r) => r.id === id)!)
 // Sem a espera de 1,5 s da verificação (nos testes a espera é zero, salvo o que testa a espera de propósito).
 const verificar = (opcoes: { settleMs?: number } = {}) => verifyAuditIntegrity({ settleMs: 0, ...opcoes })
 
@@ -114,7 +117,7 @@ describe("selagem", () => {
     expect(b.seloAnterior).toBe(a.selo)
     expect(c.seloAnterior).toBe(b.selo)
     expect([a.seloSeq, b.seloSeq, c.seloSeq]).toEqual([1, 2, 3])
-    expect(a.selo).toBe(computeSeal(null, a))
+    expect(a.selo).toBe(computeSeal(null, 1, a))
     expect(new Set(db.state.rows.map((r) => r.selo)).size).toBe(3)
   })
 
@@ -183,41 +186,79 @@ describe("selagem", () => {
     expect(novo.seloSeq).toBe(4) // e continuou a numeração de onde ela estava (3 → 4), sem recomeçar em 1
   })
 
-  it("o selo depende de TODOS os campos e do selo anterior", () => {
+  it("o selo depende de TODOS os campos, da POSIÇÃO e do selo anterior", () => {
     const base = { id: 1, empresaId: 1, usuario: "a@b.com", acao: "x", detalhe: "y", criadoEm: new Date("2026-01-01T00:00:00Z") }
-    const selo = computeSeal(null, base)
+    const selo = computeSeal(null, 1, base)
     expect(selo).toMatch(/^[0-9a-f]{64}$/)
     for (const mudanca of [{ id: 2 }, { empresaId: 2 }, { usuario: "c@d.com" }, { acao: "z" }, { detalhe: "w" }, { criadoEm: new Date("2026-01-01T00:00:01Z") }]) {
-      expect(computeSeal(null, { ...base, ...mudanca })).not.toBe(selo)
+      expect(computeSeal(null, 1, { ...base, ...mudanca })).not.toBe(selo)
     }
-    expect(computeSeal("outro-selo", base)).not.toBe(selo)
+    expect(computeSeal("outro-selo", 1, base)).not.toBe(selo)
+    expect(computeSeal(null, 2, base)).not.toBe(selo) // a posição também vale (não dá para trocar selo_seq sem quebrar o selo)
   })
 
   it("com outra chave o selo é outro (quem só tem o banco não refaz a cadeia)", () => {
     const row = { id: 1, empresaId: 1, usuario: "a", acao: "b", detalhe: "c", criadoEm: new Date(0) }
-    const comAuth = computeSeal(null, row)
+    const comAuth = computeSeal(null, 1, row)
     vi.stubEnv("AUDIT_SEAL_SECRET", "z".repeat(40))
-    expect(computeSeal(null, row)).not.toBe(comAuth)
+    expect(computeSeal(null, 1, row)).not.toBe(comAuth)
   })
 
   it("AUDIT_SEAL_SECRET curta é recusada (falha fechado)", () => {
     vi.stubEnv("AUDIT_SEAL_SECRET", "curta")
-    expect(() => computeSeal(null, { id: 1, empresaId: 1, usuario: "a", acao: "b", detalhe: "c", criadoEm: new Date(0) })).toThrow(/AUDIT_SEAL_SECRET/)
+    expect(() => computeSeal(null, 1, { id: 1, empresaId: 1, usuario: "a", acao: "b", detalhe: "c", criadoEm: new Date(0) })).toThrow(/AUDIT_SEAL_SECRET/)
+  })
+
+  it("a trava do banco é tomada DENTRO da transação e ANTES de ler o último selo", async () => {
+    add(2)
+    await selarTodos()
+    const trava = db.prisma.$queryRaw.mock.invocationCallOrder[0]
+    const primeiraLeitura = db.prisma.auditLog.findFirst.mock.invocationCallOrder[0]
+    expect(trava).toBeLessThan(primeiraLeitura)
+    expect(db.prisma.$transaction.mock.invocationCallOrder[0]).toBeLessThan(trava)
+  })
+
+  it("devolve a faixa de ids REALMENTE selados (o que a ação do administrador registra na trilha)", async () => {
+    add(6)
+    db.state.rows[0].selo = "x".repeat(64) // o #1 já estava selado: fora do resultado
+    db.state.rows[0].seloSeq = 1
+    db.state.rows[0].seloAnterior = null
+    Object.assign(db.state.rows[0], { selo: computeSeal(null, 1, db.state.rows[0]) })
+    expect(await sealPendingDetailed({ all: true })).toEqual({ count: 5, primeiroId: 2, ultimoId: 6 })
+    expect(await sealPendingDetailed({ all: true })).toEqual({ count: 0, primeiroId: null, ultimoId: null })
+  })
+
+  it("SUSPENDE a selagem se o último registro da cadeia foi mexido (não se apoia num elo adulterado)", async () => {
+    add(3)
+    await selarTodos()
+    db.state.rows[2].detalhe = "adulterado"
+    add(1)
+    await expect(sealPending({ all: true })).rejects.toThrow(/suspensa/)
+    expect(db.state.rows[3].selo).toBeNull()
+  })
+
+  it("selo_seq perto do limite do Int4: para com erro claro em vez de estourar no meio do lote", async () => {
+    add(1)
+    await selarTodos()
+    db.state.rows[0].seloSeq = 2_000_000_000
+    db.state.rows[0].selo = computeSeal(null, 2_000_000_000, db.state.rows[0])
+    add(1)
+    await expect(sealPending({ all: true })).rejects.toThrow(/limite/)
   })
 })
 
 describe("sealOwn: o servidor só sela o que ELE gravou", () => {
   it("sela o registro que acabou de gravar", async () => {
     add(1)
-    await sealOwn(1)
+    await sealOwnId(1)
     expect(db.state.rows[0].selo).not.toBeNull()
   })
 
   it("NÃO sela registros que ele não gravou, mesmo pendentes e recentes (quem tem só o banco não consegue fazê-lo carimbar)", async () => {
     add(3)
-    await sealOwn(1)
-    await sealOwn(2)
-    await sealOwn(3)
+    await sealOwnId(1)
+    await sealOwnId(2)
+    await sealOwnId(3)
     // quem tem acesso só ao banco zera os selos do fim e edita o conteúdo — e um registro NOVO é gravado em seguida
     for (const linha of db.state.rows.slice(1)) {
       linha.selo = null
@@ -226,7 +267,7 @@ describe("sealOwn: o servidor só sela o que ELE gravou", () => {
       linha.detalhe = "adulterado"
     }
     add(1)
-    await sealOwn(4)
+    await sealOwnId(4)
 
     expect(db.state.rows.map((r) => r.selo !== null)).toEqual([true, false, false, true]) // só o #4 (dele) foi selado
     const r = await verificar()
@@ -236,42 +277,68 @@ describe("sealOwn: o servidor só sela o que ELE gravou", () => {
 
   it("mesmo com a data do registro reescrita (agora ou FUTURA), não carimba o que não gravou — a data não decide nada", async () => {
     add(3)
-    await sealOwn(1)
+    await sealOwnId(1)
     for (const criadoEm of [new Date(), new Date(Date.now() + 365 * 86_400_000)]) {
       const alvo = db.state.rows[1]
       Object.assign(alvo, { selo: null, seloAnterior: null, seloSeq: null, detalhe: "adulterado", criadoEm })
-      await sealOwn(3)
+      await sealOwnId(3)
       expect(alvo.selo).toBeNull()
+    }
+  })
+
+  it("conteúdo ALTERADO entre a gravação e a selagem (falha de selagem + edição no banco): o servidor NÃO sela — não vira testemunha do que não gravou", async () => {
+    add(2)
+    await selarTodos() // uma cadeia existente
+    add(1)
+    db.state.falhaTransacao = true
+    await expect(sealOwnId(3)).rejects.toThrow() // a selagem falhou; o id e a impressão do conteúdo ficaram na memória
+    db.state.rows[2].detalhe = "adulterado durante a falha" // quem tem acesso ao banco edita o registro pendente
+    db.state.falhaTransacao = false
+
+    add(1)
+    await sealOwnId(4) // a próxima gravação tenta selar o #3 de novo — e recusa
+    expect(db.state.rows[2].selo).toBeNull()
+    expect(db.state.rows[3].selo).not.toBeNull() // o #4 (intacto) é selado normalmente
+    const r = await verificar()
+    expect(r.integra).toBe(false)
+    expect(r.quebra).toMatchObject({ id: 3, tipo: "sem-selo" })
+  })
+
+  it("a impressão do conteúdo depende de todos os campos", () => {
+    const base = { id: 1, empresaId: 1, usuario: "a", acao: "b", detalhe: "c", criadoEm: new Date(0) }
+    const f = contentFingerprint(base)
+    for (const mudanca of [{ id: 2 }, { usuario: "z" }, { acao: "z" }, { detalhe: "z" }, { criadoEm: new Date(1) }]) {
+      expect(contentFingerprint({ ...base, ...mudanca })).not.toBe(f)
     }
   })
 
   it("se a selagem falhar, o id fica guardado e a PRÓXIMA gravação sela os dois", async () => {
     add(2)
     db.state.falhaTransacao = true
-    await expect(sealOwn(1)).rejects.toThrow("banco indisponível")
+    await expect(sealOwnId(1)).rejects.toThrow("banco indisponível")
     expect(db.state.rows[0].selo).toBeNull()
 
     db.state.falhaTransacao = false
-    await sealOwn(2)
+    await sealOwnId(2)
     expect(db.state.rows.map((r) => r.selo !== null)).toEqual([true, true])
     expect(await verificar()).toMatchObject({ integra: true, verificados: 2 })
   })
 
   it("depois do sucesso o id sai da lista: a próxima chamada não repete trabalho", async () => {
     add(2)
-    await sealOwn(1)
+    await sealOwnId(1)
     db.prisma.$transaction.mockClear()
-    await sealOwn(2)
+    await sealOwnId(2)
     expect(db.prisma.$transaction).toHaveBeenCalledTimes(1) // um lote só, sem reprocessar o #1
   })
 
   it("guarda no máximo os 1000 ids mais recentes quando a selagem falha por muito tempo (a memória não cresce sem limite)", async () => {
     db.state.falhaTransacao = true
     add(1005)
-    for (let id = 1; id <= 1005; id++) await sealOwn(id).catch(() => {})
+    for (let id = 1; id <= 1005; id++) await sealOwnId(id).catch(() => {})
     db.state.falhaTransacao = false
     db.prisma.$transaction.mockClear()
-    await sealOwn(1005)
+    await sealOwnId(1005)
     // os 5 mais antigos foram descartados da lista; os 1000 restantes são selados (em lotes de 100)
     expect(db.state.rows.filter((r) => r.selo !== null)).toHaveLength(1000)
     expect(db.state.rows.slice(0, 5).every((r) => r.selo === null)).toBe(true)
@@ -293,7 +360,7 @@ describe("verificação", () => {
     add(2)
     await verificar()
     expect(db.state.rows.every((r) => r.selo === null)).toBe(true)
-    expect(db.prisma.$transaction).not.toHaveBeenCalled()
+    expect(db.prisma.auditLog.update).not.toHaveBeenCalled()
   })
 
   it.each([
@@ -341,6 +408,50 @@ describe("verificação", () => {
     await selarTodos()
     db.state.rows[1].seloSeq = null
     expect(await verificar()).toMatchObject({ integra: false, quebra: { id: 3 } })
+  })
+
+  it("ATAQUE: posição (selo_seq) NEGATIVA ou zero num registro editado — a leitura começa do mínimo, então ele é visitado e o selo (que cobre a posição) não confere", async () => {
+    add(4)
+    await selarTodos()
+    db.state.rows[3].detalhe = "adulterado"
+    db.state.rows[3].seloSeq = -1
+    const r = await verificar()
+    expect(r.integra).toBe(false)
+    expect(r.quebra?.id).toBe(4)
+  })
+
+  it("ATAQUE: posição REPETIDA num registro (sem a chave não dá para refazer o selo dele) — é apontado", async () => {
+    add(4)
+    await selarTodos()
+    db.state.rows[3].seloSeq = db.state.rows[2].seloSeq // #4 com a mesma posição do #3
+    const r = await verificar()
+    expect(r.integra).toBe(false)
+    expect(r.quebra?.id).toBe(4)
+  })
+
+  it("posições repetidas que a leitura por 'maior que' pularia entre páginas: a contagem de selados não bate e a verificação aponta", async () => {
+    add(1001)
+    await selarTodos()
+    // o #1001 ganha a posição do #1000, e o #1000 a do #1001 (ordem trocada): na 1ª página entram os dois primeiros 1000 por posição
+    // — para simular o "pulo", duplica a posição do último da página no seguinte
+    db.state.rows[1000].seloSeq = db.state.rows[999].seloSeq
+    const r = await verificar()
+    expect(r.integra).toBe(false)
+  })
+
+  it("trocar a posição de um registro selado (sem a chave não dá para refazer o selo) é apontado", async () => {
+    add(3)
+    await selarTodos()
+    db.state.rows[1].seloSeq = 50
+    expect((await verificar()).integra).toBe(false)
+  })
+
+  it("a cadeia é lida de um INSTANTÂNEO (REPEATABLE READ): um expurgo no meio das páginas não vira falso alarme", async () => {
+    add(3)
+    await selarTodos()
+    await verificar()
+    const chamada = (db.prisma.$transaction.mock.calls as unknown[][]).at(-1)!
+    expect((chamada[1] as { isolationLevel: string }).isolationLevel).toBe("RepeatableRead")
   })
 
   it("trocar o selo por um inventado não passa (sem a chave não dá para calcular)", async () => {
@@ -420,7 +531,7 @@ describe("registros sem selo (a DATA do registro não decide nada: só a espera 
     }
     db.state.rows[1].detalhe = "adulterado"
     add(1)
-    await sealOwn(6) // o servidor grava e sela SÓ o dele
+    await sealOwnId(6) // o servidor grava e sela SÓ o dele
     const r = await verificar()
     expect(r.integra).toBe(false)
     expect(r.quebra?.id).toBe(1)
@@ -431,7 +542,7 @@ describe("registros sem selo (a DATA do registro não decide nada: só a espera 
     await selarTodos()
     add(1)
     db.state.falhaTransacao = true
-    await expect(sealOwn(4)).rejects.toThrow()
+    await expect(sealOwnId(4)).rejects.toThrow()
     db.state.falhaTransacao = false // o banco voltou, ninguém mais gravou nada no meio tempo
 
     expect(await verificar()).toMatchObject({ integra: true, verificados: 4, naoSelados: 0 })
@@ -442,7 +553,7 @@ describe("registros sem selo (a DATA do registro não decide nada: só a espera 
     await selarTodos()
     add(1)
     db.state.falhaTransacao = true
-    await expect(sealOwn(3)).rejects.toThrow()
+    await expect(sealOwnId(3)).rejects.toThrow()
     const r = await verificar()
     expect(r.integra).toBe(false)
     expect(r.quebra?.id).toBe(3)
@@ -471,7 +582,7 @@ describe("registros sem selo (a DATA do registro não decide nada: só a espera 
 
   it("trilha nova: cada registro é selado pelo servidor que o gravou, e a verificação passa sem nenhuma ação", async () => {
     add(3)
-    for (const id of [1, 2, 3]) await sealOwn(id)
+    for (const id of [1, 2, 3]) await sealOwnId(id)
     expect(await verificar()).toMatchObject({ integra: true, verificados: 3 })
   })
 })
