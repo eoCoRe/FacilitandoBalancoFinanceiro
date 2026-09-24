@@ -64,7 +64,7 @@ export function OpiniaoDeVendaScreen({ onNavigate }: { onNavigate: (id: ScreenId
   const defaultLimit = useMemo(
     () =>
       current
-        ? suggestedCreditLimit(store.accounts, computeDre(store.dreByExercicio[current] ?? {}), store.dfc, current)
+        ? (suggestedCreditLimit(store.accounts, computeDre(store.dreByExercicio[current] ?? {}), store.dfc, current) ?? 0)
         : 0,
     [store.accounts, store.dreByExercicio, store.dfc, current],
   )
@@ -233,7 +233,7 @@ export function OpiniaoDeVendaScreen({ onNavigate }: { onNavigate: (id: ScreenId
               <div className="flex items-center justify-between">
                 <span className="text-xs text-muted-foreground">Limite sugerido</span>
                 <span className="font-mono text-sm tabular-nums text-foreground">
-                  R$ {formatBRL(opinion.suggestedLimit, 2)}
+                  {opinion.limitAvailable ? `R$ ${formatBRL(opinion.suggestedLimit, 2)}` : "Dados insuficientes"}
                 </span>
               </div>
               <div className="flex items-center justify-between">
@@ -248,7 +248,7 @@ export function OpiniaoDeVendaScreen({ onNavigate }: { onNavigate: (id: ScreenId
                         : "text-risk",
                   )}
                 >
-                  {requestedValue > 0 ? `${formatBRL(opinion.coverage, 2)}×` : "—"}
+                  {requestedValue > 0 && opinion.limitAvailable ? `${formatBRL(opinion.coverage, 2)}×` : "—"}
                 </span>
               </div>
             </div>
@@ -288,8 +288,9 @@ export function OpiniaoDeVendaScreen({ onNavigate }: { onNavigate: (id: ScreenId
                 Ver como é calculado
               </summary>
               <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
-                Menor valor entre: 25% do faturamento anualizado, 1,2× o Patrimônio Líquido e 3× a geração de caixa
-                operacional anual.
+                Menor valor entre: 25% da receita líquida anualizada, 1,2× o Patrimônio Líquido e 3× a geração de caixa
+                operacional anualizada (DFC). Exercício trimestral (1T2025) é anualizado ×4, semestral (1S2025) ×2 e os demais
+                são tratados como anuais. Critério sem dado no período fica de fora do cálculo.
               </p>
             </details>
           </section>

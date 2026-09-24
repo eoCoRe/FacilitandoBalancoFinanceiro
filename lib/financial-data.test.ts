@@ -17,6 +17,7 @@ import {
   indicatorStatus,
   INDICATORS,
   makeIndicatorContext,
+  periodsPerYear,
   suggestedCreditLimit,
   sumAccount,
   type Account,
@@ -301,9 +302,29 @@ const healthyDfc: StaticLine[] = [{ name: "Fluxo de Caixa Operacional", values: 
 describe("suggestedCreditLimit", () => {
   it("usa o menor entre 25% da receita anualizada, 120% do PL e 3x o caixa operacional anualizado", () => {
     const dre = computeDre(healthyDreByExercicio().P1) // receita-liquida: 1000, lucro-liquido: 400
-    // candidatos (em milhares): 1000*4*0.25=1000 | 2000*1.2=2400 | 300*4*3=3600 -> menor é 1000
+    // "P1" é um exercício anual: candidatos (em milhares) 1000*0.25=250 | 2000*1.2=2400 | 300*3=900 -> menor é 250
     const limit = suggestedCreditLimit(healthyAccounts(), dre, healthyDfc, "P1")
-    expect(limit).toBe(1_000_000) // milhares -> reais
+    expect(limit).toBe(250_000) // milhares -> reais
+  })
+
+  it("exercício trimestral ('1T2025') anualiza receita e caixa por 4; semestral ('1S2025'), por 2", () => {
+    const trimestre: Account[] = [{ code: "2.3", name: "Patrimônio Líquido", values: { "1T2025": 2000, "1S2025": 2000 } }]
+    const dfc: StaticLine[] = [{ name: "Fluxo de Caixa Operacional", values: { "1T2025": 300, "1S2025": 300 }, kind: "subtotal" }]
+    const dre = computeDre({ "receita-bruta": 1000, deducoes: 0 }) // receita líquida 1000
+    expect(suggestedCreditLimit(trimestre, dre, dfc, "1T2025")).toBe(1_000_000) // 1000*4*0.25
+    expect(suggestedCreditLimit(trimestre, dre, dfc, "1S2025")).toBe(500_000) // 1000*2*0.25
+    expect(periodsPerYear("2025")).toBe(1)
+  })
+
+  it("dado que falta fica de fora (não vira zero): sem DFC, vale o menor entre receita e PL", () => {
+    const dre = computeDre(healthyDreByExercicio().P1)
+    expect(suggestedCreditLimit(healthyAccounts(), dre, [], "P1")).toBe(250_000)
+    // Só com o PL
+    expect(suggestedCreditLimit(healthyAccounts(), computeDre({}), [], "P1")).toBe(2_400_000)
+  })
+
+  it("sem nenhum dado: undefined (dados insuficientes), não R$ 0", () => {
+    expect(suggestedCreditLimit([], computeDre({}), [], "P1")).toBeUndefined()
   })
 
   it("nunca retorna negativo mesmo com PL ou caixa operacional negativos", () => {
@@ -317,7 +338,7 @@ describe("suggestedCreditLimit", () => {
 
 describe("buildSalesOpinion", () => {
   it("dá parecer favorável para uma empresa saudável, com valor solicitado dentro do limite", () => {
-    const opinion = buildSalesOpinion(healthyAccounts(), healthyDreByExercicio(), healthyDfc, "P1", "P0", 500_000)
+    const opinion = buildSalesOpinion(healthyAccounts(), healthyDreByExercicio(), healthyDfc, "P1", "P0", 200_000)
 
     expect(opinion.rating).toBe("favoravel")
     expect(opinion.score).toBeGreaterThanOrEqual(70)
@@ -325,7 +346,7 @@ describe("buildSalesOpinion", () => {
     expect(opinion.criteria.find((c) => c.label === "Margem Líquida")?.status).toBe("ok")
     // lucro cresceu de 300 (P0) para 400 (P1) -> tendência positiva
     expect(opinion.criteria.find((c) => c.label === "Tendência do Lucro")?.status).toBe("ok")
-    expect(opinion.coverage).toBeGreaterThanOrEqual(1) // 500k cabe no limite sugerido
+    expect(opinion.coverage).toBeGreaterThanOrEqual(1) // 200k cabe no limite sugerido (250k)
     expect(opinion.narrative.some((n) => n.includes("cabe dentro"))).toBe(true)
   })
 
@@ -419,5 +440,25 @@ describe("buildSalesOpinion", () => {
     const tendencia = opinion.criteria.find((c) => c.label === "Tendência do Lucro")!
     expect(tendencia.value.startsWith("-")).toBe(true)
     expect(opinion.narrative.some((n) => n.includes("recuou"))).toBe(true)
+  })
+})
+
+describe("buildSalesOpinion — dados insuficientes (RN04)", () => {
+  it("critério sem dado aparece como 'Dados insuficientes' e o parecer não pode ser favorável", () => {
+    // Só o balanço, sem DRE: margem, tendência e parte do limite ficam sem dado.
+    const opinion = buildSalesOpinion(healthyAccounts(), {}, [], "P1", "P0", 100_000)
+    const margem = opinion.criteria.find((c) => c.label === "Margem Líquida")!
+    expect(margem).toMatchObject({ value: "Dados insuficientes", insuficiente: true, status: "atencao" })
+    expect(opinion.criteria.find((c) => c.label === "Liquidez Corrente")?.insuficiente).toBe(false)
+    expect(opinion.rating).not.toBe("favoravel")
+    expect(opinion.headline).toMatch(/Faltam dados/)
+    expect(opinion.narrative.some((n) => n.includes("Não há dados suficientes"))).toBe(true)
+  })
+
+  it("sem dado nenhum para o limite: limitAvailable falso, e a narrativa diz por quê (não 'limite R$ 0')", () => {
+    const opinion = buildSalesOpinion([], {}, [], "P1", undefined, 100_000)
+    expect(opinion.limitAvailable).toBe(false)
+    expect(opinion.suggestedLimit).toBe(0)
+    expect(opinion.narrative.some((n) => n.includes("para calcular um limite sugerido"))).toBe(true)
   })
 })
