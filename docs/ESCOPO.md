@@ -5,6 +5,18 @@ Objetivo: fechar o escopo. Cada item da seção 3 precisa de um **SIM** ou **NÃ
 
 Estimativas em **sessões** de trabalho como a de 24/09 (2 a 3 horas cada, eu programando e você conferindo na tela).
 
+## Decisões tomadas (24/09/2026)
+
+| # | Decisão |
+|---|---|
+| D1 | **Feito**: "Session 2" mesclada na branch `tcc/ajustes` (commit `2760c29`) |
+| D2 | **SIM**: IA via **API de LLM externa** (não modelo próprio treinado), como no RFC §5.4/§5.5 |
+| D3 | **SIM**: várias empresas |
+| D4 | **Publicar, mas não na Vercel** (plataforma a definir) |
+| D6 | Em explicação |
+| D7, D8, D9 | **SIM** |
+| D10 | Pesquisar a melhor fonte de mercado (recomendação: CVM Dados Abertos, DFP; ver conversa) |
+
 ---
 
 ## 1. O que já temos (pronto e testado)
