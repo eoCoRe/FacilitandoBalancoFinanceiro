@@ -2,7 +2,8 @@
 // valor → casamento com o Plano de Contas. `extractRowsFromLines` é pura (testável com
 // linhas sintéticas); `extractFromPdfFile` é a única parte que depende do pdfjs/navegador.
 
-import { collectLeaves, DRE_LINES, DRE_MEMO_LINE, type Account } from "../financial-data"
+import { DRE_TOTAL_PREFIX } from "../completar-demonstracoes"
+import { collectLeaves, DRE_LINES, DRE_MEMO_LINE, flattenAccounts, type Account } from "../financial-data"
 import { matchAccountName, normalize } from "./account-matcher"
 import { extractLabelAndValue, newestColumnFromRight } from "./number-parsing"
 import { extractPdfText } from "./pdf-text"
@@ -16,6 +17,9 @@ export interface ExtractedRow {
   value: number
   confidence: number
   page: number
+  // Linha de TOTAL reconhecida (Receita Líquida, Ativo Circulante...): não lança valor (o sistema calcula os totais), mas
+  // serve para conferir e completar a digitação manual (lib/completar-demonstracoes.ts). Código do total, ou ausente.
+  totalCode?: string
 }
 
 // Score mínimo para atribuir automaticamente uma conta em vez de deixar "não
@@ -28,7 +32,9 @@ const MATCH_THRESHOLD = 70
 // são reconhecidas, para "RECEITA LIQUIDA" não ser confundida com "Receita Bruta", mas nunca recebem valor — o
 // sistema as recalcula.
 export const DRE_CODE_PREFIX = "dre:"
-const DRE_CALC_PREFIX = "dre=calculada:"
+const DRE_CALC_PREFIX = DRE_TOTAL_PREFIX
+// Grupos do Balanço (Ativo Circulante, Patrimônio Líquido...) entram no casamento do mesmo jeito: reconhecidos como total.
+const GRUPO_PREFIX = "grupo:"
 
 export function dreLineIdFromCode(code: string): string | null {
   return code.startsWith(DRE_CODE_PREFIX) ? code.slice(DRE_CODE_PREFIX.length) : null
@@ -117,11 +123,16 @@ function normalizeCreditSign(rows: ExtractedRow[]): ExtractedRow[] {
   const passivo = rows.filter((r) => r.code?.startsWith("2") && r.value !== 0)
   const negativos = passivo.filter((r) => r.value < 0).length
   if (negativos * 2 <= passivo.length) return rows
-  return rows.map((r) => (r.code?.startsWith("2") && r.value !== 0 ? { ...r, value: -r.value } : r))
+  // Os TOTAIS do passivo (Passivo Circulante, PL...) seguem a mesma convenção do documento: invertem junto.
+  const doPassivo = (r: ExtractedRow) => (r.code ?? r.totalCode)?.startsWith("2") && r.value !== 0
+  return rows.map((r) => (doPassivo(r) ? { ...r, value: -r.value } : r))
 }
 
 export function extractRowsFromLines(lines: { text: string; page: number }[], accounts: Account[]): ExtractedRow[] {
-  const leaves = [...collectLeaves(accounts), ...dreExtractionTargets(), ...DRE_DECOYS]
+  const grupos: Account[] = flattenAccounts(accounts)
+    .filter(({ account }) => account.children?.length)
+    .map(({ account }) => ({ code: `${GRUPO_PREFIX}${account.code}`, name: account.name, values: {} }))
+  const leaves = [...collectLeaves(accounts), ...dreExtractionTargets(), ...DRE_DECOYS, ...grupos]
   const rows: ExtractedRow[] = []
   const rowIndexByCode = new Map<string, number>()
   // Coluna do exercício mais recente, descoberta pelo cabeçalho da página (cada página repete o seu; uma página
@@ -151,13 +162,16 @@ export function extractRowsFromLines(lines: { text: string; page: number }[], ac
     const candidates = section ? leaves.filter((l) => (sectionByCode.get(l.code) ?? section) === section) : leaves
     const { account, score } = matchAccountName(parsed.label, candidates)
     const matched = account && score >= MATCH_THRESHOLD ? account.code : null
-    const code = matched?.startsWith(DRE_CALC_PREFIX) ? null : matched
+    const ehTotal = !!matched && (matched.startsWith(DRE_CALC_PREFIX) || matched.startsWith(GRUPO_PREFIX))
+    const code = ehTotal ? null : matched
+    const totalCode = ehTotal ? (matched!.startsWith(GRUPO_PREFIX) ? matched!.slice(GRUPO_PREFIX.length) : matched!) : undefined
     const confidence = Math.max(40, Math.min(99, score))
     const row: ExtractedRow = {
       id: `pdf-${line.page}-${i}`,
       code,
       suggestedName: account && code ? account.name : parsed.label,
       sourceLabel: parsed.label,
+      ...(totalCode ? { totalCode } : {}),
       value: parsed.value,
       confidence,
       page: line.page,

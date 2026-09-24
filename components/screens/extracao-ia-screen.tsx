@@ -193,6 +193,9 @@ export function ExtracaoIaScreen({ onNavigate }: { onNavigate: (id: "tabulacao")
     for (const r of rows) {
       const v = parseInput(r.confirmedText)
       if (r.mappedCode && v !== null) valores[r.mappedCode] = v
+      // Totais lidos (Receita Líquida, Ativo Circulante...) vão junto, para a digitação conferir e completar: o primeiro
+      // que aparece no documento vale (um total repetido numa nota explicativa não o substitui).
+      else if (!r.mappedCode && r.totalCode && !(r.totalCode in valores)) valores[r.totalCode] = r.value
     }
     abrirDigitacao(valores, unit)
   }

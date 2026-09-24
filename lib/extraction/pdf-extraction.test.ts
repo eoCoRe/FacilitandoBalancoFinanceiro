@@ -221,3 +221,57 @@ describe("unidade do documento", () => {
     expect(toSystemUnit(12663.07, "milhares")).toBe(12663.07)
   })
 })
+
+describe("linhas de TOTAL (para conferir e completar a digitação)", () => {
+  const contas: Account[] = [
+    {
+      code: "1",
+      name: "Ativo",
+      children: [{ code: "1.1", name: "Ativo Circulante", children: [{ code: "1.1.1", name: "Disponibilidades", values: {} }] }],
+    },
+    {
+      code: "2",
+      name: "Passivo",
+      children: [
+        { code: "2.1", name: "Passivo Circulante", children: [{ code: "2.1.1", name: "Fornecedores", values: {} }] },
+        { code: "2.2", name: "Exigível a Longo Prazo", children: [{ code: "2.2.1", name: "Empréstimos LP", values: {} }] },
+      ],
+    },
+  ]
+
+  it("total do grupo e da DRE vira totalCode, sem conta (não lança valor)", () => {
+    const rows = extractRowsFromLines(
+      [
+        { text: "ATIVO CIRCULANTE 55.279.398,02", page: 1 },
+        { text: "RECEITA LIQUIDA 93.701.004,60", page: 2 },
+      ],
+      contas,
+    )
+    expect(rows.map((r) => [r.code, r.totalCode])).toEqual([
+      [null, "1.1"],
+      [null, "dre=calculada:receita-liquida"],
+    ])
+  })
+
+  it("'NÃO circulante' não vira o circulante; Passivo Não Circulante é o Exigível a Longo Prazo", () => {
+    const rows = extractRowsFromLines(
+      [
+        { text: "ATIVO NAO CIRCULANTE 877.857,65", page: 1 },
+        { text: "PASSIVO NAO CIRCULANTE 2.163.101,57", page: 1 },
+      ],
+      contas,
+    )
+    expect(rows.map((r) => r.totalCode)).toEqual([undefined, "2.2"])
+  })
+
+  it("balancete com passivo em sinal de crédito: os totais do passivo também ficam positivos", () => {
+    const rows = extractRowsFromLines(
+      [
+        { text: "FORNECEDORES 1.000,00-", page: 1 },
+        { text: "PASSIVO CIRCULANTE 1.000,00-", page: 1 },
+      ],
+      contas,
+    )
+    expect(rows.map((r) => r.value)).toEqual([1000, 1000])
+  })
+})

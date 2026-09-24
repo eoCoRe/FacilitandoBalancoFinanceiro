@@ -28,6 +28,8 @@ const SYNONYMS: Record<string, string> = {
   "obrigacoes fiscais": "obrigacoes tributarias",
   "reserva de lucro": "reservas de lucros",
   "reserva de lucros": "reservas de lucros",
+  "passivo nao circulante": "exigivel a longo prazo",
+  "passivo exigivel a longo prazo": "exigivel a longo prazo",
   // DRE (linhas de entrada e as calculadas, que só servem para não serem confundidas com as de entrada).
   "receita operacional bruta": "receita bruta",
   "receita bruta de vendas": "receita bruta",
@@ -70,6 +72,8 @@ export function normalize(s: string): string {
     .trim()
 }
 
+const temNao = (s: string) => /(^| )nao( |$)/.test(s)
+
 function canonicalize(s: string): string {
   const normalized = normalize(s)
   return SYNONYMS[normalized] ?? normalized
@@ -110,6 +114,8 @@ export function matchAccountName(label: string, leaves: Account[]): AccountMatch
   let best: AccountMatch = { account: null, score: 0 }
   for (const account of leaves) {
     const candidate = canonicalize(account.name)
+    // Um "não" de diferença inverte o sentido: "Ativo NÃO Circulante" não é "Ativo Circulante", por mais parecido que seja.
+    if (temNao(candidate) !== temNao(target)) continue
     const shorter = Math.min(candidate.length, target.length)
     const longer = Math.max(candidate.length, target.length)
     // Só conta "um contém o outro" como casamento forte se os dois têm tamanho parecido —
