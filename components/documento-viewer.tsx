@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Loader2, ZoomIn, ZoomOut } from "lucide-react"
 import { carregarPdfjs } from "@/lib/extraction/pdf-text"
 
@@ -13,8 +13,8 @@ function isPdf(file: File) {
 }
 
 // Mostra o documento enviado (PDF ou imagem) para o analista digitar os valores olhando para ele. Tudo no navegador:
-// o arquivo não vai a lugar nenhum. PDF é desenhado página a página num canvas (a CSP não permite PDF num iframe);
-// imagem é um <img> com URL local (blob:).
+// o arquivo não vai a lugar nenhum. PDF e imagem são desenhados num canvas (a CSP não permite PDF num iframe, e assim
+// nenhum dado do arquivo vira atributo da página).
 export function DocumentoViewer({ file }: { file: File }) {
   const [zoom, setZoom] = useState(1)
   const pdf = isPdf(file)
@@ -52,11 +52,41 @@ export function DocumentoViewer({ file }: { file: File }) {
   )
 }
 
+// A imagem é decodificada (createImageBitmap) e desenhada num canvas, como as páginas do PDF: nenhum dado do arquivo
+// vira atributo da página (um <img src="blob:..."> foi apontado pelo CodeQL como texto do usuário reinterpretado).
 function Imagem({ file, zoom }: { file: File; zoom: number }) {
-  const url = useMemo(() => URL.createObjectURL(file), [file])
-  useEffect(() => () => URL.revokeObjectURL(url), [url])
-  // eslint-disable-next-line @next/next/no-img-element -- arquivo local (blob:), não passa pelo otimizador de imagens
-  return <img src={url} alt={`Documento ${file.name}`} style={{ width: `${zoom * 100}%` }} className="mx-auto max-w-none bg-white shadow-sm" />
+  const canvas = useRef<HTMLCanvasElement>(null)
+  const [erro, setErro] = useState(false)
+
+  useEffect(() => {
+    let cancelado = false
+    createImageBitmap(file)
+      .then((bitmap) => {
+        const alvo = canvas.current
+        if (cancelado || !alvo) return bitmap.close()
+        alvo.width = bitmap.width
+        alvo.height = bitmap.height
+        alvo.getContext("2d")?.drawImage(bitmap, 0, 0)
+        bitmap.close()
+      })
+      .catch(() => !cancelado && setErro(true))
+    return () => {
+      cancelado = true
+    }
+  }, [file])
+
+  if (erro) {
+    return <p className="py-10 text-center text-sm text-muted-foreground">Não foi possível mostrar esta imagem aqui. Abra-a em outro programa e digite os valores ao lado.</p>
+  }
+  return (
+    <canvas
+      ref={canvas}
+      role="img"
+      aria-label={`Documento ${file.name}`}
+      style={{ width: `${zoom * 100}%` }}
+      className="mx-auto block max-w-none bg-white shadow-sm"
+    />
+  )
 }
 
 function PaginasPdf({ file, zoom }: { file: File; zoom: number }) {
