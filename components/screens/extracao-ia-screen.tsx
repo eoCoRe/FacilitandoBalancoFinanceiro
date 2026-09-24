@@ -27,6 +27,7 @@ import {
   type ExtractedRow,
 } from "@/lib/extraction/pdf-extraction"
 import { GLOSSARY } from "@/lib/glossary"
+import { parseBrNumber } from "@/lib/number-input"
 import { validateUploadFile } from "@/lib/upload-validation"
 import { cn } from "@/lib/utils"
 
@@ -43,12 +44,7 @@ function formatInput(value: number): string {
   return value.toLocaleString("pt-BR", { maximumFractionDigits: 2 })
 }
 
-// "12.663.067,45" → 12663067.45. Ponto é milhar e vírgula é decimal; um texto que não é número dá null.
-function parseInput(text: string): number | null {
-  const cleaned = text.trim().replace(/s/g, "").replace(/./g, "").replace(",", ".")
-  if (!/^-?d+(.d+)?$/.test(cleaned)) return null
-  return Number(cleaned)
-}
+const parseInput = parseBrNumber
 
 const DRE_OPTIONS = dreExtractionTargets()
 

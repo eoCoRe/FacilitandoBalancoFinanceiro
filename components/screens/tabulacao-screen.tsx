@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/page-header"
 import { ScaleToggle } from "@/components/scale-toggle"
 import { ExercicioAuditado } from "@/components/exercicio-auditado"
 import { can } from "@/lib/permissions"
+import { formatBrNumberForInput, parseBrNumber } from "@/lib/number-input"
 import { useFinancialStore } from "@/lib/store"
 import {
   DRE_LINES,
@@ -23,15 +24,44 @@ import { cn } from "@/lib/utils"
 
 type SubTab = "balanco" | "dre"
 
-function parseInputNumber(raw: string): number | undefined {
-  const trimmed = raw.trim()
-  if (trimmed === "") return undefined
-  const num = Number.parseFloat(trimmed.replace(/\./g, "").replace(",", "."))
-  return Number.isNaN(num) ? undefined : num
-}
-
-function displayValue(value: number | undefined): string {
-  return value === undefined ? "" : String(value)
+// Campo de valor com RASCUNHO local: enquanto a pessoa digita, o texto fica como ela escreveu (senão a vírgula de
+// "1234," sumiria na hora, porque o número 1234 volta como "1234"). Só texto que é número (ou vazio, que apaga o valor)
+// chega ao store; texto inválido fica destacado e não altera nada. Ao sair do campo, volta a mostrar o valor gravado.
+function ValueInput({
+  value,
+  onValue,
+  className,
+  label,
+}: {
+  value: number | undefined
+  onValue: (value: number | undefined) => void
+  className: string
+  label: string
+}) {
+  const [draft, setDraft] = useState<string | null>(null)
+  const text = draft ?? formatBrNumberForInput(value)
+  const invalid = text.trim() !== "" && parseBrNumber(text) === null
+  return (
+    <input
+      type="text"
+      inputMode="decimal"
+      value={text}
+      onChange={(e) => {
+        setDraft(e.target.value)
+        if (e.target.value.trim() === "") {
+          onValue(undefined)
+          return
+        }
+        const parsed = parseBrNumber(e.target.value)
+        if (parsed !== null) onValue(parsed)
+      }}
+      onBlur={() => setDraft(null)}
+      placeholder="—"
+      aria-invalid={invalid}
+      aria-label={label}
+      className={cn(className, invalid && "border-risk hover:border-risk focus:border-risk")}
+    />
+  )
 }
 
 export function TabulacaoScreen() {
@@ -187,7 +217,7 @@ export function TabulacaoScreen() {
             rows={rows}
             exercicioId={activeExercicioId}
             scale={scale}
-            onChange={(code, raw) => store.updateAccountValue(code, activeExercicioId, parseInputNumber(raw))}
+            onChange={(code, value) => store.updateAccountValue(code, activeExercicioId, value)}
           />
         )}
 
@@ -197,7 +227,7 @@ export function TabulacaoScreen() {
             computed={dreComputed}
             exercicioId={activeExercicioId}
             scale={scale}
-            onChange={(lineId, raw) => store.updateDreValue(activeExercicioId, lineId, parseInputNumber(raw))}
+            onChange={(lineId, value) => store.updateDreValue(activeExercicioId, lineId, value)}
           />
         )}
       </div>
@@ -282,7 +312,7 @@ function BalancoTab({
   rows: { account: Account; depth: number }[]
   exercicioId: string
   scale: Scale
-  onChange: (code: string, raw: string) => void
+  onChange: (code: string, value: number | undefined) => void
 }) {
   return (
     <div className="overflow-hidden rounded-md border border-border bg-card">
@@ -316,14 +346,11 @@ function BalancoTab({
                   </td>
                   <td className="px-2 py-1">
                     {isLeaf ? (
-                      <input
-                        type="text"
-                        inputMode="decimal"
-                        value={displayValue(account.values?.[exercicioId])}
-                        onChange={(e) => onChange(account.code, e.target.value)}
-                        placeholder="—"
+                      <ValueInput
+                        value={account.values?.[exercicioId]}
+                        onValue={(value) => onChange(account.code, value)}
                         className="w-full rounded-[calc(var(--radius)*0.6)] border border-transparent bg-transparent px-2 py-1 text-right font-mono text-sm tabular-nums text-foreground outline-none transition-colors hover:border-border focus:border-ring focus:bg-background"
-                        aria-label={`${account.name} — ${exercicioId}`}
+                        label={`${account.name} — ${exercicioId}`}
                       />
                     ) : (
                       <div
@@ -357,7 +384,7 @@ function DreTab({
   computed: Record<string, number | undefined>
   exercicioId: string
   scale: Scale
-  onChange: (lineId: string, raw: string) => void
+  onChange: (lineId: string, value: number | undefined) => void
 }) {
   return (
     <div className="flex flex-col gap-4">
@@ -398,14 +425,11 @@ function DreTab({
                         {formatScaled(computed[line.id], scale)}
                       </div>
                     ) : (
-                      <input
-                        type="text"
-                        inputMode="decimal"
-                        value={displayValue(inputs[line.id])}
-                        onChange={(e) => onChange(line.id, e.target.value)}
-                        placeholder="—"
+                      <ValueInput
+                        value={inputs[line.id]}
+                        onValue={(value) => onChange(line.id, value)}
                         className="w-full rounded-[calc(var(--radius)*0.6)] border border-transparent bg-transparent px-2 py-1 text-right font-mono text-sm tabular-nums text-foreground outline-none transition-colors hover:border-border focus:border-ring focus:bg-background"
-                        aria-label={`${line.name} — ${exercicioId}`}
+                        label={`${line.name} — ${exercicioId}`}
                       />
                     )}
                   </td>
@@ -422,14 +446,11 @@ function DreTab({
           <p className="text-sm text-foreground">{DRE_MEMO_LINE.name}</p>
           <p className="text-xs text-muted-foreground">Não integra o resultado — usado apenas no cálculo do PMPC.</p>
         </div>
-        <input
-          type="text"
-          inputMode="decimal"
-          value={displayValue(inputs[DRE_MEMO_LINE.id])}
-          onChange={(e) => onChange(DRE_MEMO_LINE.id, e.target.value)}
-          placeholder="—"
+        <ValueInput
+          value={inputs[DRE_MEMO_LINE.id]}
+          onValue={(value) => onChange(DRE_MEMO_LINE.id, value)}
           className="w-32 rounded-md border border-border bg-background px-2 py-1 text-right font-mono text-sm tabular-nums text-foreground outline-none focus:border-ring"
-          aria-label={DRE_MEMO_LINE.name}
+          label={DRE_MEMO_LINE.name}
         />
       </div>
     </div>
