@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import type { Account } from "../financial-data"
-import { extractRowsFromLines } from "./pdf-extraction"
+import { detectUnit, extractRowsFromLines, toSystemUnit } from "./pdf-extraction"
 
 function buildAccounts(): Account[] {
   return [
@@ -139,7 +139,53 @@ describe("extractRowsFromLines", () => {
     expect(rows[0].value).toBe(3100)
   })
 
+  it("DRE: linhas de entrada viram 'dre:<linha>', com deduções NEGATIVAS e receita positiva, seja qual for o sinal do PDF", () => {
+    const rows = extractRowsFromLines(
+      [
+        { text: "RECEITA OPERACIONAL BRUTA 100,00 100.777.333,14", page: 4 },
+        { text: "DEDUÇÕES DE VENDAS 7.076.328,54", page: 4 },
+        { text: "CUSTO SERV./ PRODUTOS VENDIDOS 80,92 81.550.439,82-", page: 4 },
+        { text: "DESPESAS OPERACIONAIS (8.809.186,14)", page: 4 },
+        { text: "RESULTADO FINANCEIRO 2.212.844,07-", page: 4 },
+      ],
+      buildAccounts(),
+    )
+    expect(rows.map((r) => [r.code, r.value])).toEqual([
+      ["dre:receita-bruta", 100777333.14],
+      ["dre:deducoes", -7076328.54],
+      ["dre:cmv", -81550439.82],
+      ["dre:despesas-operacionais", -8809186.14],
+      ["dre:resultado-financeiro", -2212844.07],
+    ])
+  })
+
+  it("DRE: linhas CALCULADAS (Receita Líquida, Lucro Bruto...) são reconhecidas mas não recebem conta nem roubam a de entrada", () => {
+    const rows = extractRowsFromLines(
+      [
+        { text: "RECEITA LIQUIDA 93.701.004,60", page: 1 },
+        { text: "LUCRO BRUTO 12.150.564,78", page: 1 },
+        { text: "LUCRO (PREJUÍZO) LIQUIDO DO EXERCICIO 1.581.390,75", page: 1 },
+      ],
+      buildAccounts(),
+    )
+    expect(rows.map((r) => r.code)).toEqual([null, null, null])
+  })
+
   it("retorna lista vazia quando nenhuma linha tem conteúdo extraível", () => {
     expect(extractRowsFromLines([{ text: "BALANÇO PATRIMONIAL", page: 1 }], buildAccounts())).toEqual([])
+  })
+})
+
+describe("unidade do documento", () => {
+  it("detecta documento em milhares pelo cabeçalho; sem aviso, assume reais", () => {
+    expect(detectUnit([{ text: "Balanço Patrimonial (Em milhares de reais)" }])).toBe("milhares")
+    expect(detectUnit([{ text: "Valores em R$ mil" }])).toBe("milhares")
+    expect(detectUnit([{ text: "BALANÇO PATRIMONIAL EXERCICIO 2025" }, { text: "Milhares de coisas" }])).toBe("reais")
+  })
+
+  it("converte para milhares com 2 casas (o que o banco guarda); em milhares, não mexe", () => {
+    expect(toSystemUnit(12663067.45, "reais")).toBe(12663.07)
+    expect(toSystemUnit(-81550439.82, "reais")).toBe(-81550.44)
+    expect(toSystemUnit(12663.07, "milhares")).toBe(12663.07)
   })
 })

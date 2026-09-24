@@ -2,7 +2,7 @@
 // valor → casamento com o Plano de Contas. `extractRowsFromLines` é pura (testável com
 // linhas sintéticas); `extractFromPdfFile` é a única parte que depende do pdfjs/navegador.
 
-import { collectLeaves, type Account } from "../financial-data"
+import { collectLeaves, DRE_LINES, DRE_MEMO_LINE, type Account } from "../financial-data"
 import { matchAccountName } from "./account-matcher"
 import { extractLabelAndValue, newestColumnFromRight } from "./number-parsing"
 import { extractPdfText } from "./pdf-text"
@@ -22,6 +22,58 @@ export interface ExtractedRow {
 // reconhecida" (mapeamento manual) — melhor falhar visível do que arriscar um palpite.
 const MATCH_THRESHOLD = 70
 
+// ---- DRE ----
+// As linhas de ENTRADA da DRE também são alvo da extração, com o código `dre:<id da linha>` (a tela/o store trocam
+// pelo id da conta DRE no banco). As linhas CALCULADAS (Receita Líquida, Lucro Bruto...) entram só como "chamariz":
+// são reconhecidas, para "RECEITA LIQUIDA" não ser confundida com "Receita Bruta", mas nunca recebem valor — o
+// sistema as recalcula.
+export const DRE_CODE_PREFIX = "dre:"
+const DRE_CALC_PREFIX = "dre=calculada:"
+
+export function dreLineIdFromCode(code: string): string | null {
+  return code.startsWith(DRE_CODE_PREFIX) ? code.slice(DRE_CODE_PREFIX.length) : null
+}
+
+// Opções de linha da DRE para o mapeamento manual e para o casamento automático.
+export function dreExtractionTargets(): Account[] {
+  return [
+    ...DRE_LINES.filter((l) => l.kind === "input").map((l) => ({ code: `${DRE_CODE_PREFIX}${l.id}`, name: l.name, values: {} })),
+    { code: `${DRE_CODE_PREFIX}${DRE_MEMO_LINE.id}`, name: "Compras", values: {} },
+  ]
+}
+
+const DRE_DECOYS: Account[] = DRE_LINES.filter((l) => l.kind === "computed").map((l) => ({
+  code: `${DRE_CALC_PREFIX}${l.id}`,
+  name: l.name,
+  values: {},
+}))
+
+// Na DRE deste sistema as deduções (deduções, custo, despesas, IR) ficam NEGATIVAS e a receita/compras POSITIVAS; o
+// PDF pode trazer qualquer das convenções ("81.550.439,82-", "(81.550.439,82)" ou sem sinal). O resultado financeiro
+// fica com o sinal lido: pode ser dos dois lados.
+const DRE_DEDUCTION_IDS = new Set(DRE_LINES.filter((l) => l.deduction).map((l) => l.id))
+function normalizeDreSign(row: ExtractedRow): ExtractedRow {
+  const lineId = row.code ? dreLineIdFromCode(row.code) : null
+  if (lineId === null || lineId === "resultado-financeiro") return row
+  const value = DRE_DEDUCTION_IDS.has(lineId) ? -Math.abs(row.value) : Math.abs(row.value)
+  return { ...row, value }
+}
+
+// ---- Unidade ----
+// O sistema guarda os valores em MILHARES de reais; a maioria dos balanços vem em reais. O documento que se declara em
+// milhares ("Em milhares de reais", "R$ mil") é lido como tal; senão, assume reais (o analista pode trocar na tela).
+export type DocumentUnit = "reais" | "milhares"
+const THOUSANDS_RE = /em\s+milhares|milhares\s+de\s+reais|R\$\s*mil\b|\(\s*mil\s*\)/i
+
+export function detectUnit(lines: { text: string }[]): DocumentUnit {
+  return lines.some((l) => THOUSANDS_RE.test(l.text)) ? "milhares" : "reais"
+}
+
+// Valor do documento → valor do sistema (milhares de reais, 2 casas como no banco: Decimal(18, 2)).
+export function toSystemUnit(value: number, unit: DocumentUnit): number {
+  return unit === "reais" ? Math.round(value / 10) / 100 : value
+}
+
 // A linha repetida vira "sem conta": mantém o texto, a página e a confiança lidos, mas não disputa a conta.
 function semConta(row: ExtractedRow): ExtractedRow {
   return { ...row, code: null, suggestedName: row.sourceLabel }
@@ -39,7 +91,7 @@ function normalizeCreditSign(rows: ExtractedRow[]): ExtractedRow[] {
 }
 
 export function extractRowsFromLines(lines: { text: string; page: number }[], accounts: Account[]): ExtractedRow[] {
-  const leaves = collectLeaves(accounts)
+  const leaves = [...collectLeaves(accounts), ...dreExtractionTargets(), ...DRE_DECOYS]
   const rows: ExtractedRow[] = []
   const rowIndexByCode = new Map<string, number>()
   // Coluna do exercício mais recente, descoberta pelo cabeçalho da página (cada página repete o seu; uma página
@@ -61,7 +113,8 @@ export function extractRowsFromLines(lines: { text: string; page: number }[], ac
     if (!parsed) return
 
     const { account, score } = matchAccountName(parsed.label, leaves)
-    const code = account && score >= MATCH_THRESHOLD ? account.code : null
+    const matched = account && score >= MATCH_THRESHOLD ? account.code : null
+    const code = matched?.startsWith(DRE_CALC_PREFIX) ? null : matched
     const confidence = Math.max(40, Math.min(99, score))
     const row: ExtractedRow = {
       id: `pdf-${line.page}-${i}`,
@@ -94,16 +147,17 @@ export function extractRowsFromLines(lines: { text: string; page: number }[], ac
     rows.push(row)
   })
 
-  return normalizeCreditSign(rows)
+  return normalizeCreditSign(rows).map(normalizeDreSign)
 }
 
 export interface PdfExtractionResult {
   supported: boolean
   rows: ExtractedRow[]
+  unit: DocumentUnit
 }
 
 export async function extractFromPdfFile(file: File, accounts: Account[]): Promise<PdfExtractionResult> {
   const { hasText, lines } = await extractPdfText(file)
-  if (!hasText) return { supported: false, rows: [] }
-  return { supported: true, rows: extractRowsFromLines(lines, accounts) }
+  if (!hasText) return { supported: false, rows: [], unit: "reais" }
+  return { supported: true, rows: extractRowsFromLines(lines, accounts), unit: detectUnit(lines) }
 }

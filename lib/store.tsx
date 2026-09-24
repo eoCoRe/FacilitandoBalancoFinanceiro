@@ -5,6 +5,7 @@ import { api, ApiError, errorMessage } from "./api-client"
 import {
   mapAuditoria,
   mapContas,
+  mapDre,
   mapSnapshot,
   type AuditEntry,
   type AuditoriaPayload,
@@ -18,6 +19,7 @@ import {
   type IdIndex,
 } from "./api-mapping"
 import type { Account } from "./financial-data"
+import { dreLineIdFromCode } from "./extraction/pdf-extraction"
 import { sectorLabel } from "./sector-benchmarks"
 
 export type { AuditEntry, Exercicio }
@@ -182,6 +184,12 @@ export function FinancialDataProvider({ children }: { children: ReactNode }) {
     const { accounts, contaIdByCode } = mapContas(contas)
     ids.current = { ...ids.current, contaIdByCode }
     setData((prev) => ({ ...prev, accounts }))
+  }, [])
+
+  const refreshDre = useCallback(async () => {
+    const { dreByExercicio, dreContaIdByLine } = mapDre(await api<DrePayload>("/api/dre"))
+    ids.current = { ...ids.current, dreContaIdByLine }
+    setData((prev) => ({ ...prev, dreByExercicio }))
   }, [])
 
   const refreshAudit = useCallback(async () => {
@@ -395,7 +403,14 @@ export function FinancialDataProvider({ children }: { children: ReactNode }) {
         const exercicioDbId = ids.current.exercicioIdByPeriodo[exercicioId]
         if (!exercicioDbId) throw new ApiError(`Exercício ${exercicioId} não encontrado.`)
         const itens = entries.map((entry) => {
-          const contaId = entry.code === null ? null : ids.current.contaIdByCode[entry.code]
+          // Código "dre:<linha>" = linha de entrada da DRE (ver lib/extraction/pdf-extraction.ts); o resto, Balanço.
+          const dreLineId = entry.code === null ? null : dreLineIdFromCode(entry.code)
+          const contaId =
+            entry.code === null
+              ? null
+              : dreLineId !== null
+                ? ids.current.dreContaIdByLine[dreLineId]
+                : ids.current.contaIdByCode[entry.code]
           if (entry.code !== null && !contaId) throw new ApiError(`Conta ${entry.code} não encontrada.`)
           return {
             contaId,
@@ -409,12 +424,12 @@ export function FinancialDataProvider({ children }: { children: ReactNode }) {
           method: "POST",
           body: { exercicioId: exercicioDbId, arquivoOrigem: fileName, modeloLlm: EXTRACTION_MODEL, itens },
         })
-        await refreshAccounts()
+        await Promise.all([refreshAccounts(), refreshDre()])
         return true
       })
       return done === true
     },
-    [enqueue, flushValueWrites, refreshAccounts],
+    [enqueue, flushValueWrites, refreshAccounts, refreshDre],
   )
 
   const dismissMutationError = useCallback(() => setMutationError(null), [])

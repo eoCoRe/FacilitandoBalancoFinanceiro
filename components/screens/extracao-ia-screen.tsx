@@ -18,7 +18,14 @@ import { PageHeader } from "@/components/page-header"
 import { Button } from "@/components/ui/button"
 import { useFinancialStore } from "@/lib/store"
 import { flattenAccounts, formatBRL } from "@/lib/financial-data"
-import { extractFromPdfFile, type ExtractedRow } from "@/lib/extraction/pdf-extraction"
+import {
+  dreExtractionTargets,
+  dreLineIdFromCode,
+  extractFromPdfFile,
+  toSystemUnit,
+  type DocumentUnit,
+  type ExtractedRow,
+} from "@/lib/extraction/pdf-extraction"
 import { GLOSSARY } from "@/lib/glossary"
 import { validateUploadFile } from "@/lib/upload-validation"
 import { cn } from "@/lib/utils"
@@ -27,8 +34,23 @@ type Stage = "idle" | "processing" | "reviewing" | "unsupported" | "done"
 
 interface ReviewRow extends ExtractedRow {
   mappedCode: string | null
-  confirmedValue: number
+  // Texto do campo "Confirmado", no formato brasileiro ("12.663.067,45"): guardar o texto (e não o número) deixa a
+  // pessoa digitar a vírgula sem o campo "comê-la"; o número só é lido na confirmação.
+  confirmedText: string
 }
+
+function formatInput(value: number): string {
+  return value.toLocaleString("pt-BR", { maximumFractionDigits: 2 })
+}
+
+// "12.663.067,45" → 12663067.45. Ponto é milhar e vírgula é decimal; um texto que não é número dá null.
+function parseInput(text: string): number | null {
+  const cleaned = text.trim().replace(/s/g, "").replace(/./g, "").replace(",", ".")
+  if (!/^-?d+(.d+)?$/.test(cleaned)) return null
+  return Number(cleaned)
+}
+
+const DRE_OPTIONS = dreExtractionTargets()
 
 function confidenceStatus(confidence: number): "ok" | "atencao" | "risco" {
   if (confidence >= 90) return "ok"
@@ -53,6 +75,7 @@ export function ExtracaoIaScreen({ onNavigate }: { onNavigate: (id: "tabulacao")
   const [omitidasCount, setOmitidasCount] = useState(0)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [confirming, setConfirming] = useState(false)
+  const [unit, setUnit] = useState<DocumentUnit>("reais")
   const [historicoKey, setHistoricoKey] = useState(0)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -88,9 +111,10 @@ export function ExtracaoIaScreen({ onNavigate }: { onNavigate: (id: "tabulacao")
         result.rows.map((row) => ({
           ...row,
           mappedCode: row.code,
-          confirmedValue: row.value,
+          confirmedText: formatInput(row.value),
         })),
       )
+      setUnit(result.unit)
       setStage("reviewing")
     } catch {
       setUploadError("Não foi possível ler este PDF (arquivo corrompido ou protegido por senha).")
@@ -117,15 +141,16 @@ export function ExtracaoIaScreen({ onNavigate }: { onNavigate: (id: "tabulacao")
 
   async function handleConfirm() {
     const mapped = rows.filter((r) => r.mappedCode)
-    if (mapped.length === 0 || !exercicioId || !fileName || confirming) return
+    if (mapped.length === 0 || !exercicioId || !fileName || confirming || invalidCount > 0) return
     // As linhas SEM conta também vão (rastreabilidade, RF06): ficam no histórico, mas não lançam valor. Todas as COM conta
     // sempre vão (são os valores a lançar; se só elas já passarem do limite, o servidor recusa com um aviso visível). As
     // sem conta entram enquanto couber no limite do servidor, e o que não coube é AVISADO ao terminar — nada é cortado
     // em silêncio.
     const { enviar, omitidas } = selectEntriesToSend(mapped, rows.filter((r) => !r.mappedCode))
+    // O sistema guarda milhares de reais: um documento em reais é convertido aqui, na gravação.
     const entries = enviar.map((r) => ({
       code: r.mappedCode,
-      value: r.confirmedValue,
+      value: toSystemUnit(parseInput(r.confirmedText) ?? r.value, unit),
       confidence: r.confidence,
       page: r.page,
       label: r.sourceLabel,
@@ -149,6 +174,8 @@ export function ExtracaoIaScreen({ onNavigate }: { onNavigate: (id: "tabulacao")
   }
 
   const mappedCount = rows.filter((r) => r.mappedCode).length
+  // Só as linhas que vão lançar valor precisam de um número válido no campo "Confirmado".
+  const invalidCount = rows.filter((r) => r.mappedCode && parseInput(r.confirmedText) === null).length
   const lowConfidenceCount = rows.filter((r) => confidenceStatus(r.confidence) !== "ok").length
 
   return (
@@ -262,7 +289,20 @@ export function ExtracaoIaScreen({ onNavigate }: { onNavigate: (id: "tabulacao")
                   {lowConfidenceCount > 0 && `, ${lowConfidenceCount} para revisão`}
                 </span>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <label htmlFor="ext-unidade" className="text-xs text-muted-foreground">
+                  Valores do documento em
+                </label>
+                <select
+                  id="ext-unidade"
+                  value={unit}
+                  onChange={(e) => setUnit(e.target.value as DocumentUnit)}
+                  title="O sistema guarda milhares de reais: valores em reais são divididos por 1.000 ao gravar."
+                  className="h-8 rounded-md border border-border bg-background px-2 text-sm text-foreground outline-none focus:border-ring"
+                >
+                  <option value="reais">Reais (R$)</option>
+                  <option value="milhares">Milhares (R$ mil)</option>
+                </select>
                 <label htmlFor="ext-exercicio" className="text-xs text-muted-foreground">
                   Gravar em
                 </label>
@@ -310,7 +350,9 @@ export function ExtracaoIaScreen({ onNavigate }: { onNavigate: (id: "tabulacao")
                         <td className="px-4 py-3">
                           {row.code ? (
                             <div>
-                              <span className="mr-1.5 font-mono text-xs text-muted-foreground">{row.code}</span>
+                              <span className="mr-1.5 font-mono text-xs text-muted-foreground">
+                                {dreLineIdFromCode(row.code) !== null ? "DRE" : row.code}
+                              </span>
                               <span className="text-foreground">{row.suggestedName}</span>
                             </div>
                           ) : (
@@ -329,11 +371,20 @@ export function ExtracaoIaScreen({ onNavigate }: { onNavigate: (id: "tabulacao")
                                 className="h-7 rounded border border-border bg-background px-1.5 text-xs text-foreground outline-none focus:border-ring"
                               >
                                 <option value="">Mapear para uma conta…</option>
-                                {leafOptions.map(({ account }) => (
-                                  <option key={account.code} value={account.code} title={GLOSSARY[account.name]}>
-                                    {account.code} — {account.name}
-                                  </option>
-                                ))}
+                                <optgroup label="Balanço Patrimonial">
+                                  {leafOptions.map(({ account }) => (
+                                    <option key={account.code} value={account.code} title={GLOSSARY[account.name]}>
+                                      {account.code} — {account.name}
+                                    </option>
+                                  ))}
+                                </optgroup>
+                                <optgroup label="DRE">
+                                  {DRE_OPTIONS.map((line) => (
+                                    <option key={line.code} value={line.code}>
+                                      DRE — {line.name}
+                                    </option>
+                                  ))}
+                                </optgroup>
                               </select>
                             </div>
                           )}
@@ -360,12 +411,13 @@ export function ExtracaoIaScreen({ onNavigate }: { onNavigate: (id: "tabulacao")
                           <input
                             type="text"
                             inputMode="decimal"
-                            value={row.confirmedValue}
-                            onChange={(e) => {
-                              const num = Number.parseFloat(e.target.value.replace(/\./g, "").replace(",", "."))
-                              updateRow(row.id, { confirmedValue: Number.isNaN(num) ? 0 : num })
-                            }}
-                            className="w-full rounded border border-border bg-background px-2 py-1 text-right font-mono text-sm tabular-nums text-foreground outline-none focus:border-ring"
+                            value={row.confirmedText}
+                            aria-invalid={row.mappedCode !== null && parseInput(row.confirmedText) === null}
+                            onChange={(e) => updateRow(row.id, { confirmedText: e.target.value })}
+                            className={cn(
+                              "w-full rounded border bg-background px-2 py-1 text-right font-mono text-sm tabular-nums text-foreground outline-none focus:border-ring",
+                              row.mappedCode !== null && parseInput(row.confirmedText) === null ? "border-risk" : "border-border",
+                            )}
                           />
                         </td>
                       </tr>
@@ -385,7 +437,7 @@ export function ExtracaoIaScreen({ onNavigate }: { onNavigate: (id: "tabulacao")
                   <X className="size-3.5" />
                   Cancelar
                 </Button>
-                <Button size="sm" disabled={mappedCount === 0 || !exercicioId || confirming} onClick={handleConfirm}>
+                <Button size="sm" disabled={mappedCount === 0 || !exercicioId || confirming || invalidCount > 0} onClick={handleConfirm}>
                   <Check className="size-3.5" />
                   Confirmar {mappedCount} valor(es) para {exercicioId || "—"}
                 </Button>
