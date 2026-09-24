@@ -3,7 +3,7 @@
 // linhas sintéticas); `extractFromPdfFile` é a única parte que depende do pdfjs/navegador.
 
 import { collectLeaves, DRE_LINES, DRE_MEMO_LINE, type Account } from "../financial-data"
-import { matchAccountName } from "./account-matcher"
+import { matchAccountName, normalize } from "./account-matcher"
 import { extractLabelAndValue, newestColumnFromRight } from "./number-parsing"
 import { extractPdfText } from "./pdf-text"
 
@@ -74,6 +74,36 @@ export function toSystemUnit(value: number, unit: DocumentUnit): number {
   return unit === "reais" ? Math.round(value / 10) / 100 : value
 }
 
+// ---- Seções do Balanço ----
+// "EMPRÉSTIMOS" no Passivo NÃO Circulante não é a conta de curto prazo, nem "APLICAÇÕES" no Realizável a Longo Prazo.
+// O leitor acompanha os títulos de seção do documento e só casa contas cujo grupo no Plano de Contas é da mesma seção.
+// Documento sem títulos reconhecíveis, ou conta cujo grupo não indica a seção: não restringe nada. As linhas da DRE
+// ficam fora disso (uma DRE pode vir na mesma página, sem título que a separe).
+type Section = "ativo-circulante" | "ativo-nao-circulante" | "passivo-circulante" | "passivo-nao-circulante" | "pl"
+
+const SECTION_PATTERNS: [Section, RegExp][] = [
+  ["ativo-circulante", /^ativo circulante\b/],
+  ["ativo-nao-circulante", /^ativo nao circulante\b|realizavel a longo prazo|^ativo permanente\b|^permanente\b/],
+  ["passivo-circulante", /^passivo circulante\b/],
+  ["passivo-nao-circulante", /^passivo nao circulante\b|exigivel a longo prazo|^passivo exigivel a l/],
+  ["pl", /^patrimonio liquido\b/],
+]
+
+function sectionOf(text: string): Section | null {
+  const normalized = normalize(text)
+  return SECTION_PATTERNS.find(([, re]) => re.test(normalized))?.[0] ?? null
+}
+
+// Seção de cada conta analítica = a do grupo mais próximo cujo nome indica uma seção.
+function leafSections(accounts: Account[], inherited: Section | null = null, out = new Map<string, Section>()) {
+  for (const account of accounts) {
+    const section = (account.children ? sectionOf(account.name) : null) ?? inherited
+    if (!account.children && section) out.set(account.code, section)
+    if (account.children) leafSections(account.children, section, out)
+  }
+  return out
+}
+
 // A linha repetida vira "sem conta": mantém o texto, a página e a confiança lidos, mas não disputa a conta.
 function semConta(row: ExtractedRow): ExtractedRow {
   return { ...row, code: null, suggestedName: row.sourceLabel }
@@ -98,21 +128,28 @@ export function extractRowsFromLines(lines: { text: string; page: number }[], ac
   // sem cabeçalho de anos, como uma DRE com coluna de %, volta ao padrão: a última coluna).
   let page = -1
   let columnFromRight = 0
+  const sectionByCode = leafSections(accounts)
+  let section: Section | null = null
 
   lines.forEach((line, i) => {
     if (line.page !== page) {
       page = line.page
       columnFromRight = 0
+      section = null
     }
     const header = newestColumnFromRight(line.text)
     if (header !== null) {
       columnFromRight = header
       return
     }
+    // Título de seção (com ou sem o total ao lado): as linhas seguintes pertencem a ela.
+    const lineSection = sectionOf(line.text)
+    if (lineSection) section = lineSection
     const parsed = extractLabelAndValue(line.text, columnFromRight)
     if (!parsed) return
 
-    const { account, score } = matchAccountName(parsed.label, leaves)
+    const candidates = section ? leaves.filter((l) => (sectionByCode.get(l.code) ?? section) === section) : leaves
+    const { account, score } = matchAccountName(parsed.label, candidates)
     const matched = account && score >= MATCH_THRESHOLD ? account.code : null
     const code = matched?.startsWith(DRE_CALC_PREFIX) ? null : matched
     const confidence = Math.max(40, Math.min(99, score))

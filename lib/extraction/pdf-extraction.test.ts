@@ -139,6 +139,38 @@ describe("extractRowsFromLines", () => {
     expect(rows[0].value).toBe(3100)
   })
 
+  it("seção do documento: 'Fornecedores' no Passivo NÃO Circulante não vira a conta de curto prazo", () => {
+    const accounts: Account[] = [
+      {
+        code: "2",
+        name: "Passivo",
+        children: [
+          { code: "2.1", name: "Passivo Circulante", children: [{ code: "2.1.1", name: "Fornecedores", values: {} }] },
+          { code: "2.2", name: "Exigível a Longo Prazo", children: [{ code: "2.2.1", name: "Empréstimos LP", values: {} }] },
+        ],
+      },
+    ]
+    const rows = extractRowsFromLines(
+      [
+        { text: "PASSIVO CIRCULANTE 5.000,00", page: 1 },
+        { text: "FORNECEDORES 3.100,00", page: 1 },
+        { text: "PASSIVO NÃO CIRCULANTE 900,00", page: 1 },
+        { text: "FORNECEDORES 900,00", page: 1 },
+      ],
+      accounts,
+    )
+    const fornecedores = rows.filter((r) => r.sourceLabel === "FORNECEDORES")
+    expect(fornecedores.map((r) => [r.code, r.value])).toEqual([
+      ["2.1.1", 3100],
+      [null, 900],
+    ])
+  })
+
+  it("sem títulos de seção no documento, nada é restringido", () => {
+    const rows = extractRowsFromLines([{ text: "Fornecedores 3.100,00", page: 1 }], buildAccounts())
+    expect(rows[0].code).toBe("2.1.1")
+  })
+
   it("DRE: linhas de entrada viram 'dre:<linha>', com deduções NEGATIVAS e receita positiva, seja qual for o sinal do PDF", () => {
     const rows = extractRowsFromLines(
       [

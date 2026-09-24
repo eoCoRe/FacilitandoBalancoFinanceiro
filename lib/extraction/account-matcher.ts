@@ -60,7 +60,7 @@ const SYNONYMS: Record<string, string> = {
   "compras de mercadorias": "compras",
 }
 
-function normalize(s: string): string {
+export function normalize(s: string): string {
   return s
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")
