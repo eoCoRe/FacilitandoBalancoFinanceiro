@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { Menu, X } from "lucide-react"
 import { AppSidebar } from "@/components/app-sidebar"
+import { temBalancos } from "@/components/exercicio-picker"
 import { DashboardScreen } from "@/components/screens/dashboard-screen"
 import { PlanoDeContasScreen } from "@/components/screens/plano-de-contas-screen"
 import { TabulacaoScreen } from "@/components/screens/tabulacao-screen"
@@ -28,12 +29,20 @@ export default function Page() {
 }
 
 function App() {
-  const [screen, setScreen] = useState<ScreenId>("opiniao-de-venda")
+  // null = ainda não escolhida: a tela inicial depende dos dados (ver abaixo).
+  const [chosen, setChosen] = useState<ScreenId | null>(null)
   // Celular/tablet estreito: a barra lateral vira uma gaveta aberta pelo botão do topo.
   const [menuOpen, setMenuOpen] = useState(false)
-  const { status, user } = useFinancialStore()
+  const store = useFinancialStore()
+  const { status, user } = store
 
   if (status !== "ready") return <StoreLoadGate />
+
+  // Empresa sem nenhum balanço (acabou de ser cadastrada, por exemplo) começa em "Incluir balanços"; as demais, no
+  // Parecer de Crédito. A escolha fica fixa depois disso: gravar o primeiro balanço não pode trocar a tela no meio.
+  const screen: ScreenId = chosen ?? (temBalancos(store) ? "opiniao-de-venda" : "extracao-ia")
+  if (chosen === null) setChosen(screen)
+  const setScreen = setChosen
 
   function navigate(id: ScreenId) {
     setScreen(id)

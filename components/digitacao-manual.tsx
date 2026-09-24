@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react"
 import { AlertTriangle, Check, Loader2, X } from "lucide-react"
 import { DocumentoViewer } from "@/components/documento-viewer"
+import { ExercicioPicker } from "@/components/exercicio-picker"
 import { Button } from "@/components/ui/button"
 import { completar, DRE_TOTAL_PREFIX, identidadesBalanco, identidadesDre, sinaisDre } from "@/lib/completar-demonstracoes"
 import { collectLeaves, DRE_LINES, DRE_MEMO_LINE, flattenAccounts, formatBRL } from "@/lib/financial-data"
@@ -11,7 +12,8 @@ import { parseExpressao } from "@/lib/number-input"
 import { useFinancialStore } from "@/lib/store"
 import { cn } from "@/lib/utils"
 
-// Digitação manual com o documento ao lado: para PDF escaneado, imagem, ou quando a leitura automática não serve.
+// Digitação manual, com o documento ao lado (PDF escaneado, imagem, ou quando a leitura automática não serve) ou sem
+// documento nenhum (o analista tem os números em mãos, no papel ou numa planilha).
 //
 // Balanços não têm padrão (um traz Receita Bruta e Deduções, outro traz Bruta e Líquida, outro os três), então:
 //  - todo campo aceita uma conta simples ("4.133.297,81 - 3.152.704,65");
@@ -19,7 +21,10 @@ import { cn } from "@/lib/utils"
 //    calcula a parte que faltar e confere se a soma bate (lib/completar-demonstracoes.ts);
 //  - só as contas analíticas e as linhas de entrada da DRE são gravadas: os totais o sistema recalcula.
 // Ao confirmar, os valores vão para a Tabulação pelo mesmo caminho da extração e ficam no histórico como "Digitado pelo
-// analista" (ou "Calculado a partir dos totais do documento"), com o nome do arquivo (rastreabilidade, RF06).
+// analista" (ou "Calculado a partir dos totais do documento"), com o nome do arquivo ou "Sem documento"
+// (rastreabilidade, RF06).
+
+export const SEM_DOCUMENTO = "Sem documento"
 
 type Campo = { code: string; nome: string; recuo: number; total: boolean; dica?: string }
 
@@ -43,7 +48,7 @@ export function DigitacaoManual({
   onCancelar,
   onConcluido,
 }: {
-  file: File
+  file: File | null
   exercicioInicial: string
   unidadeInicial: DocumentUnit
   // Valores já conhecidos (ex.: o que a leitura automática achou, inclusive totais), na unidade do documento.
@@ -91,7 +96,7 @@ export function DigitacaoManual({
       label: resultado.calculados.has(code) ? "Calculado a partir dos totais do documento" : "Digitado pelo analista",
     }))
     setSalvando(true)
-    const ok = await store.confirmExtraction(exercicioId, entries, file.name, "digitacao-manual")
+    const ok = await store.confirmExtraction(exercicioId, entries, file?.name ?? SEM_DOCUMENTO, "digitacao-manual")
     setSalvando(false)
     // Se o servidor recusou, o motivo aparece no aviso global e o que foi digitado continua na tela.
     if (ok) onConcluido(entries.length, exercicioId)
@@ -134,12 +139,14 @@ export function DigitacaoManual({
   }
 
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
-      <div className="h-[60vh] lg:sticky lg:top-4 lg:h-[calc(100dvh-6rem)]">
-        <DocumentoViewer file={file} />
-      </div>
+    <div className={cn("grid gap-4", file && "lg:grid-cols-2")}>
+      {file && (
+        <div className="h-[60vh] lg:sticky lg:top-4 lg:h-[calc(100dvh-6rem)]">
+          <DocumentoViewer file={file} />
+        </div>
+      )}
 
-      <div className="flex flex-col gap-4">
+      <div className={cn("flex flex-col gap-4", !file && "mx-auto w-full max-w-3xl")}>
         <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-card px-4 py-3">
           <label htmlFor="dm-unidade" className="text-xs text-muted-foreground">
             Valores do documento em
@@ -156,22 +163,11 @@ export function DigitacaoManual({
           <label htmlFor="dm-exercicio" className="text-xs text-muted-foreground">
             Gravar em
           </label>
-          <select
-            id="dm-exercicio"
-            value={exercicioId}
-            onChange={(e) => setExercicioId(e.target.value)}
-            className="h-8 rounded-md border border-border bg-background px-2 text-sm text-foreground outline-none focus:border-ring"
-          >
-            {store.exercicios.map((ex) => (
-              <option key={ex.id} value={ex.id}>
-                {ex.label}
-              </option>
-            ))}
-          </select>
+          <ExercicioPicker id="dm-exercicio" value={exercicioId} onChange={setExercicioId} />
         </div>
 
         <p className="text-xs leading-relaxed text-muted-foreground">
-          Digite os valores como estão no documento (ex.: 12.663.067,45). Se o documento traz um valor como conta, digite a
+          Digite os valores como estão no {file ? "documento" : "balanço"} (ex.: 12.663.067,45). Se o documento traz um valor como conta, digite a
           conta: <code className="font-mono">4.133.297,81 - 3.152.704,65</code>. Os totais são opcionais: com eles, o
           sistema calcula a parte que faltar e confere se a soma bate. Campos em branco não mudam o que já está lançado.
         </p>

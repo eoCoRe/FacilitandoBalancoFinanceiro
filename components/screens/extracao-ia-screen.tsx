@@ -15,6 +15,7 @@ import {
   X,
 } from "lucide-react"
 import { DigitacaoManual } from "@/components/digitacao-manual"
+import { ExercicioPicker, temBalancos } from "@/components/exercicio-picker"
 import { ExtracoesHistorico } from "@/components/extracoes-historico"
 import { PageHeader } from "@/components/page-header"
 import { Button } from "@/components/ui/button"
@@ -85,6 +86,19 @@ export function ExtracaoIaScreen({ onNavigate }: { onNavigate: (id: "tabulacao")
     setManualInicial({ valores, unidade })
     setStage("manual")
   }
+
+  // Digitar sem documento nenhum: o analista tem os números em mãos (papel, planilha, e-mail do cliente).
+  function digitarSemDocumento() {
+    setUploadError(null)
+    setFile(null)
+    setFileName(null)
+    setRows([])
+    setExercicioId(store.exercicios[store.exercicios.length - 1]?.id ?? "")
+    abrirDigitacao({}, "reais")
+  }
+
+  // Empresa recém-cadastrada (ou que ainda não recebeu nenhum valor): a tela explica que é por aqui que se começa.
+  const semBalancos = !temBalancos(store)
 
   const leafOptions = flattenAccounts(store.accounts).filter((r) => !r.account.children)
 
@@ -208,21 +222,27 @@ export function ExtracaoIaScreen({ onNavigate }: { onNavigate: (id: "tabulacao")
   return (
     <div className="flex flex-col">
       <PageHeader
-        eyebrow="Complementar"
-        title="Extração de PDF"
-        subtitle="Transforme demonstrações em PDF em dados estruturados de tabulação. Você revisa tudo antes de gravar."
-        actions={
-          <span className="inline-flex items-center gap-1.5 rounded border border-border bg-muted px-2 py-1 font-mono text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-            <Sparkles className="size-3" />
-            beta
-          </span>
-        }
+        eyebrow="Balanços"
+        title="Incluir balanços"
+        subtitle="Envie o documento para a leitura automática ou digite os valores. Você revisa tudo antes de gravar."
       />
 
       <div className="flex flex-col gap-6 px-4 md:px-8 py-6">
         {stage === "idle" && (
           <>
             <input ref={fileInputRef} type="file" accept=".pdf,.png,.jpg,.jpeg" className="hidden" onChange={handleFileChange} />
+
+            {semBalancos && (
+              <div role="status" className="rounded-md border border-primary/30 bg-primary/[0.04] px-4 py-3">
+                <p className="text-sm font-medium text-foreground">
+                  {store.companyName || "Esta empresa"} ainda não tem balanços.
+                </p>
+                <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+                  Inclua o primeiro para liberar os índices, as demonstrações e o parecer. Escolha abaixo: enviar o documento
+                  para a leitura automática, ou digitar os valores (com o documento ao lado, ou sem documento).
+                </p>
+              </div>
+            )}
 
             {uploadError && (
               <div className="flex items-start gap-2.5 rounded-md border border-risk/30 bg-risk-muted px-4 py-3">
@@ -234,31 +254,53 @@ export function ExtracaoIaScreen({ onNavigate }: { onNavigate: (id: "tabulacao")
               </div>
             )}
 
-            <div
-              onDragOver={(e) => {
-                e.preventDefault()
-                setIsDragOver(true)
-              }}
-              onDragLeave={() => setIsDragOver(false)}
-              onDrop={handleDrop}
-              className={cn(
-                "flex flex-col items-center justify-center rounded-md border border-dashed px-6 py-14 text-center transition-colors",
-                isDragOver ? "border-ring bg-primary/[0.04]" : "border-border bg-card",
-              )}
-            >
-              <div className="flex size-12 items-center justify-center rounded-full bg-muted">
-                <Upload className="size-5 text-muted-foreground" />
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+              <div
+                onDragOver={(e) => {
+                  e.preventDefault()
+                  setIsDragOver(true)
+                }}
+                onDragLeave={() => setIsDragOver(false)}
+                onDrop={handleDrop}
+                className={cn(
+                  "relative flex flex-col items-center justify-center rounded-md border border-dashed px-6 py-12 text-center transition-colors lg:col-span-2",
+                  isDragOver ? "border-ring bg-primary/[0.04]" : "border-border bg-card",
+                )}
+              >
+                <span className="absolute right-3 top-3 inline-flex items-center gap-1.5 rounded border border-border bg-muted px-2 py-1 font-mono text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                  <Sparkles className="size-3" />
+                  beta
+                </span>
+                <div className="flex size-12 items-center justify-center rounded-full bg-muted">
+                  <Upload className="size-5 text-muted-foreground" />
+                </div>
+                <p className="mt-4 text-sm font-medium text-foreground">Enviar o documento</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Arraste um arquivo ou selecione do computador · PDF, PNG, JPG · até 20 MB
+                </p>
+                <Button size="sm" className="mt-4 gap-1.5" onClick={() => fileInputRef.current?.click()}>
+                  <FileText className="size-3.5" />
+                  Selecionar arquivo
+                </Button>
+                <label className="mt-3 flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
+                  <input type="checkbox" checked={somenteDigitar} onChange={(e) => setSomenteDigitar(e.target.checked)} className="accent-primary" />
+                  Só quero digitar os valores olhando o documento (sem leitura automática)
+                </label>
               </div>
-              <p className="mt-4 text-sm font-medium text-foreground">Arraste um arquivo ou selecione do computador</p>
-              <p className="mt-1 text-xs text-muted-foreground">Formatos suportados: PDF, PNG, JPG · até 20 MB</p>
-              <Button size="sm" className="mt-4 gap-1.5" onClick={() => fileInputRef.current?.click()}>
-                <FileText className="size-3.5" />
-                Selecionar arquivo
-              </Button>
-              <label className="mt-3 flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
-                <input type="checkbox" checked={somenteDigitar} onChange={(e) => setSomenteDigitar(e.target.checked)} className="accent-primary" />
-                Só quero digitar os valores olhando o documento (sem leitura automática)
-              </label>
+
+              <div className="flex flex-col items-center justify-center rounded-md border border-border bg-card px-6 py-12 text-center">
+                <div className="flex size-12 items-center justify-center rounded-full bg-muted">
+                  <PencilLine className="size-5 text-muted-foreground" />
+                </div>
+                <p className="mt-4 text-sm font-medium text-foreground">Digitar sem documento</p>
+                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                  Para quando você tem os números em mãos (papel, planilha, e-mail do cliente).
+                </p>
+                <Button size="sm" variant="outline" className="mt-4 gap-1.5" onClick={digitarSemDocumento}>
+                  <PencilLine className="size-3.5" />
+                  Digitar os valores
+                </Button>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -341,18 +383,7 @@ export function ExtracaoIaScreen({ onNavigate }: { onNavigate: (id: "tabulacao")
                 <label htmlFor="ext-exercicio" className="text-xs text-muted-foreground">
                   Gravar em
                 </label>
-                <select
-                  id="ext-exercicio"
-                  value={exercicioId}
-                  onChange={(e) => setExercicioId(e.target.value)}
-                  className="h-8 rounded-md border border-border bg-background px-2 text-sm text-foreground outline-none focus:border-ring"
-                >
-                  {store.exercicios.map((ex) => (
-                    <option key={ex.id} value={ex.id}>
-                      {ex.label}
-                    </option>
-                  ))}
-                </select>
+                <ExercicioPicker id="ext-exercicio" value={exercicioId} onChange={setExercicioId} />
               </div>
             </div>
 
@@ -492,7 +523,7 @@ export function ExtracaoIaScreen({ onNavigate }: { onNavigate: (id: "tabulacao")
           </>
         )}
 
-        {stage === "manual" && file && (
+        {stage === "manual" && (
           <DigitacaoManual
             file={file}
             exercicioInicial={exercicioId}
@@ -513,7 +544,8 @@ export function ExtracaoIaScreen({ onNavigate }: { onNavigate: (id: "tabulacao")
           <div className="flex flex-col items-center justify-center gap-3 rounded-md border border-ok/30 bg-ok-muted px-6 py-16 text-center">
             <CheckCircle2 className="size-8 text-ok" />
             <p className="text-sm font-medium text-ok">
-              {confirmedCount} valor(es) gravado(s) em {exercicioId} a partir de “{fileName}”.
+              {confirmedCount} valor(es) gravado(s) em {exercicioId}
+              {fileName ? ` a partir de “${fileName}”` : ", digitados sem documento"}.
             </p>
             <p className="text-xs text-ok/70">
               Os lançamentos aparecem na Tabulação e já entram no cálculo dos índices e da Opinião de Venda.
@@ -526,7 +558,7 @@ export function ExtracaoIaScreen({ onNavigate }: { onNavigate: (id: "tabulacao")
             )}
             <div className="mt-2 flex gap-2">
               <Button variant="outline" size="sm" onClick={reset}>
-                Nova extração
+                Incluir outro balanço
               </Button>
               <Button size="sm" onClick={() => onNavigate("tabulacao")}>
                 Ver na Tabulação

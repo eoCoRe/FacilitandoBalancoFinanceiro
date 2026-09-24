@@ -39,3 +39,6 @@ sinônimos e distância de edição. **Não há IA nenhuma.** O TCC exige IA, en
 - [ ] Índices: coluna "Mediana do setor" (CVM, DFP 2025) e a nota com a fonte no rodapé.
 - [ ] Parecer: registrar uma decisão e ver o histórico (coordenador ou administrador).
 - [ ] Demonstrações: alternar Valores / AV % / AH % no Balanço e na DRE, e exportar o CSV.
+- [ ] (Ainda não testado) Cadastro de empresa → cai em "Incluir balanços" com o aviso "ainda não tem balanços"; criar o exercício ali mesmo
+      ("+ Novo exercício…" ou o campo que já aparece quando não há nenhum) e gravar pelos dois caminhos: documento
+      (leitor) e "Digitar sem documento". No histórico, a digitação sem documento aparece como "Sem documento".

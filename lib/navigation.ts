@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react"
-import { LayoutDashboard, ListTree, Table2, FileSpreadsheet, Percent, Sparkles, Gavel, Users, ScrollText } from "lucide-react"
+import { LayoutDashboard, ListTree, Table2, FileSpreadsheet, Percent, FilePlus2, Gavel, Users, ScrollText } from "lucide-react"
 
 export type ScreenId =
   | "dashboard"
@@ -17,6 +17,8 @@ export interface NavItem {
   label: string
   icon: LucideIcon
   badge?: string
+  // Outros nomes pelos quais a tela é procurada na busca (Ctrl+K).
+  keywords?: string
 }
 
 export const INICIO_NAV: NavItem[] = [{ id: "opiniao-de-venda", label: "Parecer de Crédito", icon: Gavel }]
@@ -30,7 +32,7 @@ export const DETALHADO_NAV: NavItem[] = [
   { id: "plano-de-contas", label: "Plano de Contas", icon: ListTree },
   { id: "tabulacao", label: "Tabulação", icon: Table2 },
   { id: "demonstracoes", label: "Balanço · DRE · DFC", icon: FileSpreadsheet },
-  { id: "extracao-ia", label: "Extração de PDF", icon: Sparkles, badge: "beta" },
+  { id: "extracao-ia", label: "Incluir balanços", icon: FilePlus2, keywords: "extração pdf leitura digitação manual documento" },
   { id: "auditoria", label: "Auditoria", icon: ScrollText },
 ]
 

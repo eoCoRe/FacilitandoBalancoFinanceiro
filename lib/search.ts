@@ -25,7 +25,7 @@ export function normalize(text: string): string {
 
 export function buildSearchEntries({ accounts, isAdmin }: { accounts: Account[]; isAdmin: boolean }): SearchEntry[] {
   const screens = [...INICIO_NAV, ...ANALISE_NAV, ...DETALHADO_NAV, ...(isAdmin ? ADMIN_NAV : [])].map(
-    (item): SearchEntry => ({ id: `tela:${item.id}`, kind: "Tela", label: item.label, hint: "", screen: item.id }),
+    (item): SearchEntry => ({ id: `tela:${item.id}`, kind: "Tela", label: item.label, hint: item.keywords ?? "", screen: item.id }),
   )
   const indices = INDICATORS.map(
     (indicator): SearchEntry => ({

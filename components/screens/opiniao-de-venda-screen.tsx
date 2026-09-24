@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import { ArrowRight, CheckCircle2, AlertTriangle, ChevronDown, XCircle, Gavel, FileText, Sparkles } from "lucide-react"
+import { ArrowRight, CheckCircle2, AlertTriangle, ChevronDown, XCircle, Gavel, FileText, FilePlus2 } from "lucide-react"
 import { PageHeader } from "@/components/page-header"
 import { HistoricoPareceres, RegistrarDecisao } from "@/components/parecer-registro"
 import { Button } from "@/components/ui/button"
@@ -88,12 +88,12 @@ export function OpiniaoDeVendaScreen({ onNavigate }: { onNavigate: (id: ScreenId
           <div className="flex flex-col items-center gap-4 rounded-md border border-dashed border-border bg-card px-6 py-14 text-center">
             <p className="max-w-sm text-sm leading-relaxed text-muted-foreground">
               Para gerar o parecer automático, primeiro cadastre os valores do Balanço e da DRE de pelo menos um
-              exercício — pela extração de PDF ou lançamento manual na Tabulação.
+              exercício — enviando o documento para a leitura automática ou digitando os valores.
             </p>
             <div className="flex flex-wrap justify-center gap-2">
               <Button size="sm" className="gap-1.5" onClick={() => onNavigate("extracao-ia")}>
-                <Sparkles className="size-3.5" />
-                Extração de PDF
+                <FilePlus2 className="size-3.5" />
+                Incluir balanços
               </Button>
               <Button variant="outline" size="sm" className="gap-1.5" onClick={() => onNavigate("tabulacao")}>
                 Ir para Tabulação
