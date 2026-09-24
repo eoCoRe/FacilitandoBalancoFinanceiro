@@ -11,7 +11,7 @@ Estimativas em **sessões** de trabalho como a de 24/09 (2 a 3 horas cada, eu pr
 |---|---|
 | D1 | **Feito**: "Session 2" mesclada na branch `tcc/ajustes` (commit `2760c29`) |
 | D2 | **SIM**: IA via **API de LLM externa** (não modelo próprio treinado), como no RFC §5.4/§5.5 |
-| D3 | **Feito**: várias empresas (commits `1e5195a` a este) |
+| D3 | **Feito**: várias empresas (commits `1e5195a` a `bf96e4c`) |
 | D4 | **Publicar, mas não na Vercel** (plataforma a definir) |
 | D6 | Em explicação |
 | D7, D8, D9 | **SIM** |
