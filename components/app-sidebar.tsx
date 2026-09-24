@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { Search } from "lucide-react"
 import { AccountMenu } from "@/components/auth/account-menu"
 import { CommandPalette } from "@/components/command-palette"
+import { EmpresaSwitcher } from "@/components/empresa-switcher"
 import { can } from "@/lib/permissions"
 import { useFinancialStore } from "@/lib/store"
 import { INICIO_NAV, ANALISE_NAV, DETALHADO_NAV, ADMIN_NAV, type NavItem, type ScreenId } from "@/lib/navigation"
@@ -15,7 +16,7 @@ interface AppSidebarProps {
 }
 
 export function AppSidebar({ active, onNavigate }: AppSidebarProps) {
-  const { companyName, cnpj, user } = useFinancialStore()
+  const { user } = useFinancialStore()
   const [searchOpen, setSearchOpen] = useState(false)
 
   // ⌘K (Mac) / Ctrl+K abre a busca de qualquer lugar do app.
@@ -57,13 +58,9 @@ export function AppSidebar({ active, onNavigate }: AppSidebarProps) {
         </button>
       </div>
 
-      {/* Empresa selecionada */}
+      {/* Empresa em análise (clique para trocar ou cadastrar outra) */}
       <div className="px-3 pb-4">
-        <div className="rounded-md border border-border bg-background p-3">
-          <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Empresa</p>
-          <p className="mt-1 text-sm font-medium leading-tight text-foreground text-pretty">{companyName}</p>
-          <p className="mt-0.5 font-mono text-xs text-muted-foreground tabular-nums">{cnpj}</p>
-        </div>
+        <EmpresaSwitcher />
       </div>
 
       {/* Navegação */}
