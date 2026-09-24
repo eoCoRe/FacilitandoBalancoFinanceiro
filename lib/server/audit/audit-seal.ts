@@ -21,8 +21,12 @@ import { logEvent } from "@/lib/server/log"
 // — a recuperação de uma falha de selagem depois de reiniciar o processo, ou o histórico de uma instalação anterior à
 // selagem (uma vez).
 //
+// UMA CADEIA POR EMPRESA. Cada registro encadeia no último selo da PRÓPRIA empresa, e a posição (selo_seq) conta dentro
+// dela. Assim a eliminação LGPD de uma empresa (que apaga os registros dela, em cascata) leva a cadeia dela inteira e não
+// abre um buraco no meio da cadeia das outras. Com uma empresa só, é a mesma cadeia de antes.
+//
 // Limites assumidos (também em SECURITY.md): apagar os registros mais RECENTES não é detectável sem uma âncora externa; o
-// expurgo por retenção só apaga o começo da cadeia (ver retention.ts) e a verificação recomeça do primeiro que sobrou.
+// expurgo por retenção só apaga o começo de cada cadeia (ver retention.ts) e a verificação recomeça do primeiro que sobrou.
 
 // Trava que serializa a selagem (e o expurgo) entre requisições simultâneas: dois selando ao mesmo tempo bifurcariam a cadeia.
 export const SEAL_LOCK_KEY = 7_310_442
@@ -77,41 +81,40 @@ export interface SealResult {
 // cadeia — nunca fica sem selo.
 //  - `ids`: só estes registros (o caminho normal: o que este processo acabou de gravar). Com `expected` (id → impressão do
 //    conteúdo gravado), um registro cujo conteúdo mudou desde a gravação NÃO é selado;
-//  - `all`: TODOS os que estão sem selo (só a ação explícita do administrador, que fica registrada na trilha).
-// Antes de encadear, confere o selo do ÚLTIMO registro da cadeia: se ele foi mexido, a selagem é suspensa (erro) em vez de
-// se apoiar num elo adulterado.
+//  - `all`: TODOS os que estão sem selo (só a ação explícita do administrador, que fica registrada na trilha); com
+//    `empresaId`, só os dessa empresa.
+// Antes de encadear numa cadeia, confere o selo do ÚLTIMO registro dela: se ele foi mexido, a selagem é suspensa (erro)
+// em vez de se apoiar num elo adulterado.
 export async function sealPendingDetailed({
   ids,
   all = false,
   expected,
+  empresaId,
 }: {
   ids?: readonly number[]
   all?: boolean
   expected?: ReadonlyMap<number, string>
+  empresaId?: number
 } = {}): Promise<SealResult> {
   const result: SealResult = { count: 0, primeiroId: null, ultimoId: null }
   if (!all && (!ids || ids.length === 0)) return result
 
   for (let batch = 0; batch < SEAL_MAX_BATCHES; batch++) {
     const lote = await prisma.$transaction(async (tx) => {
-      // ::text porque o retorno da função é "void", que o driver não sabe ler.
+      // ::text porque o retorno da função é "void", que o driver não sabe ler. Uma trava só para todas as empresas:
+      // mais simples, e a selagem é rápida.
       await tx.$queryRaw`SELECT pg_advisory_xact_lock(${SEAL_LOCK_KEY})::text`
-      // Só posições preenchidas: no Postgres, ORDER BY ... DESC põe NULL primeiro, e um registro com selo mas sem posição
-      // viraria o "último" e bagunçaria a cadeia.
-      const last = await tx.auditLog.findFirst({
-        where: { selo: { not: null }, seloSeq: { not: null } },
-        orderBy: { seloSeq: "desc" },
-      })
-      if (last && !safeEqual(last.selo, computeSeal(last.seloAnterior, last.seloSeq as number, last))) {
-        throw new Error("O último registro selado da auditoria não confere com o selo (a cadeia foi alterada): a selagem foi suspensa. Verifique a integridade.")
-      }
       const pending = await tx.auditLog.findMany({
-        where: { selo: null, ...(all ? {} : { id: { in: [...(ids ?? [])] } }) },
+        where: {
+          selo: null,
+          ...(empresaId === undefined ? {} : { empresaId }),
+          ...(all ? {} : { id: { in: [...(ids ?? [])] } }),
+        },
         orderBy: { id: "asc" },
         take: SEAL_BATCH,
       })
-      let previous = last?.selo ?? null
-      let seq = last?.seloSeq ?? 0
+      // Ponta de cada cadeia tocada neste lote (empresa → último selo e posição).
+      const pontas = new Map<number, { previous: string | null; seq: number }>()
       const selados: number[] = []
       for (const row of pending) {
         const esperado = expected?.get(row.id)
@@ -120,11 +123,25 @@ export async function sealPendingDetailed({
           logEvent("error", "audit.seal.content_mismatch", { id: row.id })
           continue
         }
-        if (seq + 1 > SEQ_LIMIT) throw new Error("selo_seq chegou perto do limite do Int4: a selagem foi suspensa.")
-        seq += 1
-        const selo = computeSeal(previous, seq, row)
-        await tx.auditLog.update({ where: { id: row.id }, data: { selo, seloAnterior: previous, seloSeq: seq } })
-        previous = selo
+        let ponta = pontas.get(row.empresaId)
+        if (!ponta) {
+          // Só posições preenchidas: no Postgres, ORDER BY ... DESC põe NULL primeiro, e um registro com selo mas sem
+          // posição viraria o "último" e bagunçaria a cadeia.
+          const last = await tx.auditLog.findFirst({
+            where: { empresaId: row.empresaId, selo: { not: null }, seloSeq: { not: null } },
+            orderBy: { seloSeq: "desc" },
+          })
+          if (last && !safeEqual(last.selo, computeSeal(last.seloAnterior, last.seloSeq as number, last))) {
+            throw new Error("O último registro selado da auditoria não confere com o selo (a cadeia foi alterada): a selagem foi suspensa. Verifique a integridade.")
+          }
+          ponta = { previous: last?.selo ?? null, seq: last?.seloSeq ?? 0 }
+          pontas.set(row.empresaId, ponta)
+        }
+        if (ponta.seq + 1 > SEQ_LIMIT) throw new Error("selo_seq chegou perto do limite do Int4: a selagem foi suspensa.")
+        ponta.seq += 1
+        const selo = computeSeal(ponta.previous, ponta.seq, row)
+        await tx.auditLog.update({ where: { id: row.id }, data: { selo, seloAnterior: ponta.previous, seloSeq: ponta.seq } })
+        ponta.previous = selo
         selados.push(row.id)
       }
       return { lidos: pending.length, selados }
@@ -197,9 +214,9 @@ export interface IntegrityReport {
 
 const VERIFY_PAGE = 1000
 
-// Confere a cadeia inteira, do primeiro ao último registro selado. Não sela nada de ninguém (ver "quem sela o quê"
-// acima); só repete a selagem do que ESTE processo gravou e não conseguiu selar.
-export async function verifyAuditIntegrity({ settleMs = SETTLE_MS }: { settleMs?: number } = {}): Promise<IntegrityReport> {
+// Confere a cadeia inteira DA EMPRESA, do primeiro ao último registro selado. Não sela nada de ninguém (ver "quem sela o
+// quê" acima); só repete a selagem do que ESTE processo gravou e não conseguiu selar.
+export async function verifyAuditIntegrity({ empresaId, settleMs = SETTLE_MS }: { empresaId: number; settleMs?: number }): Promise<IntegrityReport> {
   await retryOwnUnsealed().catch(() => {}) // se ainda falhar, o registro aparece como sem selo, que é a verdade
 
   let verificados = 0
@@ -216,7 +233,7 @@ export async function verifyAuditIntegrity({ settleMs = SETTLE_MS }: { settleMs?
 
       while (!quebra) {
         const rows: SealedRow[] = await tx.auditLog.findMany({
-          where: { selo: { not: null }, seloSeq: cursor === null ? { not: null } : { gt: cursor } },
+          where: { empresaId, selo: { not: null }, seloSeq: cursor === null ? { not: null } : { gt: cursor } },
           orderBy: { seloSeq: "asc" },
           take: VERIFY_PAGE,
         })
@@ -248,7 +265,7 @@ export async function verifyAuditIntegrity({ settleMs = SETTLE_MS }: { settleMs?
       // Registro com selo mas SEM posição na cadeia: a leitura acima anda por posição e o ignoraria — apagar só a
       // posição não pode servir para esconder um registro mexido.
       const semPosicao = await tx.auditLog.findFirst({
-        where: { selo: { not: null }, seloSeq: null },
+        where: { empresaId, selo: { not: null }, seloSeq: null },
         orderBy: { id: "asc" },
         select: { id: true },
       })
@@ -258,7 +275,7 @@ export async function verifyAuditIntegrity({ settleMs = SETTLE_MS }: { settleMs?
       }
       // Posição repetida: a leitura por "maior que a última" pularia o segundo registro. Se a contagem de selados não
       // bate com a de conferidos, sobrou registro fora da cadeia.
-      const totalSelados = await tx.auditLog.count({ where: { selo: { not: null } } })
+      const totalSelados = await tx.auditLog.count({ where: { empresaId, selo: { not: null } } })
       if (totalSelados !== verificados) {
         quebra = { id: ultimoId ?? 0, tipo: "posicao", motivo: "Há registros selados que não entram na cadeia (posição repetida ou fora do intervalo): foi mexido diretamente no banco." }
       }
@@ -272,7 +289,7 @@ export async function verifyAuditIntegrity({ settleMs = SETTLE_MS }: { settleMs?
   // registro, que não é confiável (quem escreve no banco reescreve a data). Fora do instantâneo: precisa enxergar o que
   // foi selado durante a espera.
   if (!quebra) {
-    const primeiroSemSelo = () => prisma.auditLog.findFirst({ where: { selo: null }, orderBy: { id: "asc" }, select: { id: true } })
+    const primeiroSemSelo = () => prisma.auditLog.findFirst({ where: { empresaId, selo: null }, orderBy: { id: "asc" }, select: { id: true } })
     if (await primeiroSemSelo()) {
       if (settleMs > 0) await new Promise((resolve) => setTimeout(resolve, settleMs))
       const semSelo = await primeiroSemSelo()
@@ -286,6 +303,6 @@ export async function verifyAuditIntegrity({ settleMs = SETTLE_MS }: { settleMs?
     }
   }
 
-  const naoSelados = await prisma.auditLog.count({ where: { selo: null } })
+  const naoSelados = await prisma.auditLog.count({ where: { empresaId, selo: null } })
   return { integra: quebra === null, verificados, naoSelados, primeiroId, ultimoId, quebra }
 }

@@ -10,6 +10,7 @@ type Row = { id: number; empresaId: number; usuario: string; acao: string; detal
 const db = vi.hoisted(() => {
   const state = { rows: [] as Row[], nextId: 1, falhaTransacao: false }
   type Where = {
+    empresaId?: number
     selo?: null | { not: null }
     seloSeq?: null | { not: null } | { gt: number }
     id?: { in: number[] }
@@ -17,6 +18,7 @@ const db = vi.hoisted(() => {
   }
   type OrderBy = { id?: "asc" | "desc"; seloSeq?: "asc" | "desc" }
   const match = (r: Row, w: Where = {}) => {
+    if (w.empresaId !== undefined && r.empresaId !== w.empresaId) return false
     if (w.selo !== undefined && (w.selo === null ? r.selo !== null : r.selo === null)) return false
     if (w.seloSeq !== undefined) {
       if (w.seloSeq === null) {
@@ -90,7 +92,7 @@ const selarTodos = () => sealPending({ all: true })
 // O servidor sela o registro que ACABOU de gravar: aqui, o que está na "tabela" naquele momento.
 const sealOwnId = (id: number) => sealOwn(db.state.rows.find((r) => r.id === id)!)
 // Sem a espera de 1,5 s da verificação (nos testes a espera é zero, salvo o que testa a espera de propósito).
-const verificar = (opcoes: { settleMs?: number } = {}) => verifyAuditIntegrity({ settleMs: 0, ...opcoes })
+const verificar = (opcoes: { settleMs?: number; empresaId?: number } = {}) => verifyAuditIntegrity({ empresaId: 1, settleMs: 0, ...opcoes })
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -584,5 +586,70 @@ describe("registros sem selo (a DATA do registro não decide nada: só a espera 
     add(3)
     for (const id of [1, 2, 3]) await sealOwnId(id)
     expect(await verificar()).toMatchObject({ integra: true, verificados: 3 })
+  })
+})
+
+describe("uma cadeia por empresa", () => {
+  it("registros de empresas intercalados: cada empresa tem a sua cadeia, com posições a partir de 1", async () => {
+    add(1, { empresaId: 1 })
+    add(1, { empresaId: 2 })
+    add(1, { empresaId: 1 })
+    add(1, { empresaId: 2 })
+    for (const id of [1, 2, 3, 4]) await sealOwnId(id)
+
+    const posicoes = db.state.rows.map((r) => [r.empresaId, r.seloSeq])
+    expect(posicoes).toEqual([
+      [1, 1],
+      [2, 1],
+      [1, 2],
+      [2, 2],
+    ])
+    // O 2º registro de cada empresa encadeia no 1º da MESMA empresa.
+    expect(db.state.rows[2].seloAnterior).toBe(db.state.rows[0].selo)
+    expect(db.state.rows[3].seloAnterior).toBe(db.state.rows[1].selo)
+    expect(await verificar({ empresaId: 1 })).toMatchObject({ integra: true, verificados: 2 })
+    expect(await verificar({ empresaId: 2 })).toMatchObject({ integra: true, verificados: 2 })
+  })
+
+  it("eliminar (LGPD) uma empresa apaga a cadeia dela inteira e NÃO fura a das outras", async () => {
+    add(1, { empresaId: 1 })
+    add(2, { empresaId: 2 })
+    add(1, { empresaId: 1 })
+    for (const id of [1, 2, 3, 4]) await sealOwnId(id)
+
+    db.state.rows = db.state.rows.filter((r) => r.empresaId !== 2) // cascata da eliminação
+    expect(await verificar({ empresaId: 1 })).toMatchObject({ integra: true, verificados: 2 })
+    add(1, { empresaId: 1 })
+    await sealOwnId(5)
+    expect(await verificar({ empresaId: 1 })).toMatchObject({ integra: true, verificados: 3 })
+  })
+
+  it("adulteração numa empresa é apontada só nela, e não suspende a selagem das outras", async () => {
+    add(1, { empresaId: 1 })
+    add(1, { empresaId: 2 })
+    for (const id of [1, 2]) await sealOwnId(id)
+    db.state.rows[1].detalhe = "mexido no banco"
+
+    expect(await verificar({ empresaId: 2 })).toMatchObject({ integra: false, quebra: { id: 2, tipo: "conteudo" } })
+    add(1, { empresaId: 1 })
+    await sealOwnId(3)
+    expect(db.state.rows[2].seloSeq).toBe(2)
+    expect(await verificar({ empresaId: 1 })).toMatchObject({ integra: true, verificados: 2 })
+  })
+
+  it("selar pendentes à mão com empresaId: só os daquela empresa", async () => {
+    add(2, { empresaId: 1 })
+    add(2, { empresaId: 2 })
+    const r = await sealPendingDetailed({ all: true, empresaId: 2 })
+    expect(r).toEqual({ count: 2, primeiroId: 3, ultimoId: 4 })
+    expect(db.state.rows.filter((row) => row.selo !== null).map((row) => row.id)).toEqual([3, 4])
+  })
+
+  it("registro sem selo de OUTRA empresa não é problema na verificação desta", async () => {
+    add(1, { empresaId: 1 })
+    await sealOwnId(1)
+    add(1, { empresaId: 2 }) // gravado por outro servidor, ainda sem selo
+    expect(await verificar({ empresaId: 1 })).toMatchObject({ integra: true, naoSelados: 0 })
+    expect(await verificar({ empresaId: 2 })).toMatchObject({ integra: false, quebra: { tipo: "sem-selo" } })
   })
 })

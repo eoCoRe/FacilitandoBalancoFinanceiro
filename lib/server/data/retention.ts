@@ -53,21 +53,29 @@ export async function purgeExpiredData(now: Date = new Date()): Promise<PurgeRes
   // que ficou depois de um registro ainda dentro do prazo espera o prefixo passar (some no expurgo seguinte).
   // Tudo sob a MESMA trava da selagem: sem ela, um registro sendo selado neste instante (que já leu o "último selado")
   // poderia ficar apontando para um registro que o expurgo acabou de apagar.
+  // Cada empresa tem a SUA cadeia (ver audit-seal.ts), então o prefixo é calculado e apagado empresa por empresa.
   const auditCutoff = daysBefore(auditLogRetentionDays, now)
   const auditLogsApagados = await prisma.$transaction(
     async (tx) => {
       await tx.$queryRaw`SELECT pg_advisory_xact_lock(${SEAL_LOCK_KEY})::text`
-      const primeiroMantido = await tx.auditLog.aggregate({
-        _min: { seloSeq: true },
-        where: { criadoEm: { gte: auditCutoff }, seloSeq: { not: null } },
-      })
-      const limiteDaCadeia = primeiroMantido._min.seloSeq
-      return tx.auditLog.deleteMany({
-        where: {
-          criadoEm: { lt: auditCutoff },
-          ...(limiteDaCadeia === null ? {} : { OR: [{ selo: null }, { seloSeq: { lt: limiteDaCadeia } }] }),
-        },
-      })
+      const comVencidos = await tx.auditLog.groupBy({ by: ["empresaId"], where: { criadoEm: { lt: auditCutoff } } })
+      let apagados = 0
+      for (const { empresaId } of comVencidos) {
+        const primeiroMantido = await tx.auditLog.aggregate({
+          _min: { seloSeq: true },
+          where: { empresaId, criadoEm: { gte: auditCutoff }, seloSeq: { not: null } },
+        })
+        const limiteDaCadeia = primeiroMantido._min.seloSeq
+        const { count } = await tx.auditLog.deleteMany({
+          where: {
+            empresaId,
+            criadoEm: { lt: auditCutoff },
+            ...(limiteDaCadeia === null ? {} : { OR: [{ selo: null }, { seloSeq: { lt: limiteDaCadeia } }] }),
+          },
+        })
+        apagados += count
+      }
+      return { count: apagados }
     },
     { timeout: 120_000, maxWait: 30_000 },
   )

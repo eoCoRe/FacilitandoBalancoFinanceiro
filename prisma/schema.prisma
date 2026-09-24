@@ -150,6 +150,7 @@ model AuditLog {
   seloSeq      Int?     @map("selo_seq")
 
   @@index([seloSeq])
+  @@index([empresaId, seloSeq])
   @@map("audit_log")
 }
 

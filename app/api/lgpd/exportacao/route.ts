@@ -6,7 +6,7 @@ import { requirePermission } from "@/lib/server/auth/authz"
 import { exportEmpresaData } from "@/lib/server/data/lgpd"
 
 // Direito de acesso e portabilidade (LGPD Art. 18, II e V) — devolve tudo que o sistema
-// tem sobre a empresa (protótipo é single-tenant). Só o perfil administrador (permissão "lgpd").
+// tem sobre a empresa em análise. Só o perfil administrador (permissão "lgpd").
 export async function GET() {
   try {
     const admin = await requirePermission("lgpd")

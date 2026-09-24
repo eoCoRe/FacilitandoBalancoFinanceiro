@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 const { prisma } = vi.hoisted(() => ({
   prisma: {
-    auditLog: { deleteMany: vi.fn(), aggregate: vi.fn() },
+    auditLog: { deleteMany: vi.fn(), aggregate: vi.fn(), groupBy: vi.fn() },
     $transaction: vi.fn(),
     $queryRaw: vi.fn(),
     extracao: { deleteMany: vi.fn() },
@@ -20,6 +20,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   prisma.auditLog.deleteMany.mockResolvedValue({ count: 0 })
   prisma.auditLog.aggregate.mockResolvedValue({ _min: { seloSeq: null } }) // nenhum registro selado dentro do prazo
+  prisma.auditLog.groupBy.mockResolvedValue([{ empresaId: 1 }]) // uma empresa com registros vencidos
   prisma.$transaction.mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) => fn(prisma))
   prisma.$queryRaw.mockResolvedValue([])
   prisma.extracao.deleteMany.mockResolvedValue({ count: 0 })
@@ -37,7 +38,7 @@ describe("purgeExpiredData", () => {
     const auditCutoff = new Date(NOW.getTime() - DEFAULT_AUDIT_LOG_RETENTION_DAYS * 24 * 60 * 60 * 1000)
     const extracaoCutoff = new Date(NOW.getTime() - DEFAULT_EXTRACAO_RETENTION_DAYS * 24 * 60 * 60 * 1000)
 
-    expect(prisma.auditLog.deleteMany).toHaveBeenCalledWith({ where: { criadoEm: { lt: auditCutoff } } })
+    expect(prisma.auditLog.deleteMany).toHaveBeenCalledWith({ where: { empresaId: 1, criadoEm: { lt: auditCutoff } } })
     expect(prisma.extracao.deleteMany).toHaveBeenCalledWith({ where: { criadoEm: { lt: extracaoCutoff } } })
   })
 
@@ -50,7 +51,7 @@ describe("purgeExpiredData", () => {
     const auditCutoff = new Date(NOW.getTime() - 30 * 24 * 60 * 60 * 1000)
     const extracaoCutoff = new Date(NOW.getTime() - 10 * 24 * 60 * 60 * 1000)
 
-    expect(prisma.auditLog.deleteMany).toHaveBeenCalledWith({ where: { criadoEm: { lt: auditCutoff } } })
+    expect(prisma.auditLog.deleteMany).toHaveBeenCalledWith({ where: { empresaId: 1, criadoEm: { lt: auditCutoff } } })
     expect(prisma.extracao.deleteMany).toHaveBeenCalledWith({ where: { criadoEm: { lt: extracaoCutoff } } })
   })
 
@@ -63,7 +64,7 @@ describe("purgeExpiredData", () => {
     const auditCutoff = new Date(NOW.getTime() - DEFAULT_AUDIT_LOG_RETENTION_DAYS * 24 * 60 * 60 * 1000)
     const extracaoCutoff = new Date(NOW.getTime() - DEFAULT_EXTRACAO_RETENTION_DAYS * 24 * 60 * 60 * 1000)
 
-    expect(prisma.auditLog.deleteMany).toHaveBeenCalledWith({ where: { criadoEm: { lt: auditCutoff } } })
+    expect(prisma.auditLog.deleteMany).toHaveBeenCalledWith({ where: { empresaId: 1, criadoEm: { lt: auditCutoff } } })
     expect(prisma.extracao.deleteMany).toHaveBeenCalledWith({ where: { criadoEm: { lt: extracaoCutoff } } })
   })
 
@@ -105,7 +106,7 @@ describe("o expurgo da auditoria só apaga um PREFIXO da cadeia de selos", () =>
     await purgeExpiredData(NOW)
     expect(prisma.auditLog.aggregate).toHaveBeenCalledWith({
       _min: { seloSeq: true },
-      where: { criadoEm: { gte: CORTE }, seloSeq: { not: null } },
+      where: { empresaId: 1, criadoEm: { gte: CORTE }, seloSeq: { not: null } },
     })
   })
 
@@ -113,14 +114,38 @@ describe("o expurgo da auditoria só apaga um PREFIXO da cadeia de selos", () =>
     prisma.auditLog.aggregate.mockResolvedValue({ _min: { seloSeq: 42 } })
     await purgeExpiredData(NOW)
     expect(prisma.auditLog.deleteMany).toHaveBeenCalledWith({
-      where: { criadoEm: { lt: CORTE }, OR: [{ selo: null }, { seloSeq: { lt: 42 } }] },
+      where: { empresaId: 1, criadoEm: { lt: CORTE }, OR: [{ selo: null }, { seloSeq: { lt: 42 } }] },
     })
   })
 
   it("sem nenhum registro selado dentro do prazo, tudo o que venceu pode sair (a cadeia inteira é velha)", async () => {
     prisma.auditLog.aggregate.mockResolvedValue({ _min: { seloSeq: null } })
     await purgeExpiredData(NOW)
-    expect(prisma.auditLog.deleteMany).toHaveBeenCalledWith({ where: { criadoEm: { lt: CORTE } } })
+    expect(prisma.auditLog.deleteMany).toHaveBeenCalledWith({ where: { empresaId: 1, criadoEm: { lt: CORTE } } })
+  })
+
+  it("cada empresa tem a sua cadeia: o prefixo é calculado e apagado por empresa, e as contagens somam", async () => {
+    prisma.auditLog.groupBy.mockResolvedValue([{ empresaId: 1 }, { empresaId: 2 }])
+    prisma.auditLog.aggregate.mockImplementation(async ({ where }: { where: { empresaId: number } }) => ({
+      _min: { seloSeq: where.empresaId === 1 ? 42 : null },
+    }))
+    prisma.auditLog.deleteMany.mockResolvedValueOnce({ count: 5 }).mockResolvedValueOnce({ count: 3 })
+
+    const result = await purgeExpiredData(NOW)
+
+    expect(prisma.auditLog.groupBy).toHaveBeenCalledWith({ by: ["empresaId"], where: { criadoEm: { lt: CORTE } } })
+    expect(prisma.auditLog.deleteMany).toHaveBeenCalledWith({
+      where: { empresaId: 1, criadoEm: { lt: CORTE }, OR: [{ selo: null }, { seloSeq: { lt: 42 } }] },
+    })
+    expect(prisma.auditLog.deleteMany).toHaveBeenCalledWith({ where: { empresaId: 2, criadoEm: { lt: CORTE } } })
+    expect(result.auditLogsApagados).toBe(8)
+  })
+
+  it("nenhuma empresa com registro vencido: não apaga nada da auditoria", async () => {
+    prisma.auditLog.groupBy.mockResolvedValue([])
+    const result = await purgeExpiredData(NOW)
+    expect(prisma.auditLog.deleteMany).not.toHaveBeenCalled()
+    expect(result.auditLogsApagados).toBe(0)
   })
 
   it("roda sob a MESMA trava da selagem (um selo em andamento não pode apontar para um registro recém-apagado)", async () => {

@@ -16,7 +16,7 @@ export async function POST() {
     const user = await requirePermission("exportar-auditoria")
     const empresa = await getEmpresaAtual()
 
-    const relatorio = await verifyAuditIntegrity()
+    const relatorio = await verifyAuditIntegrity({ empresaId: empresa.id })
     await logAudit(
       empresa.id,
       "Integridade da auditoria verificada",

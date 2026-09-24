@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { getEmpresaAtual } from "@/lib/server/data/empresa"
+import { EMPRESA_COOKIE, getEmpresaAtual } from "@/lib/server/data/empresa"
 import { handleRouteError } from "@/lib/server/http"
 import { requirePermission } from "@/lib/server/auth/authz"
 import { eraseEmpresaData } from "@/lib/server/data/lgpd"
@@ -27,7 +27,10 @@ export async function DELETE(request: Request) {
       solicitadoPor ? `${solicitadoPor} (executado por ${admin.email})` : admin.email,
     )
 
-    return NextResponse.json(resultado)
+    // A escolha apontava para a empresa que deixou de existir: a próxima tela abre na primeira que sobrou.
+    const response = NextResponse.json(resultado)
+    response.cookies.delete(EMPRESA_COOKIE)
+    return response
   } catch (error) {
     return handleRouteError(error)
   }

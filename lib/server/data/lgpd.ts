@@ -2,8 +2,8 @@ import { prisma } from "@/lib/db"
 import { ValidationError } from "@/lib/server/validation"
 
 // Direito de acesso e portabilidade (LGPD Art. 18, II e V) — snapshot de tudo que o
-// sistema tem sobre a empresa (protótipo é single-tenant, então "a empresa" é sempre a
-// mesma), pronto para entregar ao titular ou a quem ele autorizar.
+// sistema tem sobre UMA empresa (a que está em análise), pronto para entregar ao titular
+// ou a quem ele autorizar.
 export async function exportEmpresaData(empresaId: number) {
   const empresa = await prisma.empresa.findUnique({
     where: { id: empresaId },
@@ -26,7 +26,8 @@ export async function exportEmpresaData(empresaId: number) {
 // apagados — só Exercicio/Valor/Extracao/ValorExtraido/AuditLog da empresa, via cascade
 // do schema ao apagar Empresa. O próprio apagamento é registrado em LgpdErasureLog (sem
 // relação com Empresa, de propósito) na mesma transação, para sobreviver à exclusão que
-// documenta.
+// documenta. As outras empresas não são afetadas: cada uma tem a sua cadeia de selos na
+// auditoria (ver audit-seal.ts), então a cadeia desta sai inteira, sem furar as outras.
 export async function eraseEmpresaData(empresaId: number, solicitadoPor?: string) {
   const empresa = await prisma.empresa.findUnique({ where: { id: empresaId } })
   if (!empresa) throw new ValidationError("Empresa não encontrada.")
