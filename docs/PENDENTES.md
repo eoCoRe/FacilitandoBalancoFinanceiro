@@ -18,17 +18,14 @@ sinônimos e distância de edição. **Não há IA nenhuma.** O TCC exige IA, en
 - [ ] Revisão humana continua obrigatória (human-in-the-loop): a IA só sugere.
 - [ ] PDF escaneado (imagem): hoje não é lido; um modelo com visão resolve.
 
-## 2. Várias empresas (recomendado)
+## 2. Várias empresas — FEITO (24/09, branch `tcc/ajustes`)
 
-Hoje o sistema é **uma empresa só** (`lib/server/data/empresa.ts` sempre pega a primeira). Anexar o balanço de
-outra empresa **sobrescreve** os valores da atual. Para o analista trabalhar com vários clientes:
-
-- [ ] Tela de cadastro de empresas (CNPJ, razão social, setor).
-- [ ] Seletor de empresa no topo; todas as telas mostram a empresa escolhida.
-- [ ] Rotas do servidor usam a empresa escolhida em vez de `getEmpresaAtual()` (o banco já liga `Exercicio` e
-      `AuditLog` à `Empresa`).
-- [ ] Auditoria (cadeia de selos) e LGPD (exportação/eliminação) por empresa.
-- [ ] Estimativa: 4 a 6 dias.
+- [x] Cadastro de empresas (CNPJ validado e único), coordenador ou acima.
+- [x] Seletor de empresa na barra lateral (busca por razão social ou CNPJ); trocar recarrega os dados.
+- [x] Servidor usa a empresa escolhida (`getEmpresaAtual()`, cookie `cb_empresa`).
+- [x] Uma cadeia de selos de auditoria por empresa; eliminação LGPD de uma não fura a das outras.
+- [x] Testes (unitários + teste de fumaça contra Postgres real).
+- [ ] Conferir na tela (você).
 
 ## 3. Esperando o PDF com as regras do TCC
 

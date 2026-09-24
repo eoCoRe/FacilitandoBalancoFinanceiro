@@ -1,6 +1,6 @@
 # Central de Balanços
 
-Plataforma de análise de balanços para analistas de crédito: cadastro do Plano de Contas,
+Plataforma de análise de balanços para analistas de crédito, com **várias empresas** (seletor na barra lateral; os dados e a trilha de auditoria de cada uma ficam separados): cadastro do Plano de Contas,
 tabulação do Balanço/DRE por exercício, demonstrações consolidadas, índices financeiros
 calculados automaticamente, parecer de crédito (Opinião de Venda) e a tela de **Extração de PDF**,
 onde o analista confere os valores lidos de um Balanço/DRE em PDF antes de confirmá-los para a
@@ -100,7 +100,7 @@ com opção de o administrador exigir por perfil. Recuperação e código por e-
 SMTP (`SMTP_*` no `.env`); sem ele, em desenvolvimento o e-mail aparece no console do
 servidor e em produção esses recursos ficam desligados. O aplicativo autenticador não depende de e-mail.
 Três perfis, cumulativos: **analista** (consulta e lança valores/extrações), **coordenador**
-(+ Plano de Contas, cadastro da empresa, marcar exercício como auditado e exportar a auditoria) e **administrador** (+ usuários e LGPD). A regra
+(+ Plano de Contas, cadastrar e editar empresas, marcar exercício como auditado e exportar a auditoria) e **administrador** (+ usuários e LGPD). A regra
 está em `lib/permissions.ts` e é imposta no servidor em toda rota de `app/api/`; detalhes e
 limitações em `SECURITY.md`.
 
