@@ -96,6 +96,49 @@ describe("extractRowsFromLines", () => {
     expect(new Set(rows.map((r) => r.id)).size).toBe(rows.length)
   })
 
+  it("cabeçalho com o ano mais recente À ESQUERDA: pega essa coluna, não a última (balanço real: Set/2024 | Dez/2023)", () => {
+    const rows = extractRowsFromLines(
+      [
+        { text: "Descricao da conta----------Sld.de Setembro 2024--Sld.de Dezembro 2023", page: 1 },
+        { text: "DISPONIBILIDADES 2.278.211,52 1.431.042,04", page: 1 },
+        { text: "CLIENTES 27.003.959,54", page: 1 }, // uma coluna só: fica a única que há
+      ],
+      buildAccounts(),
+    )
+    expect(rows.map((r) => [r.code, r.value])).toEqual([
+      ["1.1.1", 2278211.52],
+      ["1.1.3", 27003959.54],
+    ])
+  })
+
+  it("o cabeçalho vale só para a própria página: a seguinte, sem anos no cabeçalho, volta à última coluna", () => {
+    const rows = extractRowsFromLines(
+      [
+        { text: "Saldo 2024 Saldo 2023", page: 1 },
+        { text: "Disponibilidades 900,00 800,00", page: 1 },
+        { text: "Fornecedores 12,06 3.100,00", page: 2 }, // coluna de % antes do valor, como numa DRE
+      ],
+      buildAccounts(),
+    )
+    expect(rows.map((r) => r.value)).toEqual([900, 3100])
+  })
+
+  it("balancete com passivo em sinal de crédito (\"28.999,50-\"): o passivo entra POSITIVO", () => {
+    const rows = extractRowsFromLines(
+      [
+        { text: "Disponibilidades 1.000,00", page: 1 },
+        { text: "Fornecedores 28.999,50-", page: 1 },
+      ],
+      buildAccounts(),
+    )
+    expect(rows.map((r) => r.value)).toEqual([1000, 28999.5])
+  })
+
+  it("passivo já positivo (convenção comum) não tem o sinal mexido", () => {
+    const rows = extractRowsFromLines([{ text: "Fornecedores 3.100,00", page: 1 }], buildAccounts())
+    expect(rows[0].value).toBe(3100)
+  })
+
   it("retorna lista vazia quando nenhuma linha tem conteúdo extraível", () => {
     expect(extractRowsFromLines([{ text: "BALANÇO PATRIMONIAL", page: 1 }], buildAccounts())).toEqual([])
   })

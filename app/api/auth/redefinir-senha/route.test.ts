@@ -86,7 +86,8 @@ describe("POST /api/auth/redefinir-senha", () => {
     verification.consumeResetToken.mockClear()
     expect((await post({ token: "ID.SEGREDO", novaSenha: "nova-senha-segura-1" })).status).toBe(429)
     expect(verification.consumeResetToken).not.toHaveBeenCalled()
-  })
+    // 10 hashes scrypt reais (a senha é "hasheada" antes de gastar o link): em máquina mais lenta passa dos 5 s padrão.
+  }, 30_000)
 
   it("se a gravação da senha falhar DEPOIS de gastar o link, o link é devolvido (a pessoa não fica sem)", async () => {
     verification.consumeResetToken.mockResolvedValue(5)

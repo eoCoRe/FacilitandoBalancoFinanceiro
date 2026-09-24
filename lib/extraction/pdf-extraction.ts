@@ -4,7 +4,7 @@
 
 import { collectLeaves, type Account } from "../financial-data"
 import { matchAccountName } from "./account-matcher"
-import { extractLabelAndValue } from "./number-parsing"
+import { extractLabelAndValue, newestColumnFromRight } from "./number-parsing"
 import { extractPdfText } from "./pdf-text"
 
 export interface ExtractedRow {
@@ -27,13 +27,37 @@ function semConta(row: ExtractedRow): ExtractedRow {
   return { ...row, code: null, suggestedName: row.sourceLabel }
 }
 
+// Balancete no padrão débito/crédito mostra o passivo e o PL com sinal de crédito ("28.999.279,50-"). O Plano de
+// Contas guarda o passivo POSITIVO (é assim que os índices o usam), então, se a maioria das contas de passivo lidas
+// (código "2...", o padrão brasileiro) veio negativa, o documento usa essa convenção e o sinal delas é invertido —
+// inclusive o de um PL com prejuízo, que no balancete aparece positivo. O texto lido fica intacto em `sourceLabel`.
+function normalizeCreditSign(rows: ExtractedRow[]): ExtractedRow[] {
+  const passivo = rows.filter((r) => r.code?.startsWith("2") && r.value !== 0)
+  const negativos = passivo.filter((r) => r.value < 0).length
+  if (negativos * 2 <= passivo.length) return rows
+  return rows.map((r) => (r.code?.startsWith("2") && r.value !== 0 ? { ...r, value: -r.value } : r))
+}
+
 export function extractRowsFromLines(lines: { text: string; page: number }[], accounts: Account[]): ExtractedRow[] {
   const leaves = collectLeaves(accounts)
   const rows: ExtractedRow[] = []
   const rowIndexByCode = new Map<string, number>()
+  // Coluna do exercício mais recente, descoberta pelo cabeçalho da página (cada página repete o seu; uma página
+  // sem cabeçalho de anos, como uma DRE com coluna de %, volta ao padrão: a última coluna).
+  let page = -1
+  let columnFromRight = 0
 
   lines.forEach((line, i) => {
-    const parsed = extractLabelAndValue(line.text)
+    if (line.page !== page) {
+      page = line.page
+      columnFromRight = 0
+    }
+    const header = newestColumnFromRight(line.text)
+    if (header !== null) {
+      columnFromRight = header
+      return
+    }
+    const parsed = extractLabelAndValue(line.text, columnFromRight)
     if (!parsed) return
 
     const { account, score } = matchAccountName(parsed.label, leaves)
@@ -70,7 +94,7 @@ export function extractRowsFromLines(lines: { text: string; page: number }[], ac
     rows.push(row)
   })
 
-  return rows
+  return normalizeCreditSign(rows)
 }
 
 export interface PdfExtractionResult {

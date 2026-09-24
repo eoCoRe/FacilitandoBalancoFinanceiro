@@ -16,6 +16,18 @@ const SYNONYMS: Record<string, string> = {
   "emprestimos bancarios": "emprestimos e financiamentos",
   financiamentos: "emprestimos e financiamentos",
   "patrimonio liquido total": "patrimonio liquido",
+  // Vistos em balanços reais de escritórios de contabilidade (2024/2025).
+  disponivel: "disponibilidades",
+  "caixa e bancos conta movimento": "disponibilidades",
+  "creditos de clientes": "contas a receber de clientes",
+  "clientes a receber": "contas a receber de clientes",
+  "estoque de mercadorias": "estoques",
+  "estoques de mercadorias": "estoques",
+  "mercadorias para revenda": "estoques",
+  "impostos a recolher": "obrigacoes tributarias",
+  "obrigacoes fiscais": "obrigacoes tributarias",
+  "reserva de lucro": "reservas de lucros",
+  "reserva de lucros": "reservas de lucros",
 }
 
 function normalize(s: string): string {
