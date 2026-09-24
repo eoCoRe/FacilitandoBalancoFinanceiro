@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { downloadTextFile } from "@/lib/download"
 import { balancoCsv, balanceteCsv, dfcCsv, dreCsv, exportFileName } from "@/lib/export-csv"
 import { GLOSSARY } from "@/lib/glossary"
+import { basesVerticaisBalanco, formatPercentual, percentual, variacao, type ModoAnalise } from "@/lib/analise-hv"
 import { useFinancialStore } from "@/lib/store"
 import {
   DRE_LINES,
@@ -68,8 +69,18 @@ function Head({ exercicioIds }: { exercicioIds: string[] }) {
   )
 }
 
-function BalancoTable({ accounts, exercicioIds, scale }: { accounts: Account[]; exercicioIds: string[]; scale: Scale }) {
+function BalancoTable({ accounts, exercicioIds, scale, modo }: { accounts: Account[]; exercicioIds: string[]; scale: Scale; modo: ModoAnalise }) {
   const rows = flattenAccounts(accounts)
+  const bases = useMemo(
+    () => Object.fromEntries(exercicioIds.map((id) => [id, basesVerticaisBalanco(accounts, id)])),
+    [accounts, exercicioIds],
+  )
+  const celula = (account: Account, id: string, i: number) => {
+    const valor = sumAccount(account, id)
+    if (modo === "av") return formatPercentual(percentual(valor, bases[id].get(account.code)))
+    if (modo === "ah") return i === 0 ? "—" : formatPercentual(variacao(valor, sumAccount(account, exercicioIds[i - 1])), true)
+    return formatScaled(valor, scale)
+  }
   return (
     <TableShell>
       <Head exercicioIds={exercicioIds} />
@@ -95,7 +106,7 @@ function BalancoTable({ accounts, exercicioIds, scale }: { accounts: Account[]; 
                   )}
                 />
               </td>
-              {exercicioIds.map((id) => (
+              {exercicioIds.map((id, i) => (
                 <td
                   key={id}
                   className={cn(
@@ -104,7 +115,7 @@ function BalancoTable({ accounts, exercicioIds, scale }: { accounts: Account[]; 
                     isRoot && "underline decoration-border decoration-2 underline-offset-4",
                   )}
                 >
-                  {formatScaled(sumAccount(account, id), scale)}
+                  {celula(account, id, i)}
                 </td>
               ))}
             </tr>
@@ -119,11 +130,19 @@ function DreTable({
   exercicioIds,
   computedByPeriod,
   scale,
+  modo,
 }: {
   exercicioIds: string[]
   computedByPeriod: Record<string, Record<string, number | undefined>>
   scale: Scale
+  modo: ModoAnalise
 }) {
+  const celula = (lineId: string, id: string, i: number) => {
+    const valor = computedByPeriod[id]?.[lineId]
+    if (modo === "av") return formatPercentual(percentual(valor, computedByPeriod[id]?.["receita-liquida"]))
+    if (modo === "ah") return i === 0 ? "—" : formatPercentual(variacao(valor, computedByPeriod[exercicioIds[i - 1]]?.[lineId]), true)
+    return formatScaled(valor, scale)
+  }
   return (
     <TableShell>
       <Head exercicioIds={exercicioIds} />
@@ -142,7 +161,7 @@ function DreTable({
                   )}
                 />
               </td>
-              {exercicioIds.map((id) => {
+              {exercicioIds.map((id, i) => {
                 const value = computedByPeriod[id]?.[line.id]
                 return (
                   <td
@@ -158,7 +177,7 @@ function DreTable({
                             : "text-muted-foreground",
                     )}
                   >
-                    {formatScaled(value, scale)}
+                    {celula(line.id, id, i)}
                   </td>
                 )
               })}
@@ -249,6 +268,8 @@ export function DemonstracoesScreen() {
   const store = useFinancialStore()
   const [tab, setTab] = useState<SubTab>("balanco")
   const [scale, setScale] = useState<Scale>("milhares")
+  const [modo, setModo] = useState<ModoAnalise>("valores")
+  const temAnalise = tab === "balanco" || tab === "dre"
 
   const exercicioIds = useMemo(() => store.exercicios.map((e) => e.id), [store.exercicios])
   const lastPeriod = exercicioIds[exercicioIds.length - 1]
@@ -267,13 +288,13 @@ export function DemonstracoesScreen() {
     return { period: id, ok: a !== undefined && p !== undefined && a === p }
   })
 
-  // Exporta a aba que está na tela, na escala escolhida (o arquivo confere com o que se vê).
+  // Exporta a aba que está na tela, na escala escolhida e com a AV/AH escolhida (o arquivo confere com o que se vê).
   function exportar() {
     const csv =
       tab === "balanco"
-        ? balancoCsv(store.accounts, exercicioIds, scale)
+        ? balancoCsv(store.accounts, exercicioIds, scale, modo)
         : tab === "dre"
-          ? dreCsv(store.dreByExercicio, exercicioIds, scale)
+          ? dreCsv(store.dreByExercicio, exercicioIds, scale, modo)
           : tab === "dfc"
             ? dfcCsv(store.dfc, exercicioIds, scale)
             : balanceteCsv(store.accounts, lastPeriod, scale)
@@ -321,8 +342,44 @@ export function DemonstracoesScreen() {
       </div>
 
       <div className="px-4 md:px-8 py-6">
-        {tab === "balanco" && <BalancoTable accounts={store.accounts} exercicioIds={exercicioIds} scale={scale} />}
-        {tab === "dre" && <DreTable exercicioIds={exercicioIds} computedByPeriod={computedByPeriod} scale={scale} />}
+        {temAnalise && (
+          <div className="mb-4 flex flex-wrap items-center gap-3">
+            <div className="inline-flex rounded-md border border-border p-0.5" role="radiogroup" aria-label="O que mostrar nas colunas">
+              {(
+                [
+                  ["valores", "Valores"],
+                  ["av", "AV %"],
+                  ["ah", "AH %"],
+                ] as const
+              ).map(([id, rotulo]) => (
+                <button
+                  key={id}
+                  type="button"
+                  role="radio"
+                  aria-checked={modo === id}
+                  onClick={() => setModo(id)}
+                  className={cn(
+                    "rounded px-2.5 py-1 text-xs font-medium transition-colors",
+                    modo === id ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {rotulo}
+                </button>
+              ))}
+            </div>
+            {modo !== "valores" && (
+              <p className="text-xs text-muted-foreground">
+                {modo === "av"
+                  ? tab === "balanco"
+                    ? "Análise vertical: quanto cada conta representa do Ativo Total (lado do ativo) ou do Passivo + PL (lado do passivo), em cada exercício."
+                    : "Análise vertical: quanto cada linha representa da Receita Líquida, em cada exercício."
+                  : "Análise horizontal: quanto cada linha variou em relação ao exercício da coluna anterior."}
+              </p>
+            )}
+          </div>
+        )}
+        {tab === "balanco" && <BalancoTable accounts={store.accounts} exercicioIds={exercicioIds} scale={scale} modo={modo} />}
+        {tab === "dre" && <DreTable exercicioIds={exercicioIds} computedByPeriod={computedByPeriod} scale={scale} modo={modo} />}
         {tab === "dfc" && <StaticStatementTable lines={store.dfc} exercicioIds={exercicioIds} scale={scale} />}
         {tab === "balancete" && <BalanceteTable accounts={store.accounts} period={lastPeriod} scale={scale} />}
       </div>

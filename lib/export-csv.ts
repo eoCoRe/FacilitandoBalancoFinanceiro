@@ -5,6 +5,7 @@
 // vírgula decimal (o Excel em português entende); célula sem dado (RN04, "dados insuficientes") sai VAZIA,
 // nunca zero; e o cabeçalho de cada exercício diz a unidade ("1T2026 (R$ mil)").
 
+import { basesVerticaisBalanco, percentual, variacao, type ModoAnalise } from "./analise-hv"
 import { toCsv } from "./csv"
 import {
   applyScale,
@@ -37,21 +38,54 @@ const scaled = (value: number | undefined, scale: Scale): string =>
 
 const periodHeader = (id: string, scale: Scale): string => `${id} (${UNIT_LABEL[scale]})`
 
-export function balancoCsv(accounts: Account[], exercicioIds: string[], scale: Scale): string {
+// Com AV ou AH na tela, o arquivo leva os valores E as colunas de percentual do modo (uma por exercício; na AH o primeiro
+// exercício não tem anterior e fica vazio).
+const analiseHeaders = (ids: string[], modo: ModoAnalise): string[] =>
+  modo === "valores" ? [] : ids.map((id) => `${id} (${modo === "av" ? "AV" : "AH"} %)`)
+
+export function balancoCsv(accounts: Account[], exercicioIds: string[], scale: Scale, modo: ModoAnalise = "valores"): string {
+  const bases = Object.fromEntries(exercicioIds.map((id) => [id, basesVerticaisBalanco(accounts, id)]))
+  const analise = (account: Account): string[] =>
+    modo === "valores"
+      ? []
+      : exercicioIds.map((id, i) =>
+          num(
+            modo === "av"
+              ? percentual(sumAccount(account, id), bases[id].get(account.code))
+              : i === 0
+                ? undefined
+                : variacao(sumAccount(account, id), sumAccount(account, exercicioIds[i - 1])),
+            1,
+          ),
+        )
   const rows = flattenAccounts(accounts).map(({ account, depth }) => [
     account.code,
     account.name,
     depth,
     ...exercicioIds.map((id) => scaled(sumAccount(account, id), scale)),
+    ...analise(account),
   ])
-  return toCsv(["Código", "Conta", "Nível", ...exercicioIds.map((id) => periodHeader(id, scale))], rows)
+  return toCsv(["Código", "Conta", "Nível", ...exercicioIds.map((id) => periodHeader(id, scale)), ...analiseHeaders(exercicioIds, modo)], rows)
 }
 
-export function dreCsv(dreByExercicio: Record<string, DreValues>, exercicioIds: string[], scale: Scale): string {
+export function dreCsv(dreByExercicio: Record<string, DreValues>, exercicioIds: string[], scale: Scale, modo: ModoAnalise = "valores"): string {
   const computed = Object.fromEntries(exercicioIds.map((id) => [id, computeDre(dreByExercicio[id] ?? {})]))
   const lines = [...DRE_LINES.map((l) => ({ id: l.id, name: l.name })), { id: DRE_MEMO_LINE.id, name: DRE_MEMO_LINE.name }]
-  const rows = lines.map((line) => [line.name, ...exercicioIds.map((id) => scaled(computed[id][line.id], scale))])
-  return toCsv(["Descrição", ...exercicioIds.map((id) => periodHeader(id, scale))], rows)
+  const analise = (lineId: string): string[] =>
+    modo === "valores"
+      ? []
+      : exercicioIds.map((id, i) =>
+          num(
+            modo === "av"
+              ? percentual(computed[id][lineId], computed[id]["receita-liquida"])
+              : i === 0
+                ? undefined
+                : variacao(computed[id][lineId], computed[exercicioIds[i - 1]][lineId]),
+            1,
+          ),
+        )
+  const rows = lines.map((line) => [line.name, ...exercicioIds.map((id) => scaled(computed[id][line.id], scale)), ...analise(line.id)])
+  return toCsv(["Descrição", ...exercicioIds.map((id) => periodHeader(id, scale)), ...analiseHeaders(exercicioIds, modo)], rows)
 }
 
 export function dfcCsv(lines: StaticLine[], exercicioIds: string[], scale: Scale): string {

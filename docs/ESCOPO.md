@@ -15,7 +15,8 @@ Estimativas em **sessões** de trabalho como a de 24/09 (2 a 3 horas cada, eu pr
 | D4 | **Publicar, mas não na Vercel** (plataforma a definir) |
 | D6 | Em explicação |
 | D7 | **Feito**: registrar o parecer (decisão, limite, validade, justificativa) com histórico imutável; cálculo do parecer corrigido |
-| D8, D9 | **SIM** |
+| D9 | **Feito**: análise vertical e horizontal no Balanço e na DRE (tela e CSV) |
+| D8 | **SIM** (junto com a IA, D2) |
 | D10 | **Feito**: medianas setoriais da CVM (Dados Abertos, DFP 2025), `pnpm setores:atualizar` |
 
 ---

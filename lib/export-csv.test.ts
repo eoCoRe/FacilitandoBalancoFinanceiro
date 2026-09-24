@@ -150,3 +150,29 @@ describe("exportFileName", () => {
     expect(exportFileName("dre", "!!!", new Date("2026-09-20T12:00:00Z"))).toBe("empresa-dre-2026-09-20.csv")
   })
 })
+
+describe("exportação com análise vertical/horizontal (o arquivo confere com a tela)", () => {
+  it("Balanço em AV: valores e, depois, uma coluna de % por exercício (base: total do lado do balanço)", () => {
+    const rows = parse(balancoCsv(accounts, ids, "milhares", "av"))
+    expect(rows[0].slice(-3)).toEqual(ids.map((id) => `${id} (AV %)`))
+    const disp = rows.find((r) => r[1] === "Disponibilidades")!
+    expect(disp[3]).toBe("850") // o valor continua lá
+    expect(disp[3 + ids.length]).toBe("5,9") // 850 / 14.400 (Ativo Total 4T2024)
+  })
+
+  it("Balanço em AH: o primeiro exercício fica vazio (sem anterior)", () => {
+    const disp = parse(balancoCsv(accounts, ids, "milhares", "ah")).find((r) => r[1] === "Disponibilidades")!
+    expect(disp.slice(3 + ids.length)).toEqual(["", "8,2", "14,1"]) // 850 -> 920 -> 1.050
+  })
+
+  it("DRE em AV: sobre a Receita Líquida; em AH: sobre o exercício anterior", () => {
+    const av = parse(dreCsv(dre, ids, "milhares", "av"))
+    expect(av.find((r) => r[0].includes("Custo"))![1 + ids.length]).toBe("-70") // -12.600 / 18.000
+    const ah = parse(dreCsv(dre, ids, "milhares", "ah"))
+    expect(ah.find((r) => r[0] === "Receita Bruta")!.slice(1 + ids.length)).toEqual(["", "-73,6", "8,6"])
+  })
+
+  it("sem modo, o arquivo é o de sempre (só valores)", () => {
+    expect(parse(balancoCsv(accounts, ids, "milhares"))[0]).toHaveLength(3 + ids.length)
+  })
+})
