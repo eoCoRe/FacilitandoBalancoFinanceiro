@@ -8,12 +8,13 @@ describe("can", () => {
     expect(TODAS.filter((p) => can("ANALISTA", p))).toEqual(["consultar", "lancar-valores"])
   })
 
-  it("coordenador acrescenta plano de contas e cadastro da empresa", () => {
+  it("coordenador acrescenta plano de contas, cadastro e edição de empresas", () => {
     expect(TODAS.filter((p) => can("COORDENADOR", p))).toEqual([
       "consultar",
       "lancar-valores",
       "gerir-plano-de-contas",
       "editar-empresa",
+      "cadastrar-empresa",
       "exportar-auditoria",
       "auditar-exercicio",
     ])

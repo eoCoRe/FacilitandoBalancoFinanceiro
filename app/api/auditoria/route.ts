@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
 import { parseAuditQuery } from "@/lib/server/audit/auditoria"
 import { requirePermission } from "@/lib/server/auth/authz"
-import { getDefaultEmpresa } from "@/lib/server/data/empresa"
+import { getEmpresaAtual } from "@/lib/server/data/empresa"
 import { handleRouteError } from "@/lib/server/http"
 
 // Trilha de auditoria (RF08/RNF03), mais recentes primeiro. Sem parâmetros devolve os 50 últimos (o que a
@@ -12,7 +12,7 @@ import { handleRouteError } from "@/lib/server/http"
 export async function GET(request: Request) {
   try {
     await requirePermission("consultar")
-    const empresa = await getDefaultEmpresa()
+    const empresa = await getEmpresaAtual()
     const params = new URL(request.url).searchParams
     const { where, limite } = parseAuditQuery(params, empresa.id)
 

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
 import { logAudit } from "@/lib/server/audit/audit"
 import { requirePermission } from "@/lib/server/auth/authz"
-import { getDefaultEmpresa } from "@/lib/server/data/empresa"
+import { EMPRESA_COOKIE, EMPRESA_COOKIE_OPTIONS, getEmpresaAtual } from "@/lib/server/data/empresa"
 import { handleRouteError } from "@/lib/server/http"
 import { formatCnpj, isValidCnpj } from "@/lib/cnpj"
 import { DEFAULT_SECTOR_ID, sectorLabel } from "@/lib/sector-benchmarks"
@@ -11,7 +11,7 @@ import { requireNonEmptyString, ValidationError } from "@/lib/server/validation"
 export async function GET() {
   try {
     await requirePermission("consultar")
-    const empresa = await getDefaultEmpresa()
+    const empresa = await getEmpresaAtual()
     const exercicios = await prisma.exercicio.findMany({
       where: { empresaId: empresa.id },
       orderBy: { id: "asc" },
@@ -29,9 +29,8 @@ export async function GET() {
   }
 }
 
-// Cadastra a empresa — só quando NÃO existe nenhuma (instalação nova, ou depois da eliminação LGPD): o sistema trabalha
-// com uma empresa só. Só administrador. O Plano de Contas e o catálogo de índices são globais e continuam no banco; os
-// exercícios se abrem depois, na Tabulação.
+// Cadastra uma empresa (cliente em análise) e já a deixa escolhida (cookie de getEmpresaAtual). Coordenador ou acima.
+// O Plano de Contas e o catálogo de índices são globais e valem para todas; os exercícios se abrem depois, na Tabulação.
 export async function POST(request: Request) {
   try {
     const user = await requirePermission("cadastrar-empresa")
@@ -42,11 +41,14 @@ export async function POST(request: Request) {
     const razaoSocial = requireNonEmptyString(body.razaoSocial, "Razão social", 200)
     const setor = body.setor === undefined || body.setor === null || body.setor === "" ? sectorLabel(DEFAULT_SECTOR_ID) : requireNonEmptyString(body.setor, "Setor", 100)
 
-    if (await prisma.empresa.findFirst()) throw new ValidationError("Já existe uma empresa cadastrada.")
-    const empresa = await prisma.empresa.create({ data: { cnpj: formatCnpj(cnpjInformado), razaoSocial, setor } })
+    const cnpj = formatCnpj(cnpjInformado)
+    if (await prisma.empresa.findUnique({ where: { cnpj } })) throw new ValidationError("Já existe uma empresa com este CNPJ.")
+    const empresa = await prisma.empresa.create({ data: { cnpj, razaoSocial, setor } })
 
     await logAudit(empresa.id, "Empresa cadastrada", `${razaoSocial} (${empresa.cnpj}).`, user.email)
-    return NextResponse.json(empresa, { status: 201 })
+    const response = NextResponse.json(empresa, { status: 201 })
+    response.cookies.set(EMPRESA_COOKIE, String(empresa.id), EMPRESA_COOKIE_OPTIONS)
+    return response
   } catch (error) {
     return handleRouteError(error)
   }
@@ -69,7 +71,7 @@ export async function PATCH(request: Request) {
     if (rawRazaoSocial !== undefined) data.razaoSocial = requireNonEmptyString(rawRazaoSocial, "razaoSocial")
     if (rawSetor !== undefined) data.setor = requireNonEmptyString(rawSetor, "setor")
 
-    const empresa = await getDefaultEmpresa()
+    const empresa = await getEmpresaAtual()
     const atualizada = await prisma.empresa.update({ where: { id: empresa.id }, data })
 
     await logAudit(empresa.id, "Empresa atualizada", `Cadastro atualizado: ${Object.keys(data).join(", ")}.`, user.email)

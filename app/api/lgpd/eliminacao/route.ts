@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { getDefaultEmpresa } from "@/lib/server/data/empresa"
+import { getEmpresaAtual } from "@/lib/server/data/empresa"
 import { handleRouteError } from "@/lib/server/http"
 import { requirePermission } from "@/lib/server/auth/authz"
 import { eraseEmpresaData } from "@/lib/server/data/lgpd"
@@ -21,7 +21,7 @@ export async function DELETE(request: Request) {
     const solicitadoPor =
       rawSolicitadoPor === undefined ? undefined : requireNonEmptyString(rawSolicitadoPor, "solicitadoPor")
 
-    const empresa = await getDefaultEmpresa()
+    const empresa = await getEmpresaAtual()
     const resultado = await eraseEmpresaData(
       empresa.id,
       solicitadoPor ? `${solicitadoPor} (executado por ${admin.email})` : admin.email,

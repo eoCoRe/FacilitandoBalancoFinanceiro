@@ -25,7 +25,7 @@ outra empresa **sobrescreve** os valores da atual. Para o analista trabalhar com
 
 - [ ] Tela de cadastro de empresas (CNPJ, razão social, setor).
 - [ ] Seletor de empresa no topo; todas as telas mostram a empresa escolhida.
-- [ ] Rotas do servidor usam a empresa escolhida em vez de `getDefaultEmpresa()` (o banco já liga `Exercicio` e
+- [ ] Rotas do servidor usam a empresa escolhida em vez de `getEmpresaAtual()` (o banco já liga `Exercicio` e
       `AuditLog` à `Empresa`).
 - [ ] Auditoria (cadeia de selos) e LGPD (exportação/eliminação) por empresa.
 - [ ] Estimativa: 4 a 6 dias.

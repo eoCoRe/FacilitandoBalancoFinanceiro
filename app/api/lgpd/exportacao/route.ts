@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { logAudit } from "@/lib/server/audit/audit"
-import { getDefaultEmpresa } from "@/lib/server/data/empresa"
+import { getEmpresaAtual } from "@/lib/server/data/empresa"
 import { handleRouteError } from "@/lib/server/http"
 import { requirePermission } from "@/lib/server/auth/authz"
 import { exportEmpresaData } from "@/lib/server/data/lgpd"
@@ -10,7 +10,7 @@ import { exportEmpresaData } from "@/lib/server/data/lgpd"
 export async function GET() {
   try {
     const admin = await requirePermission("lgpd")
-    const empresa = await getDefaultEmpresa()
+    const empresa = await getEmpresaAtual()
     const dados = await exportEmpresaData(empresa.id)
 
     await logAudit(empresa.id, "Exportação de dados solicitada (LGPD)", "Direito de acesso/portabilidade exercido.", admin.email)

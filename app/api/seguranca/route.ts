@@ -3,7 +3,7 @@ import { prisma } from "@/lib/db"
 import { isPapel, PAPEIS } from "@/lib/permissions"
 import { logAudit } from "@/lib/server/audit/audit"
 import { requirePermission } from "@/lib/server/auth/authz"
-import { getDefaultEmpresa } from "@/lib/server/data/empresa"
+import { getEmpresaAtual } from "@/lib/server/data/empresa"
 import { handleRouteError } from "@/lib/server/http"
 import { mailAvailable } from "@/lib/server/mail/mail"
 import { ValidationError } from "@/lib/server/validation"
@@ -45,7 +45,7 @@ export async function PUT(request: Request) {
       create: { papel: body.papel, doisFatoresObrigatorio: body.doisFatoresObrigatorio },
     })
 
-    const empresa = await getDefaultEmpresa()
+    const empresa = await getEmpresaAtual()
     await logAudit(
       empresa.id,
       "Política de 2FA alterada",

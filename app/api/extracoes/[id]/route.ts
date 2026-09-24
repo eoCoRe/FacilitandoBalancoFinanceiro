@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
 import { requirePermission } from "@/lib/server/auth/authz"
-import { getDefaultEmpresa } from "@/lib/server/data/empresa"
+import { getEmpresaAtual } from "@/lib/server/data/empresa"
 import { handleRouteError } from "@/lib/server/http"
 import { requirePositiveInt, ValidationError } from "@/lib/server/validation"
 
@@ -18,7 +18,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
     const { id } = await params
     const extracaoId = requirePositiveInt(Number(id), "id")
 
-    const empresa = await getDefaultEmpresa()
+    const empresa = await getEmpresaAtual()
     const extracao = await prisma.extracao.findUnique({
       where: { id: extracaoId },
       include: {

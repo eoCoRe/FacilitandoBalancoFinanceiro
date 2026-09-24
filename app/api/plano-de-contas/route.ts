@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
-import { getDefaultEmpresa } from "@/lib/server/data/empresa"
+import { getEmpresaAtual } from "@/lib/server/data/empresa"
 import { logAudit } from "@/lib/server/audit/audit"
 import { requirePermission } from "@/lib/server/auth/authz"
 import { handleRouteError } from "@/lib/server/http"
@@ -81,7 +81,7 @@ export async function POST(request: Request) {
       data: { codigo, descricao: nome, tipo: "BP", contaPaiId: parentId, ehGrupo },
     })
 
-    const empresa = await getDefaultEmpresa()
+    const empresa = await getEmpresaAtual()
     await logAudit(
       empresa.id,
       "Conta criada",

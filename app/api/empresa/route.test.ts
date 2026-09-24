@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const { prisma } = vi.hoisted(() => ({
   prisma: {
-    empresa: { findFirst: vi.fn(), update: vi.fn(), create: vi.fn() },
+    empresa: { findFirst: vi.fn(), findUnique: vi.fn(), update: vi.fn(), create: vi.fn() },
     exercicio: { findMany: vi.fn() },
     auditLog: { create: vi.fn() },
   },
@@ -50,20 +50,26 @@ describe("GET /api/empresa", () => {
   })
 })
 
-describe("POST /api/empresa (cadastrar a primeira empresa)", () => {
+describe("POST /api/empresa (cadastrar uma empresa)", () => {
   const post = (body: unknown) => POST(new Request("http://localhost/api/empresa", { method: "POST", body: JSON.stringify(body) }))
   beforeEach(() => {
-    prisma.empresa.findFirst.mockResolvedValue(null)
-    prisma.empresa.create.mockImplementation(async ({ data }: { data: object }) => ({ id: 1, ...data }))
+    prisma.empresa.findUnique.mockResolvedValue(null)
+    prisma.empresa.create.mockImplementation(async ({ data }: { data: object }) => ({ id: 3, ...data }))
   })
 
-  it("cria a empresa com o CNPJ formatado, setor padrão e registra na auditoria", async () => {
+  it("cria a empresa com o CNPJ formatado, setor padrão, registra na auditoria e já a deixa escolhida", async () => {
     const response = await post({ cnpj: "11222333000181", razaoSocial: "  Mercado Bom Ltda " })
     expect(response.status).toBe(201)
     expect(prisma.empresa.create).toHaveBeenCalledWith({
       data: { cnpj: "11.222.333/0001-81", razaoSocial: "Mercado Bom Ltda", setor: expect.any(String) },
     })
     expect(prisma.auditLog.create).toHaveBeenCalledWith({ data: expect.objectContaining({ acao: "Empresa cadastrada", usuario: "admin@teste.com" }) })
+    expect(response.headers.get("set-cookie")).toMatch(/cb_empresa=3;.*HttpOnly/i)
+  })
+
+  it("com outras empresas já cadastradas, cadastra mais uma (várias empresas)", async () => {
+    prisma.empresa.findFirst.mockResolvedValue({ id: 1 })
+    expect((await post({ cnpj: "11222333000181", razaoSocial: "X" })).status).toBe(201)
   })
 
   it("recusa CNPJ inválido, razão social vazia e CNPJ ausente", async () => {
@@ -73,14 +79,20 @@ describe("POST /api/empresa (cadastrar a primeira empresa)", () => {
     expect(prisma.empresa.create).not.toHaveBeenCalled()
   })
 
-  it("já existe uma empresa: 400 e nada é criado (o sistema trabalha com uma só)", async () => {
-    prisma.empresa.findFirst.mockResolvedValue({ id: 1 })
-    expect((await post({ cnpj: "11222333000181", razaoSocial: "X" })).status).toBe(400)
+  it("CNPJ já cadastrado (em qualquer formato): 400 e nada é criado", async () => {
+    prisma.empresa.findUnique.mockResolvedValue({ id: 1 })
+    const response = await post({ cnpj: "11222333000181", razaoSocial: "X" })
+    expect(response.status).toBe(400)
+    expect((await response.json()).error).toMatch(/CNPJ/)
+    expect(prisma.empresa.findUnique).toHaveBeenCalledWith({ where: { cnpj: "11.222.333/0001-81" } })
     expect(prisma.empresa.create).not.toHaveBeenCalled()
   })
 
-  it("só administrador cadastra: coordenador leva 403", async () => {
+  it("coordenador cadastra; analista leva 403", async () => {
     vi.mocked(getCurrentUser).mockResolvedValue({ id: 2, email: "c@teste.com", nome: "C", papel: "COORDENADOR" })
+    expect((await post({ cnpj: "11222333000181", razaoSocial: "X" })).status).toBe(201)
+    vi.mocked(getCurrentUser).mockResolvedValue({ id: 3, email: "a@teste.com", nome: "A", papel: "ANALISTA" })
+    prisma.empresa.create.mockClear()
     expect((await post({ cnpj: "11222333000181", razaoSocial: "X" })).status).toBe(403)
     expect(prisma.empresa.create).not.toHaveBeenCalled()
   })

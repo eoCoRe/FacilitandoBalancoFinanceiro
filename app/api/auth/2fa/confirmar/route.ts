@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
 import { logAudit } from "@/lib/server/audit/audit"
 import { requireUser } from "@/lib/server/auth/authz"
-import { getDefaultEmpresa } from "@/lib/server/data/empresa"
+import { getEmpresaAtual } from "@/lib/server/data/empresa"
 import { codeCheckMessage } from "@/lib/server/auth/code-messages"
 import { handleRouteError } from "@/lib/server/http"
 import { ValidationError } from "@/lib/server/validation"
@@ -21,7 +21,7 @@ export async function POST(request: Request) {
     if (resultado !== "ok") throw new ValidationError(codeCheckMessage(resultado, "ativacao"))
 
     await prisma.usuario.update({ where: { id: user.id }, data: { doisFatoresAtivo: true } })
-    const empresa = await getDefaultEmpresa()
+    const empresa = await getEmpresaAtual()
     await logAudit(empresa.id, "2FA ativado", "Verificação em 2 etapas por e-mail ligada.", user.email)
     return NextResponse.json({ ok: true })
   } catch (error) {

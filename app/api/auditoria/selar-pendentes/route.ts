@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { logAudit } from "@/lib/server/audit/audit"
 import { SEAL_MAX_PER_CALL, sealPendingDetailed } from "@/lib/server/audit/audit-seal"
 import { requirePermission } from "@/lib/server/auth/authz"
-import { getDefaultEmpresa } from "@/lib/server/data/empresa"
+import { getEmpresaAtual } from "@/lib/server/data/empresa"
 import { handleRouteError } from "@/lib/server/http"
 
 // Selo à mão dos registros que estão SEM selo (ver "quem sela o quê" em audit-seal.ts). O servidor só sela o que ele mesmo
@@ -12,7 +12,7 @@ import { handleRouteError } from "@/lib/server/http"
 export async function POST() {
   try {
     const admin = await requirePermission("selar-auditoria")
-    const empresa = await getDefaultEmpresa()
+    const empresa = await getEmpresaAtual()
 
     // Uma chamada sela até SEAL_MAX_PER_CALL; um histórico maior precisa de várias, e o administrador não deve ter que
     // clicar de novo. Continua enquanto cada rodada encher o limite (então pode haver mais).

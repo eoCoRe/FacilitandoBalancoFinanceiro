@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
-import { getDefaultEmpresa } from "@/lib/server/data/empresa"
+import { getEmpresaAtual } from "@/lib/server/data/empresa"
 import { logAudit } from "@/lib/server/audit/audit"
 import { requirePermission } from "@/lib/server/auth/authz"
 import { handleRouteError } from "@/lib/server/http"
@@ -41,7 +41,7 @@ export async function PUT(request: Request) {
 
     const registro = await upsertOrDeleteValor(contaId, exercicioId, valor)
 
-    const empresa = await getDefaultEmpresa()
+    const empresa = await getEmpresaAtual()
     await logAudit(
       empresa.id,
       valor === null ? "Valor removido" : "Valor lançado",
