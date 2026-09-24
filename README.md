@@ -85,6 +85,7 @@ vitest.setup.ts               # testes de rota: usuário logado padrão (adminis
 | `pnpm lint` | ESLint |
 | `pnpm smoke` | teste de fumaça contra o app RODANDO (`pnpm build && pnpm start`) e um Postgres real: login, permissões, leitura e escrita por HTTP (`scripts/smoke.mjs`). O CI roda isso em um banco vazio |
 | `npx tsc --noEmit` | checagem de tipos (o `next build` também checa; este é o atalho rápido) |
+| `pnpm avaliar:extracao <pdfs> [--detalhe] [--csv saida.csv]` | mede o leitor de PDF em balanços reais (contas do Balanço e linhas da DRE reconhecidas, confiança), sem banco e sem enviar os documentos a lugar nenhum (`scripts/avaliar-extracao.ts`) |
 | `pnpm purge:data` | expurgo de AuditLog/Extracao antigos (ver SECURITY.md) |
 | `pnpm admin:ensure` | cria/restabelece o administrador (`SEED_ADMIN_*`) **sem apagar dados** — o caminho em produção; o `prisma db seed` é só para desenvolvimento e apaga os dados de negócio |
 
