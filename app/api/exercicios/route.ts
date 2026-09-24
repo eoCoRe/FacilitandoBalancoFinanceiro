@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
-import { getDefaultEmpresa } from "@/lib/server/data/empresa"
+import { getEmpresaAtual } from "@/lib/server/data/empresa"
 import { logAudit } from "@/lib/server/audit/audit"
 import { requirePermission } from "@/lib/server/auth/authz"
 import { handleRouteError } from "@/lib/server/http"
@@ -17,7 +17,7 @@ export async function POST(request: Request) {
     const { periodo: rawPeriodo } = body as { periodo: unknown }
     const periodo = requireNonEmptyString(rawPeriodo, "periodo", 50)
 
-    const empresa = await getDefaultEmpresa()
+    const empresa = await getEmpresaAtual()
 
     const existente = await prisma.exercicio.findUnique({
       where: { empresaId_periodo: { empresaId: empresa.id, periodo } },

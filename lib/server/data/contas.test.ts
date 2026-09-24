@@ -25,7 +25,7 @@ describe("buildBpAccountTree", () => {
       },
     ])
 
-    const [ativo] = await buildBpAccountTree()
+    const [ativo] = await buildBpAccountTree(1)
 
     expect(ativo).toMatchObject({ code: "1", name: "Ativo" })
     expect(ativo.values).toBeUndefined() // grupo sem lançamento direto
@@ -35,12 +35,12 @@ describe("buildBpAccountTree", () => {
 
   it("devolve lista vazia quando não há contas BP cadastradas", async () => {
     prisma.conta.findMany.mockResolvedValue([])
-    expect(await buildBpAccountTree()).toEqual([])
+    expect(await buildBpAccountTree(1)).toEqual([])
   })
 
   it("filtra a busca por tipo BP", async () => {
     prisma.conta.findMany.mockResolvedValue([])
-    await buildBpAccountTree()
+    await buildBpAccountTree(1)
     expect(prisma.conta.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { tipo: "BP" } }))
   })
 
@@ -58,7 +58,7 @@ describe("buildBpAccountTree", () => {
       },
     ])
 
-    const [conta] = await buildBpAccountTree()
+    const [conta] = await buildBpAccountTree(1)
     expect(conta.values).toEqual({ "4T2024": 100, "1T2025": 120 })
   })
 
@@ -67,7 +67,7 @@ describe("buildBpAccountTree", () => {
       { id: 2, codigo: "1.1", descricao: "Ativo Circulante", contaPaiId: 999, valores: [] },
     ])
 
-    const roots = await buildBpAccountTree()
+    const roots = await buildBpAccountTree(1)
     expect(roots).toEqual([]) // não aparece como raiz nem como filha de ninguém
   })
 })

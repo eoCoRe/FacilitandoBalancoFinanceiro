@@ -149,7 +149,7 @@ export function UsuariosScreen() {
         }
       />
 
-      <div className="flex flex-col gap-4 px-8 py-6">
+      <div className="flex flex-col gap-4 px-4 md:px-8 py-6">
         {error && (
           <div
             role="alert"
@@ -286,7 +286,7 @@ export function UsuariosScreen() {
                             2 etapas ligada ({[u.totpAtivo && "app", u.doisFatoresAtivo && "e-mail"].filter(Boolean).join(" + ")}) ·{" "}
                             <button
                               type="button"
-                              className="text-primary hover:underline"
+                              className="text-primary-text hover:underline"
                               title="Desligar o 2FA desta pessoa, e-mail e app (ex.: perdeu o acesso ao e-mail ou ao celular)"
                               onClick={() => void update(u.id, { doisFatoresAtivo: false })}
                             >

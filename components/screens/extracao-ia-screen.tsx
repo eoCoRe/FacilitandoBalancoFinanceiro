@@ -9,26 +9,46 @@ import {
   FileText,
   HelpCircle,
   Loader2,
+  PencilLine,
   Sparkles,
   Upload,
   X,
 } from "lucide-react"
+import { DigitacaoManual } from "@/components/digitacao-manual"
 import { ExtracoesHistorico } from "@/components/extracoes-historico"
 import { PageHeader } from "@/components/page-header"
 import { Button } from "@/components/ui/button"
 import { useFinancialStore } from "@/lib/store"
 import { flattenAccounts, formatBRL } from "@/lib/financial-data"
-import { extractFromPdfFile, type ExtractedRow } from "@/lib/extraction/pdf-extraction"
+import {
+  dreExtractionTargets,
+  dreLineIdFromCode,
+  extractFromPdfFile,
+  toSystemUnit,
+  type DocumentUnit,
+  type ExtractedRow,
+} from "@/lib/extraction/pdf-extraction"
 import { GLOSSARY } from "@/lib/glossary"
+import { parseBrNumber } from "@/lib/number-input"
 import { validateUploadFile } from "@/lib/upload-validation"
 import { cn } from "@/lib/utils"
 
-type Stage = "idle" | "processing" | "reviewing" | "unsupported" | "done"
+type Stage = "idle" | "processing" | "reviewing" | "unsupported" | "manual" | "done"
 
 interface ReviewRow extends ExtractedRow {
   mappedCode: string | null
-  confirmedValue: number
+  // Texto do campo "Confirmado", no formato brasileiro ("12.663.067,45"): guardar o texto (e não o número) deixa a
+  // pessoa digitar a vírgula sem o campo "comê-la"; o número só é lido na confirmação.
+  confirmedText: string
 }
+
+function formatInput(value: number): string {
+  return value.toLocaleString("pt-BR", { maximumFractionDigits: 2 })
+}
+
+const parseInput = parseBrNumber
+
+const DRE_OPTIONS = dreExtractionTargets()
 
 function confidenceStatus(confidence: number): "ok" | "atencao" | "risco" {
   if (confidence >= 90) return "ok"
@@ -38,7 +58,7 @@ function confidenceStatus(confidence: number): "ok" | "atencao" | "risco" {
 
 const STEPS = [
   { title: "Envie o documento", detail: "PDF ou imagem do balanço, DRE ou balancete do cliente." },
-  { title: "Extração automática", detail: "A IA identifica contas, valores e períodos do documento." },
+  { title: "Leitura automática", detail: "O leitor identifica contas, valores e páginas do PDF, direto no seu navegador (o documento não sai do computador)." },
   { title: "Revise e concilie", detail: "Confira o mapeamento sugerido para o Plano de Contas." },
 ]
 
@@ -53,8 +73,18 @@ export function ExtracaoIaScreen({ onNavigate }: { onNavigate: (id: "tabulacao")
   const [omitidasCount, setOmitidasCount] = useState(0)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [confirming, setConfirming] = useState(false)
+  const [unit, setUnit] = useState<DocumentUnit>("reais")
   const [historicoKey, setHistoricoKey] = useState(0)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  // O arquivo fica na memória do navegador para a digitação manual mostrar o documento ao lado.
+  const [file, setFile] = useState<File | null>(null)
+  const [somenteDigitar, setSomenteDigitar] = useState(false)
+  const [manualInicial, setManualInicial] = useState<{ valores: Record<string, number>; unidade: DocumentUnit }>({ valores: {}, unidade: "reais" })
+
+  function abrirDigitacao(valores: Record<string, number>, unidade: DocumentUnit) {
+    setManualInicial({ valores, unidade })
+    setStage("manual")
+  }
 
   const leafOptions = flattenAccounts(store.accounts).filter((r) => !r.account.children)
 
@@ -66,8 +96,14 @@ export function ExtracaoIaScreen({ onNavigate }: { onNavigate: (id: "tabulacao")
     }
     setUploadError(null)
     setFileName(file.name)
+    setFile(file)
     const lastExercicioId = store.exercicios[store.exercicios.length - 1]?.id
     setExercicioId(lastExercicioId ?? "")
+
+    if (somenteDigitar) {
+      abrirDigitacao({}, "reais")
+      return
+    }
 
     const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")
     if (!isPdf) {
@@ -88,9 +124,10 @@ export function ExtracaoIaScreen({ onNavigate }: { onNavigate: (id: "tabulacao")
         result.rows.map((row) => ({
           ...row,
           mappedCode: row.code,
-          confirmedValue: row.value,
+          confirmedText: formatInput(row.value),
         })),
       )
+      setUnit(result.unit)
       setStage("reviewing")
     } catch {
       setUploadError("Não foi possível ler este PDF (arquivo corrompido ou protegido por senha).")
@@ -117,15 +154,16 @@ export function ExtracaoIaScreen({ onNavigate }: { onNavigate: (id: "tabulacao")
 
   async function handleConfirm() {
     const mapped = rows.filter((r) => r.mappedCode)
-    if (mapped.length === 0 || !exercicioId || !fileName || confirming) return
+    if (mapped.length === 0 || !exercicioId || !fileName || confirming || invalidCount > 0) return
     // As linhas SEM conta também vão (rastreabilidade, RF06): ficam no histórico, mas não lançam valor. Todas as COM conta
     // sempre vão (são os valores a lançar; se só elas já passarem do limite, o servidor recusa com um aviso visível). As
     // sem conta entram enquanto couber no limite do servidor, e o que não coube é AVISADO ao terminar — nada é cortado
     // em silêncio.
     const { enviar, omitidas } = selectEntriesToSend(mapped, rows.filter((r) => !r.mappedCode))
+    // O sistema guarda milhares de reais: um documento em reais é convertido aqui, na gravação.
     const entries = enviar.map((r) => ({
       code: r.mappedCode,
-      value: r.confirmedValue,
+      value: toSystemUnit(parseInput(r.confirmedText) ?? r.value, unit),
       confidence: r.confidence,
       page: r.page,
       label: r.sourceLabel,
@@ -144,19 +182,35 @@ export function ExtracaoIaScreen({ onNavigate }: { onNavigate: (id: "tabulacao")
   function reset() {
     setStage("idle")
     setFileName(null)
+    setFile(null)
     setRows([])
     setUploadError(null)
   }
 
+  // Da revisão para a digitação: leva o que a leitura achou (e o analista já corrigiu), na unidade do documento.
+  function digitarAPartirDaRevisao() {
+    const valores: Record<string, number> = {}
+    for (const r of rows) {
+      const v = parseInput(r.confirmedText)
+      if (r.mappedCode && v !== null) valores[r.mappedCode] = v
+      // Totais lidos (Receita Líquida, Ativo Circulante...) vão junto, para a digitação conferir e completar: o primeiro
+      // que aparece no documento vale (um total repetido numa nota explicativa não o substitui).
+      else if (!r.mappedCode && r.totalCode && !(r.totalCode in valores)) valores[r.totalCode] = r.value
+    }
+    abrirDigitacao(valores, unit)
+  }
+
   const mappedCount = rows.filter((r) => r.mappedCode).length
+  // Só as linhas que vão lançar valor precisam de um número válido no campo "Confirmado".
+  const invalidCount = rows.filter((r) => r.mappedCode && parseInput(r.confirmedText) === null).length
   const lowConfidenceCount = rows.filter((r) => confidenceStatus(r.confidence) !== "ok").length
 
   return (
     <div className="flex flex-col">
       <PageHeader
         eyebrow="Complementar"
-        title="Extração via IA"
-        subtitle="Transforme demonstrações em PDF ou imagem em dados estruturados de tabulação."
+        title="Extração de PDF"
+        subtitle="Transforme demonstrações em PDF em dados estruturados de tabulação. Você revisa tudo antes de gravar."
         actions={
           <span className="inline-flex items-center gap-1.5 rounded border border-border bg-muted px-2 py-1 font-mono text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
             <Sparkles className="size-3" />
@@ -165,7 +219,7 @@ export function ExtracaoIaScreen({ onNavigate }: { onNavigate: (id: "tabulacao")
         }
       />
 
-      <div className="flex flex-col gap-6 px-8 py-6">
+      <div className="flex flex-col gap-6 px-4 md:px-8 py-6">
         {stage === "idle" && (
           <>
             <input ref={fileInputRef} type="file" accept=".pdf,.png,.jpg,.jpeg" className="hidden" onChange={handleFileChange} />
@@ -201,6 +255,10 @@ export function ExtracaoIaScreen({ onNavigate }: { onNavigate: (id: "tabulacao")
                 <FileText className="size-3.5" />
                 Selecionar arquivo
               </Button>
+              <label className="mt-3 flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
+                <input type="checkbox" checked={somenteDigitar} onChange={(e) => setSomenteDigitar(e.target.checked)} className="accent-primary" />
+                Só quero digitar os valores olhando o documento (sem leitura automática)
+              </label>
             </div>
 
             <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -218,7 +276,7 @@ export function ExtracaoIaScreen({ onNavigate }: { onNavigate: (id: "tabulacao")
               <p className="text-xs leading-relaxed text-muted-foreground">
                 A leitura é feita localmente, sem enviar o arquivo pra nenhum serviço externo: funciona bem em PDFs
                 com texto (gerados direto pelo sistema contábil). PDF escaneado ou imagem (PNG/JPG) não tem texto pra
-                ler automaticamente — nesse caso, o lançamento é feito na Tabulação.
+                ler automaticamente — nesse caso, você digita os valores com o documento aberto ao lado.
               </p>
             </div>
           </>
@@ -238,14 +296,18 @@ export function ExtracaoIaScreen({ onNavigate }: { onNavigate: (id: "tabulacao")
             <p className="text-sm font-medium text-foreground">Não foi possível extrair automaticamente</p>
             <p className="max-w-md text-xs leading-relaxed text-muted-foreground">
               &ldquo;{fileName}&rdquo; não tem texto reconhecível para ler (imagem, digitalização ou PDF sem camada de
-              texto). Lance os valores diretamente na Tabulação.
+              texto). Digite os valores com o documento aberto ao lado.
             </p>
-            <div className="mt-2 flex gap-2">
+            <div className="mt-2 flex flex-wrap justify-center gap-2">
               <Button variant="outline" size="sm" onClick={reset}>
                 Tentar outro arquivo
               </Button>
-              <Button size="sm" onClick={() => onNavigate("tabulacao")}>
+              <Button variant="outline" size="sm" onClick={() => onNavigate("tabulacao")}>
                 Ir para Tabulação
+              </Button>
+              <Button size="sm" className="gap-1.5" onClick={() => abrirDigitacao({}, "reais")} disabled={!file}>
+                <PencilLine className="size-3.5" />
+                Digitar olhando o documento
               </Button>
             </div>
           </div>
@@ -262,7 +324,20 @@ export function ExtracaoIaScreen({ onNavigate }: { onNavigate: (id: "tabulacao")
                   {lowConfidenceCount > 0 && `, ${lowConfidenceCount} para revisão`}
                 </span>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <label htmlFor="ext-unidade" className="text-xs text-muted-foreground">
+                  Valores do documento em
+                </label>
+                <select
+                  id="ext-unidade"
+                  value={unit}
+                  onChange={(e) => setUnit(e.target.value as DocumentUnit)}
+                  title="O sistema guarda milhares de reais: valores em reais são divididos por 1.000 ao gravar."
+                  className="h-8 rounded-md border border-border bg-background px-2 text-sm text-foreground outline-none focus:border-ring"
+                >
+                  <option value="reais">Reais (R$)</option>
+                  <option value="milhares">Milhares (R$ mil)</option>
+                </select>
                 <label htmlFor="ext-exercicio" className="text-xs text-muted-foreground">
                   Gravar em
                 </label>
@@ -286,7 +361,7 @@ export function ExtracaoIaScreen({ onNavigate }: { onNavigate: (id: "tabulacao")
                 <thead>
                   <tr className="border-b border-border">
                     <th className="px-4 py-2.5 text-left text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                      Conta (sugestão da IA)
+                      Conta (sugerida)
                     </th>
                     <th className="w-24 px-4 py-2.5 text-center text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
                       Página
@@ -310,7 +385,9 @@ export function ExtracaoIaScreen({ onNavigate }: { onNavigate: (id: "tabulacao")
                         <td className="px-4 py-3">
                           {row.code ? (
                             <div>
-                              <span className="mr-1.5 font-mono text-xs text-muted-foreground">{row.code}</span>
+                              <span className="mr-1.5 font-mono text-xs text-muted-foreground">
+                                {dreLineIdFromCode(row.code) !== null ? "DRE" : row.code}
+                              </span>
                               <span className="text-foreground">{row.suggestedName}</span>
                             </div>
                           ) : (
@@ -329,11 +406,20 @@ export function ExtracaoIaScreen({ onNavigate }: { onNavigate: (id: "tabulacao")
                                 className="h-7 rounded border border-border bg-background px-1.5 text-xs text-foreground outline-none focus:border-ring"
                               >
                                 <option value="">Mapear para uma conta…</option>
-                                {leafOptions.map(({ account }) => (
-                                  <option key={account.code} value={account.code} title={GLOSSARY[account.name]}>
-                                    {account.code} — {account.name}
-                                  </option>
-                                ))}
+                                <optgroup label="Balanço Patrimonial">
+                                  {leafOptions.map(({ account }) => (
+                                    <option key={account.code} value={account.code} title={GLOSSARY[account.name]}>
+                                      {account.code} — {account.name}
+                                    </option>
+                                  ))}
+                                </optgroup>
+                                <optgroup label="DRE">
+                                  {DRE_OPTIONS.map((line) => (
+                                    <option key={line.code} value={line.code}>
+                                      DRE — {line.name}
+                                    </option>
+                                  ))}
+                                </optgroup>
                               </select>
                             </div>
                           )}
@@ -360,12 +446,13 @@ export function ExtracaoIaScreen({ onNavigate }: { onNavigate: (id: "tabulacao")
                           <input
                             type="text"
                             inputMode="decimal"
-                            value={row.confirmedValue}
-                            onChange={(e) => {
-                              const num = Number.parseFloat(e.target.value.replace(/\./g, "").replace(",", "."))
-                              updateRow(row.id, { confirmedValue: Number.isNaN(num) ? 0 : num })
-                            }}
-                            className="w-full rounded border border-border bg-background px-2 py-1 text-right font-mono text-sm tabular-nums text-foreground outline-none focus:border-ring"
+                            value={row.confirmedText}
+                            aria-invalid={row.mappedCode !== null && parseInput(row.confirmedText) === null}
+                            onChange={(e) => updateRow(row.id, { confirmedText: e.target.value })}
+                            className={cn(
+                              "w-full rounded border bg-background px-2 py-1 text-right font-mono text-sm tabular-nums text-foreground outline-none focus:border-ring",
+                              row.mappedCode !== null && parseInput(row.confirmedText) === null ? "border-risk" : "border-border",
+                            )}
                           />
                         </td>
                       </tr>
@@ -380,18 +467,46 @@ export function ExtracaoIaScreen({ onNavigate }: { onNavigate: (id: "tabulacao")
                 {mappedCount} de {rows.length} linha(s) serão gravadas — mapeie as pendentes. As sem conta ficam só no
                 histórico da extração, sem lançar valor.
               </p>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <Button variant="outline" size="sm" onClick={reset}>
                   <X className="size-3.5" />
                   Cancelar
                 </Button>
-                <Button size="sm" disabled={mappedCount === 0 || !exercicioId || confirming} onClick={handleConfirm}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={digitarAPartirDaRevisao}
+                  disabled={!file}
+                  title="Abre todos os campos do Balanço e da DRE, já com o que foi lido, e o documento ao lado"
+                >
+                  <PencilLine className="size-3.5" />
+                  Digitar com o documento ao lado
+                </Button>
+                <Button size="sm" disabled={mappedCount === 0 || !exercicioId || confirming || invalidCount > 0} onClick={handleConfirm}>
                   <Check className="size-3.5" />
                   Confirmar {mappedCount} valor(es) para {exercicioId || "—"}
                 </Button>
               </div>
             </div>
           </>
+        )}
+
+        {stage === "manual" && file && (
+          <DigitacaoManual
+            file={file}
+            exercicioInicial={exercicioId}
+            unidadeInicial={manualInicial.unidade}
+            valoresIniciais={manualInicial.valores}
+            onCancelar={() => setStage(rows.length > 0 ? "reviewing" : "idle")}
+            onConcluido={(quantos, exercicio) => {
+              setConfirmedCount(quantos)
+              setOmitidasCount(0)
+              setExercicioId(exercicio)
+              setHistoricoKey((k) => k + 1)
+              setStage("done")
+            }}
+          />
         )}
 
         {stage === "done" && (

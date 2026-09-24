@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
-import { getDefaultEmpresa } from "@/lib/server/data/empresa"
+import { getEmpresaAtual } from "@/lib/server/data/empresa"
 import { logAudit } from "@/lib/server/audit/audit"
 import { requirePermission } from "@/lib/server/auth/authz"
 import { handleRouteError } from "@/lib/server/http"
@@ -42,7 +42,7 @@ function parseItem(raw: unknown, index: number): ExtracaoItemInput {
   return { contaId, valor, confianca, paginaOrigem, rotulo }
 }
 
-// Registra o resultado de uma extração (Extração via IA) já revisada e
+// Registra o resultado de uma extração (Extração de PDF) já revisada e
 // confirmada pelo analista: grava a Extracao + um ValorExtraido por item
 // (rastreabilidade, inclusive dos não mapeados), e só os itens com conta
 // mapeada viram Valor de verdade — equivalente a store.confirmExtraction.
@@ -67,7 +67,7 @@ export async function POST(request: Request) {
     }
     const itens = rawItens.map(parseItem)
 
-    const empresa = await getDefaultEmpresa()
+    const empresa = await getEmpresaAtual()
     // O exercício precisa ser da empresa e as contas precisam existir: sem isso o banco recusaria no meio da
     // gravação com um erro de chave estrangeira (500), depois de parte do trabalho já feito.
     const exercicio = await prisma.exercicio.findUnique({ where: { id: exercicioId } })
@@ -125,7 +125,7 @@ export async function POST(request: Request) {
 export async function GET() {
   try {
     await requirePermission("consultar")
-    const empresa = await getDefaultEmpresa()
+    const empresa = await getEmpresaAtual()
     const extracoes = await prisma.extracao.findMany({
       // Só as da empresa (igual ao detalhe /api/extracoes/:id, que recusa extração de outra empresa).
       where: { exercicio: { empresaId: empresa.id } },

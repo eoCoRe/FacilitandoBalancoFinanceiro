@@ -94,7 +94,7 @@ function KpiCard({
     <div className="group rounded-3xl bg-muted p-5 transition-transform duration-200 hover:-translate-y-0.5">
       <div className="flex items-start justify-between gap-2">
         <GlossaryTerm term={label} className="text-xs font-semibold text-muted-foreground" />
-        <div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-background text-primary">
+        <div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-background text-primary-text">
           <Icon className="size-3.5" />
         </div>
       </div>
@@ -217,7 +217,7 @@ export function DashboardScreen() {
         actions={<ScaleToggle value={scale} onChange={setScale} />}
       />
 
-      <div className="flex flex-col gap-6 px-8 py-6">
+      <div className="flex flex-col gap-6 px-4 md:px-8 py-6">
         {/* KPIs */}
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
           <KpiCard
@@ -254,7 +254,7 @@ export function DashboardScreen() {
         {/* Gráfico + Alertas */}
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
           <div className="rounded-md border border-border bg-card p-5 shadow-sm transition-shadow duration-200 hover:shadow-md lg:col-span-2">
-            <p className="text-[11px] font-medium uppercase tracking-wider text-primary">Evolução</p>
+            <p className="text-[11px] font-medium uppercase tracking-wider text-primary-text">Evolução</p>
             <h2 className="mt-1 text-sm font-semibold text-foreground">Liquidez Corrente</h2>
             <div className="mt-4 h-52">
               {sparkReady ? (
@@ -268,7 +268,7 @@ export function DashboardScreen() {
           </div>
 
           <div className="rounded-md border border-border bg-card p-5 shadow-sm transition-shadow duration-200 hover:shadow-md">
-            <p className="text-[11px] font-medium uppercase tracking-wider text-primary">Alertas</p>
+            <p className="text-[11px] font-medium uppercase tracking-wider text-primary-text">Alertas</p>
             <h2 className="mt-1 text-sm font-semibold text-foreground">Pontos de atenção</h2>
             {alerts.length === 0 ? (
               <p className="mt-4 text-sm text-muted-foreground">
@@ -293,7 +293,7 @@ export function DashboardScreen() {
         {/* Tabela de comparação */}
         <div className="overflow-hidden rounded-md border border-border bg-card shadow-sm">
           <div className="border-b border-border px-5 py-3">
-            <p className="text-[11px] font-medium uppercase tracking-wider text-primary">Comparativo</p>
+            <p className="text-[11px] font-medium uppercase tracking-wider text-primary-text">Comparativo</p>
             <h2 className="mt-1 text-sm font-semibold text-foreground">
               Indicadores por período <span className="font-normal text-muted-foreground">— um de cada grupo de análise</span>
             </h2>

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { getDefaultEmpresa } from "@/lib/server/data/empresa"
+import { EMPRESA_COOKIE, getEmpresaAtual } from "@/lib/server/data/empresa"
 import { handleRouteError } from "@/lib/server/http"
 import { requirePermission } from "@/lib/server/auth/authz"
 import { eraseEmpresaData } from "@/lib/server/data/lgpd"
@@ -21,13 +21,16 @@ export async function DELETE(request: Request) {
     const solicitadoPor =
       rawSolicitadoPor === undefined ? undefined : requireNonEmptyString(rawSolicitadoPor, "solicitadoPor")
 
-    const empresa = await getDefaultEmpresa()
+    const empresa = await getEmpresaAtual()
     const resultado = await eraseEmpresaData(
       empresa.id,
       solicitadoPor ? `${solicitadoPor} (executado por ${admin.email})` : admin.email,
     )
 
-    return NextResponse.json(resultado)
+    // A escolha apontava para a empresa que deixou de existir: a próxima tela abre na primeira que sobrou.
+    const response = NextResponse.json(resultado)
+    response.cookies.delete(EMPRESA_COOKIE)
+    return response
   } catch (error) {
     return handleRouteError(error)
   }

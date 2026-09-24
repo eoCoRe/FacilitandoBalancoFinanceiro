@@ -8,6 +8,7 @@ const { prisma } = vi.hoisted(() => ({
     valor: { count: vi.fn() },
     extracao: { count: vi.fn() },
     auditLog: { count: vi.fn() },
+    parecer: { count: vi.fn() },
     lgpdErasureLog: { create: vi.fn() },
     $transaction: vi.fn(),
   },
@@ -32,6 +33,7 @@ beforeEach(() => {
   prisma.valor.count.mockResolvedValue(0)
   prisma.extracao.count.mockResolvedValue(0)
   prisma.auditLog.count.mockResolvedValue(0)
+  prisma.parecer.count.mockResolvedValue(0)
 })
 
 describe("DELETE /api/lgpd/eliminacao", () => {

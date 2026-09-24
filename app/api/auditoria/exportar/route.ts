@@ -4,7 +4,7 @@ import { logAudit } from "@/lib/server/audit/audit"
 import { AUDIT_EXPORT_MAX, parseAuditQuery } from "@/lib/server/audit/auditoria"
 import { requirePermission } from "@/lib/server/auth/authz"
 import { toCsv } from "@/lib/csv"
-import { getDefaultEmpresa } from "@/lib/server/data/empresa"
+import { getEmpresaAtual } from "@/lib/server/data/empresa"
 import { handleRouteError } from "@/lib/server/http"
 
 // Exporta a trilha de auditoria em CSV (mesmos filtros da listagem; até 10 mil linhas). Só coordenador ou
@@ -13,7 +13,7 @@ import { handleRouteError } from "@/lib/server/http"
 export async function GET(request: Request) {
   try {
     const user = await requirePermission("exportar-auditoria")
-    const empresa = await getDefaultEmpresa()
+    const empresa = await getEmpresaAtual()
 
     const params = new URL(request.url).searchParams
     params.delete("cursor") // exportar é sempre "tudo o que bate com os filtros", não uma página

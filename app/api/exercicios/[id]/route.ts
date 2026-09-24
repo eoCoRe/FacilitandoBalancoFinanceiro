@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
 import { logAudit } from "@/lib/server/audit/audit"
 import { requirePermission } from "@/lib/server/auth/authz"
-import { getDefaultEmpresa } from "@/lib/server/data/empresa"
+import { getEmpresaAtual } from "@/lib/server/data/empresa"
 import { handleRouteError } from "@/lib/server/http"
 import { requirePositiveInt, ValidationError } from "@/lib/server/validation"
 
@@ -22,7 +22,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     const body = (await request.json()) as { auditado?: unknown }
     if (typeof body.auditado !== "boolean") throw new ValidationError("auditado deve ser verdadeiro ou falso.")
 
-    const empresa = await getDefaultEmpresa()
+    const empresa = await getEmpresaAtual()
     const exercicio = await prisma.exercicio.findUnique({ where: { id: exercicioId } })
     // O exercício precisa ser da empresa (hoje só há uma, mas a checagem não deve depender disso).
     if (!exercicio || exercicio.empresaId !== empresa.id) throw new ValidationError("Exercício não encontrado.")

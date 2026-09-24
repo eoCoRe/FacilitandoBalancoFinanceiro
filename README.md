@@ -1,8 +1,8 @@
 # Central de Balanços
 
-Plataforma de análise de balanços para analistas de crédito: cadastro do Plano de Contas,
+Plataforma de análise de balanços para analistas de crédito, com **várias empresas** (seletor na barra lateral; os dados e a trilha de auditoria de cada uma ficam separados): cadastro do Plano de Contas,
 tabulação do Balanço/DRE por exercício, demonstrações consolidadas, índices financeiros
-calculados automaticamente, parecer de crédito (Opinião de Venda) e a tela de **Extração via IA**,
+calculados automaticamente, parecer de crédito (Opinião de Venda) e a tela de **Extração de PDF**,
 onde o analista confere os valores lidos de um Balanço/DRE em PDF antes de confirmá-los para a
 Tabulação (fluxo *human-in-the-loop*), com histórico de cada extração (o que foi lido, de onde e a que conta foi ligado). Balanço, DRE, DFC, Balancete e Índices exportam em CSV (`Exportar CSV`, na escala escolhida na tela) e o Parecer de Crédito imprime ou salva em PDF (`Exportar parecer`). Hoje a leitura do PDF é feita por um leitor local, no próprio
 navegador (`lib/extraction/`), sem LLM e sem enviar o documento a terceiros.
@@ -85,6 +85,8 @@ vitest.setup.ts               # testes de rota: usuário logado padrão (adminis
 | `pnpm lint` | ESLint |
 | `pnpm smoke` | teste de fumaça contra o app RODANDO (`pnpm build && pnpm start`) e um Postgres real: login, permissões, leitura e escrita por HTTP (`scripts/smoke.mjs`). O CI roda isso em um banco vazio |
 | `npx tsc --noEmit` | checagem de tipos (o `next build` também checa; este é o atalho rápido) |
+| `pnpm avaliar:extracao <pdfs> [--detalhe] [--csv saida.csv]` | mede o leitor de PDF em balanços reais (contas do Balanço e linhas da DRE reconhecidas, confiança), sem banco e sem enviar os documentos a lugar nenhum (`scripts/avaliar-extracao.ts`) |
+| `pnpm setores:atualizar [--ano 2025]` | recalcula as medianas setoriais dos índices com os dados abertos da CVM (DFP das companhias abertas) e grava `lib/setores/medias-cvm.json` (`scripts/atualizar-medias-setoriais.ts`) |
 | `pnpm purge:data` | expurgo de AuditLog/Extracao antigos (ver SECURITY.md) |
 | `pnpm admin:ensure` | cria/restabelece o administrador (`SEED_ADMIN_*`) **sem apagar dados** — o caminho em produção; o `prisma db seed` é só para desenvolvimento e apaga os dados de negócio |
 
@@ -99,7 +101,7 @@ com opção de o administrador exigir por perfil. Recuperação e código por e-
 SMTP (`SMTP_*` no `.env`); sem ele, em desenvolvimento o e-mail aparece no console do
 servidor e em produção esses recursos ficam desligados. O aplicativo autenticador não depende de e-mail.
 Três perfis, cumulativos: **analista** (consulta e lança valores/extrações), **coordenador**
-(+ Plano de Contas, cadastro da empresa, marcar exercício como auditado e exportar a auditoria) e **administrador** (+ usuários e LGPD). A regra
+(+ Plano de Contas, cadastrar e editar empresas, registrar a decisão de crédito, marcar exercício como auditado e exportar a auditoria) e **administrador** (+ usuários e LGPD). A regra
 está em `lib/permissions.ts` e é imposta no servidor em toda rota de `app/api/`; detalhes e
 limitações em `SECURITY.md`.
 

@@ -3,7 +3,7 @@ import { prisma } from "@/lib/db"
 import { isPapel } from "@/lib/permissions"
 import { logAudit } from "@/lib/server/audit/audit"
 import { requirePermission } from "@/lib/server/auth/authz"
-import { getDefaultEmpresa } from "@/lib/server/data/empresa"
+import { getEmpresaAtual } from "@/lib/server/data/empresa"
 import { handleRouteError } from "@/lib/server/http"
 import { hashPassword, requireValidPassword } from "@/lib/server/auth/password"
 import { toUsuarioDto } from "@/lib/server/data/usuarios"
@@ -116,7 +116,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       : await prisma.usuario.update({ where: { id: usuarioId }, data })
     if (body.doisFatoresAtivo === false) await prisma.codigoRecuperacao.deleteMany({ where: { usuarioId } })
 
-    const empresa = await getDefaultEmpresa()
+    const empresa = await getEmpresaAtual()
     await logAudit(empresa.id, "Usuário atualizado", `${alvo.email}: ${mudancas.join(", ")}.`, admin.email)
 
     return NextResponse.json(toUsuarioDto(atualizado))

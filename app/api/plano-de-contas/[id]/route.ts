@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
-import { getDefaultEmpresa } from "@/lib/server/data/empresa"
+import { getEmpresaAtual } from "@/lib/server/data/empresa"
 import { logAudit } from "@/lib/server/audit/audit"
 import { requirePermission } from "@/lib/server/auth/authz"
 import { handleRouteError } from "@/lib/server/http"
@@ -25,7 +25,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
 
     const atualizada = await prisma.conta.update({ where: { id: contaId }, data: { descricao: nome } })
 
-    const empresa = await getDefaultEmpresa()
+    const empresa = await getEmpresaAtual()
     await logAudit(empresa.id, "Conta renomeada", `${conta.codigo} → "${nome}".`, user.email)
 
     return NextResponse.json(atualizada)
@@ -49,7 +49,7 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
 
     await prisma.conta.delete({ where: { id: contaId } })
 
-    const empresa = await getDefaultEmpresa()
+    const empresa = await getEmpresaAtual()
     await logAudit(empresa.id, "Conta removida", `${conta.codigo} excluída do Plano de Contas.`, user.email)
 
     return NextResponse.json({ ok: true })

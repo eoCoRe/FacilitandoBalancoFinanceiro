@@ -3,7 +3,7 @@ import { prisma } from "@/lib/db"
 import { isPapel } from "@/lib/permissions"
 import { logAudit } from "@/lib/server/audit/audit"
 import { requirePermission } from "@/lib/server/auth/authz"
-import { getDefaultEmpresa } from "@/lib/server/data/empresa"
+import { getEmpresaAtual } from "@/lib/server/data/empresa"
 import { handleRouteError } from "@/lib/server/http"
 import { hashPassword, requireValidPassword } from "@/lib/server/auth/password"
 import { requireEmail, requireNonEmptyString, ValidationError } from "@/lib/server/validation"
@@ -41,7 +41,7 @@ export async function POST(request: Request) {
 
     const usuario = await prisma.usuario.create({ data: { nome, email, papel: body.papel, senhaHash } })
 
-    const empresa = await getDefaultEmpresa()
+    const empresa = await getEmpresaAtual()
     await logAudit(empresa.id, "Usuário criado", `${email} com perfil ${body.papel}.`, admin.email)
 
     return NextResponse.json(toUsuarioDto(usuario), { status: 201 })

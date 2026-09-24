@@ -32,7 +32,9 @@ interface DetalheExtracao {
 
 // Nome legível do que produziu a extração (o campo do banco guarda um identificador técnico).
 function origemLegivel(modelo: string): string {
-  return modelo === "leitor-pdf-local" ? "Leitor local de PDF" : modelo
+  if (modelo === "leitor-pdf-local") return "Leitor local de PDF"
+  if (modelo === "digitacao-manual") return "Digitado pelo analista"
+  return modelo
 }
 
 const formatarData = (iso: string) => new Date(iso).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })

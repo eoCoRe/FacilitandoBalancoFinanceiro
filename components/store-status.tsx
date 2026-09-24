@@ -1,12 +1,13 @@
 "use client"
 
 import { AlertTriangle, Loader2, X } from "lucide-react"
+import { EmpresaOnboarding } from "@/components/empresa-onboarding"
 import { Button } from "@/components/ui/button"
 import { useFinancialStore } from "@/lib/store"
 
 // Tela cheia enquanto os dados vêm do banco na primeira carga, ou quando ela falha.
 export function StoreLoadGate() {
-  const { status, loadError, reload } = useFinancialStore()
+  const { status, loadError, loadErrorCode, reload } = useFinancialStore()
 
   if (status === "loading") {
     return (
@@ -16,6 +17,9 @@ export function StoreLoadGate() {
       </div>
     )
   }
+
+  // Não é uma falha: só não há empresa ainda. O administrador cadastra; os demais são orientados.
+  if (loadErrorCode === "SEM_EMPRESA") return <EmpresaOnboarding onDone={reload} />
 
   return (
     <div className="flex min-h-dvh items-center justify-center px-6">

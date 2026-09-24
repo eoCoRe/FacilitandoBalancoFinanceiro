@@ -18,7 +18,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   prisma.empresa.findFirst.mockResolvedValue({ id: 1 })
   prisma.conta.findUnique.mockResolvedValue({ id: 5 })
-  prisma.exercicio.findUnique.mockResolvedValue({ id: 2 })
+  prisma.exercicio.findUnique.mockResolvedValue({ id: 2, empresaId: 1 })
 })
 
 function buildRequest(body: unknown) {
@@ -26,6 +26,17 @@ function buildRequest(body: unknown) {
 }
 
 describe("PUT /api/valores", () => {
+  it("exercício de OUTRA empresa (a empresa em análise foi trocada em outra aba): 400, nada é gravado nem apagado", async () => {
+    prisma.exercicio.findUnique.mockResolvedValue({ id: 2, empresaId: 7, periodo: "2025" })
+    const gravar = await PUT(buildRequest({ contaId: 5, exercicioId: 2, valor: 100 }))
+    expect(gravar.status).toBe(400)
+    expect((await gravar.json()).error).toMatch(/outra empresa/)
+    const apagar = await PUT(buildRequest({ contaId: 5, exercicioId: 2, valor: null }))
+    expect(apagar.status).toBe(400)
+    expect(prisma.valor.upsert).not.toHaveBeenCalled()
+    expect(prisma.valor.deleteMany).not.toHaveBeenCalled()
+  })
+
   it("rejeita quando contaId ou exercicioId estão ausentes ou inválidos", async () => {
     const response = await PUT(buildRequest({ valor: 100 }))
     expect(response.status).toBe(400)
@@ -113,7 +124,7 @@ describe("PUT /api/valores", () => {
 
   it("a auditoria mostra código da conta e período (não ids internos)", async () => {
     prisma.conta.findUnique.mockResolvedValue({ id: 3, codigo: "1.1.1" })
-    prisma.exercicio.findUnique.mockResolvedValue({ id: 9, periodo: "1T2026" })
+    prisma.exercicio.findUnique.mockResolvedValue({ id: 9, empresaId: 1, periodo: "1T2026" })
     prisma.valor.upsert.mockResolvedValue({ id: 1 })
 
     await PUT(buildRequest({ contaId: 3, exercicioId: 9, valor: 1500 }))

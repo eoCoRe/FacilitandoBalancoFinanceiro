@@ -2,8 +2,8 @@ import { prisma } from "@/lib/db"
 import { ValidationError } from "@/lib/server/validation"
 
 // Direito de acesso e portabilidade (LGPD Art. 18, II e V) — snapshot de tudo que o
-// sistema tem sobre a empresa (protótipo é single-tenant, então "a empresa" é sempre a
-// mesma), pronto para entregar ao titular ou a quem ele autorizar.
+// sistema tem sobre UMA empresa (a que está em análise), pronto para entregar ao titular
+// ou a quem ele autorizar.
 export async function exportEmpresaData(empresaId: number) {
   const empresa = await prisma.empresa.findUnique({
     where: { id: empresaId },
@@ -15,6 +15,7 @@ export async function exportEmpresaData(empresaId: number) {
         },
       },
       auditLogs: true,
+      pareceres: true,
     },
   })
   if (!empresa) throw new ValidationError("Empresa não encontrada.")
@@ -23,21 +24,23 @@ export async function exportEmpresaData(empresaId: number) {
 
 // Direito de eliminação (LGPD Art. 18, VI). Conta/Indice não têm empresaId (são
 // estrutura global do Plano de Contas/catálogo, não dado pessoal) e por isso não são
-// apagados — só Exercicio/Valor/Extracao/ValorExtraido/AuditLog da empresa, via cascade
+// apagados — só Exercicio/Valor/Extracao/ValorExtraido/AuditLog/Parecer da empresa, via cascade
 // do schema ao apagar Empresa. O próprio apagamento é registrado em LgpdErasureLog (sem
 // relação com Empresa, de propósito) na mesma transação, para sobreviver à exclusão que
-// documenta.
+// documenta. As outras empresas não são afetadas: cada uma tem a sua cadeia de selos na
+// auditoria (ver audit-seal.ts), então a cadeia desta sai inteira, sem furar as outras.
 export async function eraseEmpresaData(empresaId: number, solicitadoPor?: string) {
   const empresa = await prisma.empresa.findUnique({ where: { id: empresaId } })
   if (!empresa) throw new ValidationError("Empresa não encontrada.")
 
-  const [exercicios, valores, extracoes, auditLogs] = await Promise.all([
+  const [exercicios, valores, extracoes, auditLogs, pareceres] = await Promise.all([
     prisma.exercicio.count({ where: { empresaId } }),
     prisma.valor.count({ where: { exercicio: { empresaId } } }),
     prisma.extracao.count({ where: { exercicio: { empresaId } } }),
     prisma.auditLog.count({ where: { empresaId } }),
+    prisma.parecer.count({ where: { empresaId } }),
   ])
-  const registrosApagados = { exercicios, valores, extracoes, auditLogs }
+  const registrosApagados = { exercicios, valores, extracoes, auditLogs, pareceres }
 
   await prisma.$transaction([
     prisma.lgpdErasureLog.create({

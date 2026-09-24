@@ -30,6 +30,7 @@
   --color-secondary: var(--secondary);
   --color-primary-foreground: var(--primary-foreground);
   --color-primary: var(--primary);
+  --color-primary-text: var(--primary-text);
   --color-popover-foreground: var(--popover-foreground);
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
@@ -66,6 +67,8 @@
   --popover: oklch(1 0.002 90);
   --popover-foreground: oklch(0.18 0 0);
   --primary: oklch(0.62 0.16 60);
+  /* Laranja da marca como TEXTO pequeno (links, rótulos): o tom do botão dá só ~3:1 sobre fundo claro; este passa de 4,5:1 (WCAG AA). */
+  --primary-text: oklch(0.47 0.13 55);
   --primary-foreground: oklch(0.15 0.02 60);
   --secondary: oklch(0.95 0.01 90);
   --secondary-foreground: oklch(0.2 0 0);
@@ -111,6 +114,7 @@
   --popover: oklch(0.21 0.025 320);
   --popover-foreground: oklch(0.96 0.01 90);
   --primary: oklch(0.8 0.16 70);
+  --primary-text: oklch(0.8 0.16 70);
   --primary-foreground: oklch(0.18 0.03 70);
   --secondary: oklch(0.26 0.02 320);
   --secondary-foreground: oklch(0.96 0.01 90);
@@ -147,6 +151,7 @@
     --popover: oklch(0.21 0.025 320);
     --popover-foreground: oklch(0.96 0.01 90);
     --primary: oklch(0.8 0.16 70);
+    --primary-text: oklch(0.8 0.16 70);
     --primary-foreground: oklch(0.18 0.03 70);
     --secondary: oklch(0.26 0.02 320);
     --secondary-foreground: oklch(0.96 0.01 90);

@@ -618,11 +618,15 @@ export interface OpinionCriterion {
   status: CriterionStatus
   weight: number
   score: number
+  // Sem dado para avaliar (RN04): o critério conta como "atenção" e impede o parecer favorável.
+  insuficiente: boolean
 }
 
 export interface SalesOpinion {
   requestedValue: number
+  // Em reais. 0 quando não há dado para calcular (ver `limitAvailable`).
   suggestedLimit: number
+  limitAvailable: boolean
   coverage: number
   score: number
   rating: OpinionRating
@@ -651,19 +655,44 @@ function scoreBand(value: number, good: number, medium: number, higherIsBetter =
 
 const STATUS_SCORE: Record<CriterionStatus, number> = { ok: 100, atencao: 60, risco: 20 }
 
+// Quantos exercícios deste tipo cabem num ano, para anualizar receita e caixa: "1T2025" (trimestre) = 4, "1S2025"
+// (semestre) = 2; qualquer outro rótulo ("2025", "Dez/2024"...) é tratado como exercício anual.
+export function periodsPerYear(period: string): number {
+  if (/^[1-4]T\d{4}$/i.test(period)) return 4
+  if (/^[12]S\d{4}$/i.test(period)) return 2
+  return 1
+}
+
+// Limite de crédito sugerido, em REAIS: o menor entre 25% da receita líquida anualizada, 120% do Patrimônio Líquido e
+// 3× o caixa operacional anualizado (DFC). Só entram os critérios que têm dado no período: um dado que falta não vira
+// zero (senão o limite seria sempre R$ 0 para quem não tem DFC lançada). Sem nenhum: undefined (dados insuficientes).
 export function suggestedCreditLimit(
   accounts: Account[],
   dre: Record<string, number | undefined>,
   dfc: StaticLine[],
   period: string,
-): number {
-  const receitaLiquida = dre["receita-liquida"] ?? 0
-  const annualizedRevenue = receitaLiquida * 4
-  const pl = accountTotalByName(accounts, "Patrimônio Líquido", period) ?? 0
-  const operatingCash = (dfc.find((l) => l.name === "Fluxo de Caixa Operacional")?.values[period] ?? 0) * 4
-  const candidates = [annualizedRevenue * 0.25, pl * 1.2, operatingCash * 3]
-  const limitInThousands = Math.max(0, Math.min(...candidates))
-  return Math.round(limitInThousands * 1000)
+): number | undefined {
+  const porAno = periodsPerYear(period)
+  const receitaLiquida = dre["receita-liquida"]
+  const pl = accountTotalByName(accounts, "Patrimônio Líquido", period)
+  const caixaOperacional = dfc.find((l) => l.name === "Fluxo de Caixa Operacional")?.values[period]
+  const candidates = [
+    receitaLiquida === undefined ? undefined : receitaLiquida * porAno * 0.25,
+    pl === undefined ? undefined : pl * 1.2,
+    caixaOperacional === undefined ? undefined : caixaOperacional * porAno * 3,
+  ].filter((x): x is number => x !== undefined)
+  if (candidates.length === 0) return undefined
+  return Math.round(Math.max(0, Math.min(...candidates)) * 1000)
+}
+
+function criterion(
+  base: { label: string; detail: string; weight: number },
+  value: number | undefined,
+  format: (v: number) => string,
+  band: (v: number) => CriterionStatus,
+): OpinionCriterion {
+  if (value === undefined) return { ...base, value: DADOS_INSUFICIENTES, status: "atencao", score: 0, insuficiente: true }
+  return { ...base, value: format(value), status: band(value), score: 0, insuficiente: false }
 }
 
 export function buildSalesOpinion(
@@ -677,125 +706,145 @@ export function buildSalesOpinion(
   const dre = computeDre(dreByExercicio[period] ?? {})
   const ctx = makeIndicatorContext(accounts, dre, period)
 
-  const liquidez = INDICATORS.find((i) => i.id === "liquidez-corrente")!.compute(ctx) ?? 0
-  const endividamento = INDICATORS.find((i) => i.id === "endividamento-geral")!.compute(ctx) ?? 0
-  const margem = INDICATORS.find((i) => i.id === "margem-liquida")!.compute(ctx) ?? 0
+  const liquidez = INDICATORS.find((i) => i.id === "liquidez-corrente")!.compute(ctx)
+  const endividamento = INDICATORS.find((i) => i.id === "endividamento-geral")!.compute(ctx)
+  const margem = INDICATORS.find((i) => i.id === "margem-liquida")!.compute(ctx)
 
-  const lucroAtual = dre["lucro-liquido"] ?? 0
   const drePrev = previousPeriod ? computeDre(dreByExercicio[previousPeriod] ?? {}) : undefined
-  const lucroAnterior = drePrev?.["lucro-liquido"] ?? 0
-  const tendenciaLucro = deltaPercent(lucroAtual, lucroAnterior) ?? 0
+  const tendenciaLucro = deltaPercent(dre["lucro-liquido"], drePrev?.["lucro-liquido"])
 
   const limit = suggestedCreditLimit(accounts, dre, dfc, period)
-  const coverage = requestedValue > 0 ? limit / requestedValue : 0
+  const coverage = requestedValue > 0 && limit !== undefined ? limit / requestedValue : 0
 
   const criteria: OpinionCriterion[] = [
-    {
-      label: "Liquidez Corrente",
-      detail: "Se a empresa consegue pagar as contas de curto prazo com o que tem disponível",
-      value: formatRatio(liquidez),
-      status: scoreBand(liquidez, 1.5, 1.0, true),
-      weight: 0.2,
-      score: 0,
-    },
-    {
-      label: "Endividamento",
-      detail: "Quanto do que a empresa tem foi financiado com dívidas, em vez de capital próprio",
-      value: formatPercent(endividamento),
-      status: scoreBand(endividamento, 50, 70, false),
-      weight: 0.2,
-      score: 0,
-    },
-    {
-      label: "Margem Líquida",
-      detail: "De cada R$ 100 vendidos, quanto vira lucro",
-      value: formatPercent(margem),
-      status: scoreBand(margem, 5, 2, true),
-      weight: 0.2,
-      score: 0,
-    },
-    {
-      label: "Tendência do Lucro",
-      detail: previousPeriod ? `Lucro comparado ao período anterior (${previousPeriod})` : "Sem período anterior para comparar",
-      value: `${tendenciaLucro >= 0 ? "+" : ""}${formatBRL(tendenciaLucro, 1)}%`,
-      status: scoreBand(tendenciaLucro, 5, -5, true),
-      weight: 0.15,
-      score: 0,
-    },
-    {
-      label: "Cobertura da Solicitação",
-      detail: "Quanto do valor pedido a empresa consegue cobrir com segurança",
-      value: requestedValue > 0 ? `${formatBRL(coverage, 2)}×` : "—",
-      status: requestedValue > 0 ? scoreBand(coverage, 1, 0.75, true) : "atencao",
-      weight: 0.25,
-      score: 0,
-    },
+    criterion(
+      { label: "Liquidez Corrente", detail: "Se a empresa consegue pagar as contas de curto prazo com o que tem disponível", weight: 0.2 },
+      liquidez,
+      formatRatio,
+      (v) => scoreBand(v, 1.5, 1.0, true),
+    ),
+    criterion(
+      { label: "Endividamento", detail: "Quanto do que a empresa tem foi financiado com dívidas, em vez de capital próprio", weight: 0.2 },
+      endividamento,
+      formatPercent,
+      (v) => scoreBand(v, 50, 70, false),
+    ),
+    criterion(
+      { label: "Margem Líquida", detail: "De cada R$ 100 vendidos, quanto vira lucro", weight: 0.2 },
+      margem,
+      formatPercent,
+      (v) => scoreBand(v, 5, 2, true),
+    ),
+    criterion(
+      {
+        label: "Tendência do Lucro",
+        detail: previousPeriod ? `Lucro comparado ao período anterior (${previousPeriod})` : "Sem período anterior para comparar",
+        weight: 0.15,
+      },
+      tendenciaLucro,
+      (v) => `${v >= 0 ? "+" : ""}${formatBRL(v, 1)}%`,
+      (v) => scoreBand(v, 5, -5, true),
+    ),
+    requestedValue > 0
+      ? criterion(
+          { label: "Cobertura da Solicitação", detail: "Quanto do valor pedido a empresa consegue cobrir com segurança", weight: 0.25 },
+          limit === undefined ? undefined : coverage,
+          (v) => `${formatBRL(v, 2)}×`,
+          (v) => scoreBand(v, 1, 0.75, true),
+        )
+      : {
+          label: "Cobertura da Solicitação",
+          detail: "Quanto do valor pedido a empresa consegue cobrir com segurança",
+          value: "—",
+          status: "atencao",
+          weight: 0.25,
+          score: 0,
+          insuficiente: false,
+        },
   ]
 
   for (const c of criteria) c.score = STATUS_SCORE[c.status]
   const score = Math.round(criteria.reduce((acc, c) => acc + c.score * c.weight, 0))
+  const insuficientes = criteria.filter((c) => c.insuficiente)
 
   let rating: OpinionRating
   if (score >= 70) rating = "favoravel"
   else if (score >= 45) rating = "ressalvas"
   else rating = "desfavoravel"
+  // Faltando dado, o parecer não pode ser favorável: no máximo "com ressalvas" (RN04).
+  if (rating === "favoravel" && insuficientes.length > 0) rating = "ressalvas"
 
   const headline =
-    rating === "favoravel"
-      ? "Operação recomendada dentro do limite sugerido."
-      : rating === "ressalvas"
-        ? "Operação viável mediante condições e garantias adicionais."
-        : "Operação não recomendada no valor solicitado."
+    insuficientes.length > 0 && rating !== "desfavoravel"
+      ? `Faltam dados para uma avaliação completa (${insuficientes.map((c) => c.label).join(", ")}): complete a Tabulação antes de decidir.`
+      : rating === "favoravel"
+        ? "Operação recomendada dentro do limite sugerido."
+        : rating === "ressalvas"
+          ? "Operação viável mediante condições e garantias adicionais."
+          : "Operação não recomendada no valor solicitado."
 
   // Frases curtas, em linguagem simples primeiro — o número técnico vem entre
   // parênteses como apoio, não como a informação principal (RN — parecer legível
   // por quem não é da área financeira).
-  const liquidezCriterion = criteria.find((c) => c.label === "Liquidez Corrente")!
-  const endividamentoCriterion = criteria.find((c) => c.label === "Endividamento")!
-
+  const semDados = (o_que: string) => `Não há dados suficientes no período ${period} para avaliar ${o_que}.`
   const narrative: string[] = []
 
+  if (liquidez === undefined) narrative.push(semDados("se a empresa consegue pagar as contas de curto prazo"))
+  else {
+    const status = criteria[0].status
+    narrative.push(
+      status === "ok"
+        ? `A empresa consegue pagar suas contas de curto prazo com folga (liquidez corrente de ${formatRatio(liquidez)} — acima de 1 é positivo).`
+        : status === "atencao"
+          ? `A empresa consegue pagar suas contas de curto prazo, mas com pouca margem (liquidez corrente de ${formatRatio(liquidez)}).`
+          : `A empresa pode ter dificuldade para pagar suas contas de curto prazo (liquidez corrente de ${formatRatio(liquidez)} — abaixo de 1 é sinal de alerta).`,
+    )
+  }
+
+  if (endividamento === undefined) narrative.push(semDados("o nível de dívidas"))
+  else {
+    const status = criteria[1].status
+    narrative.push(
+      status === "ok"
+        ? `O nível de dívidas em relação a tudo que a empresa possui é saudável (${formatPercent(endividamento)} financiado por terceiros).`
+        : status === "atencao"
+          ? `O nível de dívidas em relação a tudo que a empresa possui pede atenção (${formatPercent(endividamento)} financiado por terceiros).`
+          : `O nível de dívidas em relação a tudo que a empresa possui é elevado (${formatPercent(endividamento)} financiado por terceiros).`,
+    )
+  }
+
   narrative.push(
-    liquidezCriterion.status === "ok"
-      ? `A empresa consegue pagar suas contas de curto prazo com folga (liquidez corrente de ${formatRatio(liquidez)} — acima de 1 é positivo).`
-      : liquidezCriterion.status === "atencao"
-        ? `A empresa consegue pagar suas contas de curto prazo, mas com pouca margem (liquidez corrente de ${formatRatio(liquidez)}).`
-        : `A empresa pode ter dificuldade para pagar suas contas de curto prazo (liquidez corrente de ${formatRatio(liquidez)} — abaixo de 1 é sinal de alerta).`,
+    margem === undefined
+      ? semDados("quanto das vendas vira lucro")
+      : `De cada R$ 100 vendidos no período ${period}, sobram R$ ${formatBRL(margem, 2)} de lucro depois de todas as despesas e impostos.`,
   )
 
   narrative.push(
-    endividamentoCriterion.status === "ok"
-      ? `O nível de dívidas em relação a tudo que a empresa possui é saudável (${formatPercent(endividamento)} financiado por terceiros).`
-      : endividamentoCriterion.status === "atencao"
-        ? `O nível de dívidas em relação a tudo que a empresa possui pede atenção (${formatPercent(endividamento)} financiado por terceiros).`
-        : `O nível de dívidas em relação a tudo que a empresa possui é elevado (${formatPercent(endividamento)} financiado por terceiros).`,
+    !previousPeriod
+      ? `Ainda não há período anterior tabulado para comparar a evolução do lucro.`
+      : tendenciaLucro === undefined
+        ? `Não há lucro lançado nos dois períodos (${previousPeriod} e ${period}) para comparar a evolução.`
+        : tendenciaLucro >= 0
+          ? `O lucro cresceu ${formatBRL(tendenciaLucro, 1)}% frente a ${previousPeriod}, o que reforça a capacidade de pagamento.`
+          : `O lucro recuou ${formatBRL(Math.abs(tendenciaLucro), 1)}% frente a ${previousPeriod}, o que exige atenção.`,
   )
 
-  narrative.push(
-    `De cada R$ 100 vendidos no período ${period}, sobram R$ ${formatBRL(margem, 2)} de lucro depois de todas as despesas e impostos.`,
-  )
-
-  narrative.push(
-    previousPeriod
-      ? tendenciaLucro >= 0
-        ? `O lucro cresceu ${formatBRL(tendenciaLucro, 1)}% frente a ${previousPeriod}, o que reforça a capacidade de pagamento.`
-        : `O lucro recuou ${formatBRL(Math.abs(tendenciaLucro), 1)}% frente a ${previousPeriod}, o que exige atenção.`
-      : `Ainda não há período anterior tabulado para comparar a evolução do lucro.`,
-  )
-
-  if (requestedValue > 0) {
+  if (requestedValue <= 0) {
+    narrative.push(`Informe o valor pedido para saber se ele cabe dentro do que a empresa consegue sustentar com segurança.`)
+  } else if (limit === undefined) {
+    narrative.push(`Não há dados (receita, Patrimônio Líquido ou caixa operacional) para calcular um limite sugerido.`)
+  } else {
     narrative.push(
       coverage >= 1
         ? `O valor pedido (R$ ${formatBRL(requestedValue, 2)}) cabe dentro do que a empresa consegue sustentar com segurança (limite calculado: R$ ${formatBRL(limit, 2)}).`
         : `O valor pedido (R$ ${formatBRL(requestedValue, 2)}) é maior do que a empresa consegue sustentar com segurança (limite calculado: R$ ${formatBRL(limit, 2)}). Recomenda-se reduzir o valor ou pedir garantias adicionais.`,
     )
-  } else {
-    narrative.push(`Informe o valor pedido para saber se ele cabe dentro do que a empresa consegue sustentar com segurança.`)
   }
 
   return {
     requestedValue,
-    suggestedLimit: limit,
+    suggestedLimit: limit ?? 0,
+    limitAvailable: limit !== undefined,
     coverage,
     score,
     rating,

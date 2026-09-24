@@ -16,9 +16,53 @@ const SYNONYMS: Record<string, string> = {
   "emprestimos bancarios": "emprestimos e financiamentos",
   financiamentos: "emprestimos e financiamentos",
   "patrimonio liquido total": "patrimonio liquido",
+  // Vistos em balanços reais de escritórios de contabilidade (2024/2025).
+  disponivel: "disponibilidades",
+  "caixa e bancos conta movimento": "disponibilidades",
+  "creditos de clientes": "contas a receber de clientes",
+  "clientes a receber": "contas a receber de clientes",
+  "estoque de mercadorias": "estoques",
+  "estoques de mercadorias": "estoques",
+  "mercadorias para revenda": "estoques",
+  "impostos a recolher": "obrigacoes tributarias",
+  "obrigacoes fiscais": "obrigacoes tributarias",
+  "reserva de lucro": "reservas de lucros",
+  "reserva de lucros": "reservas de lucros",
+  "passivo nao circulante": "exigivel a longo prazo",
+  "passivo exigivel a longo prazo": "exigivel a longo prazo",
+  // DRE (linhas de entrada e as calculadas, que só servem para não serem confundidas com as de entrada).
+  "receita operacional bruta": "receita bruta",
+  "receita bruta de vendas": "receita bruta",
+  "receita bruta de vendas e servicos": "receita bruta",
+  "faturamento bruto": "receita bruta",
+  deducoes: "deducoes da receita",
+  "deducoes da receita bruta": "deducoes da receita",
+  "deducoes de vendas": "deducoes da receita",
+  "impostos sobre vendas": "deducoes da receita",
+  "receita operacional liquida": "receita liquida",
+  "receita liquida de vendas": "receita liquida",
+  cmv: "custo das mercadorias vendidas",
+  cpv: "custo das mercadorias vendidas",
+  "custo dos produtos vendidos": "custo das mercadorias vendidas",
+  "custo das vendas": "custo das mercadorias vendidas",
+  "custo dos servicos prestados": "custo das mercadorias vendidas",
+  "custo serv produtos vendidos": "custo das mercadorias vendidas",
+  "custo das mercadorias e servicos vendidos": "custo das mercadorias vendidas",
+  "despesas operacionais liquidas": "despesas operacionais",
+  "resultado financeiro liquido": "resultado financeiro",
+  "receitas despesas financeiras": "resultado financeiro",
+  "despesas receitas financeiras": "resultado financeiro",
+  "imposto de renda e contribuicao social": "ir csll",
+  "provisao para ir e csll": "ir csll",
+  "provisao para imposto de renda e contribuicao social": "ir csll",
+  "ir e csll": "ir csll",
+  "lucro prejuizo liquido do exercicio": "lucro liquido do exercicio",
+  "lucro prejuizo liq do exerc": "lucro liquido do exercicio",
+  "lucro liquido": "lucro liquido do exercicio",
+  "compras de mercadorias": "compras",
 }
 
-function normalize(s: string): string {
+export function normalize(s: string): string {
   return s
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")
@@ -27,6 +71,8 @@ function normalize(s: string): string {
     .replace(/\s+/g, " ")
     .trim()
 }
+
+const temNao = (s: string) => /(^| )nao( |$)/.test(s)
 
 function canonicalize(s: string): string {
   const normalized = normalize(s)
@@ -68,6 +114,8 @@ export function matchAccountName(label: string, leaves: Account[]): AccountMatch
   let best: AccountMatch = { account: null, score: 0 }
   for (const account of leaves) {
     const candidate = canonicalize(account.name)
+    // Um "não" de diferença inverte o sentido: "Ativo NÃO Circulante" não é "Ativo Circulante", por mais parecido que seja.
+    if (temNao(candidate) !== temNao(target)) continue
     const shorter = Math.min(candidate.length, target.length)
     const longer = Math.max(candidate.length, target.length)
     // Só conta "um contém o outro" como casamento forte se os dois têm tamanho parecido —

@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 const { prisma } = vi.hoisted(() => ({
   prisma: {
     conta: { findMany: vi.fn() },
+    empresa: { findFirst: vi.fn() },
   },
 }))
 
@@ -12,6 +13,7 @@ import { GET } from "./route"
 
 beforeEach(() => {
   vi.clearAllMocks()
+  prisma.empresa.findFirst.mockResolvedValue({ id: 1 })
 })
 
 describe("GET /api/dre", () => {
@@ -96,5 +98,15 @@ describe("GET /api/dre", () => {
     expect(body.valoresPorExercicio).toEqual({})
     expect(body.linhas.length).toBeGreaterThan(0) // linhas do catálogo continuam presentes
     expect(body.linhas.every((l: { contaId: number | null }) => l.contaId === null)).toBe(true)
+  })
+})
+
+describe("GET /api/dre — várias empresas", () => {
+  it("lê só os valores da empresa em análise (a conta é global; o valor é do exercício de uma empresa)", async () => {
+    prisma.conta.findMany.mockResolvedValue([])
+    await GET()
+    expect(prisma.conta.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ include: { valores: { where: { exercicio: { empresaId: 1 } }, include: { exercicio: true } } } }),
+    )
   })
 })

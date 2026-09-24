@@ -26,7 +26,7 @@ describe("POST /api/auditoria/selar-pendentes", () => {
     const response = await POST()
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual({ selados: 3 })
-    expect(seal.sealPendingDetailed).toHaveBeenCalledWith({ all: true })
+    expect(seal.sealPendingDetailed).toHaveBeenCalledWith({ all: true, empresaId: 1 })
     expect(prisma.auditLog.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         acao: "Registros pendentes selados manualmente",

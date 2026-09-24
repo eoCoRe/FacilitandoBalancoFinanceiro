@@ -62,6 +62,18 @@ function totp(base32, step) {
 }
 
 let passed = 0
+// CNPJ válido (com os dígitos verificadores) e aleatório, para o cadastro de empresa não colidir com um anterior.
+function cnpjAleatorio() {
+  const base = Array.from({ length: 12 }, () => Math.floor(Math.random() * 10))
+  const dv = (digits) => {
+    const pesos = digits.length === 12 ? [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2] : [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
+    const resto = digits.reduce((soma, d, i) => soma + d * pesos[i], 0) % 11
+    return resto < 2 ? 0 : 11 - resto
+  }
+  const d1 = dv(base)
+  return [...base, d1, dv([...base, d1])].join("")
+}
+
 async function check(name, fn) {
   try {
     await fn()
@@ -268,6 +280,53 @@ try {
     assert.ok(r.json.verificados > 0)
     assert.equal(r.json.naoSelados, 0)
     assert.equal((await analista.call("POST", "/api/auditoria/integridade")).status, 403)
+  })
+
+  await check("várias empresas: cadastrar outra, trocar, dados separados, e eliminar (LGPD) uma não fura a auditoria da outra", async () => {
+    const empresaOriginal = (await admin.call("GET", "/api/empresa")).json
+    const original = empresaOriginal.id
+    const periodo = empresaOriginal.exercicios[0]?.periodo ?? "2099"
+    const folhas = (nos) => nos.flatMap((n) => (n.subcontas?.length ? folhas(n.subcontas) : [n]))
+    const valorNaOriginal = async () => folhas((await analista.call("GET", "/api/plano-de-contas")).json.contas)[0].valores[periodo]
+    const antes = await valorNaOriginal()
+
+    const criada = await admin.call("POST", "/api/empresa", { cnpj: cnpjAleatorio(), razaoSocial: "Empresa do teste de fumaça" })
+    assert.equal(criada.status, 201, JSON.stringify(criada.json))
+    // quem cadastrou passa a ver a nova (vazia); o analista, em outro navegador, continua na que estava
+    const atual = (await admin.call("GET", "/api/empresa")).json
+    assert.equal(atual.id, criada.json.id)
+    assert.equal(atual.exercicios.length, 0)
+    assert.equal((await analista.call("GET", "/api/empresa")).json.id, original)
+
+    // MESMO período nas duas empresas, valor diferente na mesma conta: cada uma vê só o seu
+    const exercicio = await admin.call("POST", "/api/exercicios", { periodo })
+    assert.ok(exercicio.status < 300, JSON.stringify(exercicio.json))
+    const folha = folhas((await admin.call("GET", "/api/plano-de-contas")).json.contas)[0]
+    assert.equal((await admin.call("PUT", "/api/valores", { contaId: folha.id, exercicioId: exercicio.json.id, valor: 123456 })).status, 200)
+    assert.equal(folhas((await admin.call("GET", "/api/plano-de-contas")).json.contas)[0].valores[periodo], 123456)
+    assert.equal(await valorNaOriginal(), antes)
+    // e quem está na original não grava no exercício da outra
+    assert.equal((await analista.call("PUT", "/api/valores", { contaId: folha.id, exercicioId: exercicio.json.id, valor: 1 })).status, 400)
+
+    // parecer registrado (na empresa temporária: some com a eliminação abaixo), com a análise recalculada no servidor
+    const parecer = await admin.call("POST", "/api/pareceres", {
+      exercicioId: exercicio.json.id,
+      valorSolicitado: 50000,
+      decisao: "REPROVADO",
+      justificativa: "Teste de fumaça: dados insuficientes para aprovar.",
+    })
+    assert.equal(parecer.status, 201, JSON.stringify(parecer.json))
+    assert.equal(parecer.json.limiteAprovado, null)
+    assert.ok(parecer.json.criterios.length > 0)
+    assert.equal((await analista.call("POST", "/api/pareceres", { exercicioId: exercicio.json.id })).status, 403)
+    assert.equal((await admin.call("GET", "/api/pareceres")).json.pareceres.length, 1)
+    // a nova tem a sua cadeia de auditoria; eliminá-la leva a cadeia inteira, sem furar a da original
+    const elim = await admin.call("DELETE", "/api/lgpd/eliminacao", { solicitadoPor: "teste de fumaça" })
+    assert.equal(elim.status, 200, JSON.stringify(elim.json))
+    assert.equal(elim.json.empresaId, criada.json.id)
+    assert.equal((await admin.call("GET", "/api/empresa")).json.id, original)
+    const integridade = await admin.call("POST", "/api/auditoria/integridade")
+    assert.equal(integridade.json.integra, true, JSON.stringify(integridade.json))
   })
 
   await check("2FA por app autenticador: ligar, entrar com o código do app e com um código de recuperação", async () => {

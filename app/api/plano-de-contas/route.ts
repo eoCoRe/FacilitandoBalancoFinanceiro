@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
-import { getDefaultEmpresa } from "@/lib/server/data/empresa"
+import { getEmpresaAtual } from "@/lib/server/data/empresa"
 import { logAudit } from "@/lib/server/audit/audit"
 import { requirePermission } from "@/lib/server/auth/authz"
 import { handleRouteError } from "@/lib/server/http"
@@ -20,16 +20,17 @@ interface ContaNode {
 export async function GET() {
   try {
     await requirePermission("consultar")
-    return NextResponse.json({ contas: await buildTree() })
+    return NextResponse.json({ contas: await buildTree((await getEmpresaAtual()).id) })
   } catch (error) {
     return handleRouteError(error)
   }
 }
 
-async function buildTree(): Promise<ContaNode[]> {
+async function buildTree(empresaId: number): Promise<ContaNode[]> {
   const contas = await prisma.conta.findMany({
     where: { tipo: "BP" },
-    include: { valores: { include: { exercicio: true } } },
+    // Só os valores da empresa em análise: a conta é global, o valor é de um exercício (e o exercício, de uma empresa).
+    include: { valores: { where: { exercicio: { empresaId } }, include: { exercicio: true } } },
     orderBy: { codigo: "asc" },
   })
 
@@ -81,7 +82,7 @@ export async function POST(request: Request) {
       data: { codigo, descricao: nome, tipo: "BP", contaPaiId: parentId, ehGrupo },
     })
 
-    const empresa = await getDefaultEmpresa()
+    const empresa = await getEmpresaAtual()
     await logAudit(
       empresa.id,
       "Conta criada",

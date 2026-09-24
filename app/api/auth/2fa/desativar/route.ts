@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
 import { logAudit } from "@/lib/server/audit/audit"
 import { requireUser } from "@/lib/server/auth/authz"
-import { getDefaultEmpresa } from "@/lib/server/data/empresa"
+import { getEmpresaAtual } from "@/lib/server/data/empresa"
 import { handleRouteError } from "@/lib/server/http"
 import { requireCurrentPassword } from "@/lib/server/auth/password-recheck"
 import { ValidationError } from "@/lib/server/validation"
@@ -27,7 +27,7 @@ export async function POST(request: Request) {
     await requireCurrentPassword(usuario, body.senha)
 
     await prisma.usuario.update({ where: { id: user.id }, data: { doisFatoresAtivo: false } })
-    const empresa = await getDefaultEmpresa()
+    const empresa = await getEmpresaAtual()
     await logAudit(empresa.id, "2FA desativado", "Verificação em 2 etapas desligada pelo próprio usuário.", user.email)
     return NextResponse.json({ ok: true })
   } catch (error) {

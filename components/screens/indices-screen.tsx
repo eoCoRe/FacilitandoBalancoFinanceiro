@@ -18,7 +18,7 @@ import {
   type IndicatorContext,
   type IndicatorStatus,
 } from "@/lib/financial-data"
-import { sectorBenchmarkFor, SECTORS } from "@/lib/sector-benchmarks"
+import { BENCHMARK_SOURCE, sectorBenchmarkFor, sectorBenchmarkSample, sectorCompanies, sectorLabel, SECTORS } from "@/lib/sector-benchmarks"
 import { cn } from "@/lib/utils"
 
 type BenchmarkComparison = "acima" | "abaixo" | "indisponivel"
@@ -75,6 +75,7 @@ function IndicatorCard({
   status,
   comparison,
   benchmark,
+  benchmarkSample,
   exercicioIds,
   ctxByPeriod,
 }: {
@@ -83,6 +84,7 @@ function IndicatorCard({
   status: IndicatorStatus
   comparison: BenchmarkComparison
   benchmark: number | undefined
+  benchmarkSample: number
   exercicioIds: string[]
   ctxByPeriod: Record<string, IndicatorContext>
 }) {
@@ -118,8 +120,16 @@ function IndicatorCard({
               </div>
             ))}
             <div className="flex items-center gap-1.5">
-              <dt className="text-muted-foreground">Média do setor</dt>
-              <dd className="font-mono tabular-nums text-foreground">{formatIndicatorValue(indicator, benchmark)}</dd>
+              <dt className="text-muted-foreground">Mediana do setor</dt>
+              <dd className="font-mono tabular-nums text-foreground">
+                {benchmark === undefined ? (
+                  <span title="A fonte (DFP da CVM) não traz os dados deste índice">sem referência</span>
+                ) : (
+                  <span title={`Mediana de ${benchmarkSample} companhias abertas do setor (CVM, DFP ${BENCHMARK_SOURCE.exercicio})`}>
+                    {formatIndicatorValue(indicator, benchmark)}
+                  </span>
+                )}
+              </dd>
             </div>
           </dl>
         </div>
@@ -156,7 +166,7 @@ export function IndicesScreen() {
       <PageHeader
         eyebrow="Análise"
         title="Índices Financeiros"
-        subtitle="Indicadores calculados a partir das contas do Plano de Contas, por período, comparados à média do setor."
+        subtitle="Indicadores calculados a partir das contas do Plano de Contas, por período, comparados à mediana do setor (companhias abertas, CVM)."
         actions={
           <>
             <label htmlFor="setor-select" className="text-xs text-muted-foreground">
@@ -190,7 +200,8 @@ export function IndicesScreen() {
               <Download className="size-3.5" />
               Exportar CSV
             </Button>
-            <Button size="sm" className="h-8 gap-1.5">
+            {/* Índices personalizados ainda não existem: em vez de um botão que não faz nada, fica desabilitado e diz o motivo. */}
+            <Button size="sm" className="h-8 gap-1.5" disabled title="Em breve: por enquanto o catálogo de índices é fixo">
               <Plus className="size-3.5" />
               Novo índice
             </Button>
@@ -198,7 +209,7 @@ export function IndicesScreen() {
         }
       />
 
-      <div className="flex flex-col gap-6 px-8 py-6">
+      <div className="flex flex-col gap-6 px-4 md:px-8 py-6">
         {groups.map(({ group, items }) => (
           <section key={group} className="flex flex-col gap-3">
             <h2 className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{group}</h2>
@@ -216,6 +227,7 @@ export function IndicesScreen() {
                     status={status}
                     comparison={comparison}
                     benchmark={benchmark}
+                    benchmarkSample={sectorBenchmarkSample(store.sectorId, indicator.id)}
                     exercicioIds={exercicioIds}
                     ctxByPeriod={ctxByPeriod}
                   />
@@ -234,10 +246,22 @@ export function IndicesScreen() {
               [Nome da Conta]
             </code>{" "}
             para referenciar contas do Plano de Contas nas fórmulas. Operadores{" "}
-            <code className="font-mono text-xs text-foreground">+ − × /</code> e parênteses são suportados. A
-            “Média do Setor” é uma referência ilustrativa cadastrada por setor — ajuste em{" "}
-            <code className="font-mono text-xs text-foreground">lib/sector-benchmarks.ts</code> conforme a fonte
-            disponível.
+            <code className="font-mono text-xs text-foreground">+ − × /</code> e parênteses são suportados.
+          </p>
+        </div>
+
+        {/* Fonte das referências setoriais */}
+        <div className="flex items-start gap-3 rounded-md border border-border bg-muted/40 p-4">
+          <Info className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+          <p className="text-sm leading-relaxed text-muted-foreground">
+            <strong className="font-medium text-foreground">Mediana do setor</strong>: mediana de cada índice entre as{" "}
+            {sectorCompanies(store.sectorId)} companhias abertas do setor {sectorLabel(store.sectorId)}, calculada a partir das
+            demonstrações do exercício {BENCHMARK_SOURCE.exercicio} publicadas pela{" "}
+            <a href={BENCHMARK_SOURCE.url} target="_blank" rel="noreferrer" className="text-primary-text underline underline-offset-2">
+              CVM (Dados Abertos, DFP)
+            </a>
+            . São empresas maiores que o cliente típico de crédito: use como referência de ordem de grandeza, não como meta. O
+            PMRV usa a receita líquida (a DFP não traz a bruta) e o PMPC não tem referência (a DFP não traz as compras).
           </p>
         </div>
       </div>

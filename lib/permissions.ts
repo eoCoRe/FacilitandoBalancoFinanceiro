@@ -23,8 +23,10 @@ export type Permission =
   | "lancar-valores" // tabular Balanço/DRE, abrir exercícios, confirmar extrações
   | "gerir-plano-de-contas" // criar, renomear e excluir contas
   | "editar-empresa" // razão social e setor
+  | "cadastrar-empresa" // cadastrar uma empresa-cliente para análise
   | "exportar-auditoria" // baixar a trilha de auditoria inteira em CSV
   | "auditar-exercicio" // marcar/desmarcar um exercício como auditado
+  | "registrar-parecer" // registrar a decisão de crédito (alçada de aprovação)
   | "selar-auditoria" // selar à mão registros que ficaram sem selo (ação excepcional, fica na trilha)
   | "gerir-usuarios"
   | "lgpd" // exportar e eliminar dados (Art. 18)
@@ -36,8 +38,10 @@ const MIN_PAPEL: Record<Permission, Papel> = {
   "lancar-valores": "ANALISTA",
   "gerir-plano-de-contas": "COORDENADOR",
   "editar-empresa": "COORDENADOR",
+  "cadastrar-empresa": "COORDENADOR",
   "exportar-auditoria": "COORDENADOR",
   "auditar-exercicio": "COORDENADOR",
+  "registrar-parecer": "COORDENADOR",
   "selar-auditoria": "ADMINISTRADOR",
   "gerir-usuarios": "ADMINISTRADOR",
   lgpd: "ADMINISTRADOR",

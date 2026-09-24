@@ -5,6 +5,7 @@ import { api, ApiError, errorMessage } from "./api-client"
 import {
   mapAuditoria,
   mapContas,
+  mapDre,
   mapSnapshot,
   type AuditEntry,
   type AuditoriaPayload,
@@ -18,7 +19,9 @@ import {
   type IdIndex,
 } from "./api-mapping"
 import type { Account } from "./financial-data"
+import { dreLineIdFromCode } from "./extraction/pdf-extraction"
 import { sectorLabel } from "./sector-benchmarks"
+import type { Decisao, ParecerRegistrado } from "./parecer"
 
 export type { AuditEntry, Exercicio }
 
@@ -28,6 +31,14 @@ export type { AuditEntry, Exercicio }
 // extração) esperam o servidor e recarregam o que mudou.
 
 type Status = "loading" | "ready" | "error"
+
+export interface NovoParecer {
+  valorSolicitado: number
+  decisao: Decisao
+  limiteAprovado: number | null
+  validadeAte: string | null
+  justificativa: string
+}
 
 export interface ExtractionEntry {
   // null = o leitor viu a linha mas ela não foi ligada a nenhuma conta: só rastreabilidade, não lança valor.
@@ -42,6 +53,8 @@ export interface ExtractionEntry {
 interface StoreApi extends FinancialSnapshot {
   status: Status
   loadError: string | null
+  // Código que o servidor mandou junto do erro de carga (ex.: "SEM_EMPRESA": não há empresa cadastrada).
+  loadErrorCode: string | null
   mutationError: string | null
   dismissMutationError: () => void
   reload: () => void
@@ -55,7 +68,10 @@ interface StoreApi extends FinancialSnapshot {
   addAccountNode: (parentCode: string | null, name: string, isGroup: boolean) => Promise<boolean>
   renameAccountNode: (code: string, name: string) => Promise<boolean>
   deleteAccountNode: (code: string) => Promise<boolean>
-  confirmExtraction: (exercicioId: string, entries: ExtractionEntry[], fileName: string) => Promise<boolean>
+  // `origem`: quem leu os valores — o leitor de PDF (padrão) ou o analista digitando olhando o documento.
+  confirmExtraction: (exercicioId: string, entries: ExtractionEntry[], fileName: string, origem?: OrigemExtracao) => Promise<boolean>
+  // Registra a decisão de crédito (coordenador ou acima). Devolve o parecer gravado, ou null se o servidor recusou.
+  registrarParecer: (exercicioId: string, dados: NovoParecer) => Promise<ParecerRegistrado | null>
 }
 
 const EMPTY: FinancialSnapshot = {
@@ -74,7 +90,8 @@ const EMPTY: FinancialSnapshot = {
 const NO_IDS: IdIndex = { exercicioIdByPeriodo: {}, contaIdByCode: {}, dreContaIdByLine: {} }
 
 // Identifica na trilha de auditoria de onde veio a leitura (o parser roda no navegador, sem LLM).
-const EXTRACTION_MODEL = "leitor-pdf-local"
+export type OrigemExtracao = "leitor-pdf-local" | "digitacao-manual"
+const EXTRACTION_MODEL: OrigemExtracao = "leitor-pdf-local"
 
 // Espera o analista parar de digitar antes de gravar — senão cada tecla viraria uma requisição
 // e uma linha na trilha de auditoria.
@@ -109,6 +126,7 @@ export function FinancialDataProvider({ children }: { children: ReactNode }) {
   const [data, setData] = useState<FinancialSnapshot>(EMPTY)
   const [status, setStatus] = useState<Status>("loading")
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [loadErrorCode, setLoadErrorCode] = useState<string | null>(null)
   const [mutationError, setMutationError] = useState<string | null>(null)
 
   const ids = useRef<IdIndex>(NO_IDS)
@@ -133,6 +151,7 @@ export function FinancialDataProvider({ children }: { children: ReactNode }) {
       .catch((error) => {
         if (cancelled) return
         setLoadError(errorMessage(error))
+        setLoadErrorCode(error instanceof ApiError ? (error.code ?? null) : null)
         setStatus("error")
       })
     return () => {
@@ -166,6 +185,7 @@ export function FinancialDataProvider({ children }: { children: ReactNode }) {
   const reload = useCallback(() => {
     setStatus("loading")
     setLoadError(null)
+    setLoadErrorCode(null)
     fetchSnapshot()
       .then((result) => {
         applySnapshot(result)
@@ -173,6 +193,7 @@ export function FinancialDataProvider({ children }: { children: ReactNode }) {
       })
       .catch((error) => {
         setLoadError(errorMessage(error))
+        setLoadErrorCode(error instanceof ApiError ? (error.code ?? null) : null)
         setStatus("error")
       })
   }, [applySnapshot])
@@ -182,6 +203,12 @@ export function FinancialDataProvider({ children }: { children: ReactNode }) {
     const { accounts, contaIdByCode } = mapContas(contas)
     ids.current = { ...ids.current, contaIdByCode }
     setData((prev) => ({ ...prev, accounts }))
+  }, [])
+
+  const refreshDre = useCallback(async () => {
+    const { dreByExercicio, dreContaIdByLine } = mapDre(await api<DrePayload>("/api/dre"))
+    ids.current = { ...ids.current, dreContaIdByLine }
+    setData((prev) => ({ ...prev, dreByExercicio }))
   }, [])
 
   const refreshAudit = useCallback(async () => {
@@ -389,13 +416,20 @@ export function FinancialDataProvider({ children }: { children: ReactNode }) {
   )
 
   const confirmExtraction = useCallback(
-    async (exercicioId: string, entries: ExtractionEntry[], fileName: string) => {
+    async (exercicioId: string, entries: ExtractionEntry[], fileName: string, origem: OrigemExtracao = EXTRACTION_MODEL) => {
       flushValueWrites()
       const done = await enqueue(async () => {
         const exercicioDbId = ids.current.exercicioIdByPeriodo[exercicioId]
         if (!exercicioDbId) throw new ApiError(`Exercício ${exercicioId} não encontrado.`)
         const itens = entries.map((entry) => {
-          const contaId = entry.code === null ? null : ids.current.contaIdByCode[entry.code]
+          // Código "dre:<linha>" = linha de entrada da DRE (ver lib/extraction/pdf-extraction.ts); o resto, Balanço.
+          const dreLineId = entry.code === null ? null : dreLineIdFromCode(entry.code)
+          const contaId =
+            entry.code === null
+              ? null
+              : dreLineId !== null
+                ? ids.current.dreContaIdByLine[dreLineId]
+                : ids.current.contaIdByCode[entry.code]
           if (entry.code !== null && !contaId) throw new ApiError(`Conta ${entry.code} não encontrada.`)
           return {
             contaId,
@@ -407,14 +441,28 @@ export function FinancialDataProvider({ children }: { children: ReactNode }) {
         })
         await api("/api/extracoes", {
           method: "POST",
-          body: { exercicioId: exercicioDbId, arquivoOrigem: fileName, modeloLlm: EXTRACTION_MODEL, itens },
+          body: { exercicioId: exercicioDbId, arquivoOrigem: fileName, modeloLlm: origem, itens },
         })
-        await refreshAccounts()
+        await Promise.all([refreshAccounts(), refreshDre()])
         return true
       })
       return done === true
     },
-    [enqueue, flushValueWrites, refreshAccounts],
+    [enqueue, flushValueWrites, refreshAccounts, refreshDre],
+  )
+
+  const registrarParecer = useCallback(
+    async (exercicioId: string, dados: NovoParecer) => {
+      const done = await enqueue(async () => {
+        const exercicioDbId = ids.current.exercicioIdByPeriodo[exercicioId]
+        if (!exercicioDbId) throw new ApiError(`Exercício ${exercicioId} não encontrado.`)
+        const parecer = await api<ParecerRegistrado>("/api/pareceres", { method: "POST", body: { exercicioId: exercicioDbId, ...dados } })
+        await refreshAudit()
+        return parecer
+      })
+      return done ?? null
+    },
+    [enqueue, refreshAudit],
   )
 
   const dismissMutationError = useCallback(() => setMutationError(null), [])
@@ -424,6 +472,7 @@ export function FinancialDataProvider({ children }: { children: ReactNode }) {
       ...data,
       status,
       loadError,
+      loadErrorCode,
       mutationError,
       dismissMutationError,
       reload,
@@ -436,11 +485,13 @@ export function FinancialDataProvider({ children }: { children: ReactNode }) {
       renameAccountNode,
       deleteAccountNode,
       confirmExtraction,
+      registrarParecer,
     }),
     [
       data,
       status,
       loadError,
+      loadErrorCode,
       mutationError,
       dismissMutationError,
       reload,
@@ -453,6 +504,7 @@ export function FinancialDataProvider({ children }: { children: ReactNode }) {
       renameAccountNode,
       deleteAccountNode,
       confirmExtraction,
+      registrarParecer,
     ],
   )
 

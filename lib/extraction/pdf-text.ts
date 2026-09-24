@@ -24,9 +24,16 @@ function isTextItem(item: TextItem | { type: string }): item is TextItem {
   return "str" in item
 }
 
-export async function extractPdfText(file: File): Promise<PdfTextResult> {
+// O pdfjs configurado (worker do próprio bundle). Usado pela leitura do texto e pelo visualizador do documento
+// (components/documento-viewer.tsx), que desenha as páginas num canvas — a CSP não permite PDF num iframe.
+export async function carregarPdfjs() {
   const pdfjsLib = await import("pdfjs-dist")
   pdfjsLib.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString()
+  return pdfjsLib
+}
+
+export async function extractPdfText(file: File): Promise<PdfTextResult> {
+  const pdfjsLib = await carregarPdfjs()
 
   const buffer = await file.arrayBuffer()
   const loadingTask = pdfjsLib.getDocument({ data: buffer })

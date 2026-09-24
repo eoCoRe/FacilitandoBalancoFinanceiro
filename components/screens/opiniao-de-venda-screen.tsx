@@ -3,7 +3,9 @@
 import { useMemo, useState } from "react"
 import { ArrowRight, CheckCircle2, AlertTriangle, ChevronDown, XCircle, Gavel, FileText, Sparkles } from "lucide-react"
 import { PageHeader } from "@/components/page-header"
+import { HistoricoPareceres, RegistrarDecisao } from "@/components/parecer-registro"
 import { Button } from "@/components/ui/button"
+import { can } from "@/lib/permissions"
 import { useFinancialStore } from "@/lib/store"
 import {
   buildSalesOpinion,
@@ -64,11 +66,12 @@ export function OpiniaoDeVendaScreen({ onNavigate }: { onNavigate: (id: ScreenId
   const defaultLimit = useMemo(
     () =>
       current
-        ? suggestedCreditLimit(store.accounts, computeDre(store.dreByExercicio[current] ?? {}), store.dfc, current)
+        ? (suggestedCreditLimit(store.accounts, computeDre(store.dreByExercicio[current] ?? {}), store.dfc, current) ?? 0)
         : 0,
     [store.accounts, store.dreByExercicio, store.dfc, current],
   )
   const [requestedValue, setRequestedValue] = useState<number>(Math.round(defaultLimit * 0.8))
+  const [historicoVersao, setHistoricoVersao] = useState(0)
 
   const opinion = useMemo(
     () =>
@@ -81,16 +84,16 @@ export function OpiniaoDeVendaScreen({ onNavigate }: { onNavigate: (id: ScreenId
     return (
       <div className="flex flex-col">
         <PageHeader eyebrow="Início" title="Parecer de Crédito" subtitle={`Nenhum exercício tabulado ainda para ${store.companyName}.`} />
-        <div className="px-8 py-6">
+        <div className="px-4 md:px-8 py-6">
           <div className="flex flex-col items-center gap-4 rounded-md border border-dashed border-border bg-card px-6 py-14 text-center">
             <p className="max-w-sm text-sm leading-relaxed text-muted-foreground">
               Para gerar o parecer automático, primeiro cadastre os valores do Balanço e da DRE de pelo menos um
-              exercício — via extração por IA ou lançamento manual na Tabulação.
+              exercício — pela extração de PDF ou lançamento manual na Tabulação.
             </p>
             <div className="flex flex-wrap justify-center gap-2">
               <Button size="sm" className="gap-1.5" onClick={() => onNavigate("extracao-ia")}>
                 <Sparkles className="size-3.5" />
-                Extração via IA
+                Extração de PDF
               </Button>
               <Button variant="outline" size="sm" className="gap-1.5" onClick={() => onNavigate("tabulacao")}>
                 Ir para Tabulação
@@ -132,7 +135,7 @@ export function OpiniaoDeVendaScreen({ onNavigate }: { onNavigate: (id: ScreenId
         }
       />
 
-      <div className="grid gap-5 px-8 py-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="grid gap-5 px-4 md:px-8 py-6 lg:grid-cols-[minmax(0,1fr)_360px]">
         {/* Coluna principal — parecer */}
         <div className="flex flex-col gap-5">
           {/* Cabeçalho do parecer */}
@@ -208,9 +211,11 @@ export function OpiniaoDeVendaScreen({ onNavigate }: { onNavigate: (id: ScreenId
               ))}
             </div>
           </section>
+
+          <HistoricoPareceres recarregar={historicoVersao} />
         </div>
 
-        {/* Coluna lateral — entrada e limite */}
+        {/* Coluna lateral — entrada, limite e registro da decisão */}
         <aside className="flex flex-col gap-5">
           <section className="rounded-md border border-border bg-card p-5">
             <label htmlFor="valor-solicitacao" className="text-sm font-medium text-foreground">
@@ -233,7 +238,7 @@ export function OpiniaoDeVendaScreen({ onNavigate }: { onNavigate: (id: ScreenId
               <div className="flex items-center justify-between">
                 <span className="text-xs text-muted-foreground">Limite sugerido</span>
                 <span className="font-mono text-sm tabular-nums text-foreground">
-                  R$ {formatBRL(opinion.suggestedLimit, 2)}
+                  {opinion.limitAvailable ? `R$ ${formatBRL(opinion.suggestedLimit, 2)}` : "Dados insuficientes"}
                 </span>
               </div>
               <div className="flex items-center justify-between">
@@ -248,7 +253,7 @@ export function OpiniaoDeVendaScreen({ onNavigate }: { onNavigate: (id: ScreenId
                         : "text-risk",
                   )}
                 >
-                  {requestedValue > 0 ? `${formatBRL(opinion.coverage, 2)}×` : "—"}
+                  {requestedValue > 0 && opinion.limitAvailable ? `${formatBRL(opinion.coverage, 2)}×` : "—"}
                 </span>
               </div>
             </div>
@@ -288,15 +293,20 @@ export function OpiniaoDeVendaScreen({ onNavigate }: { onNavigate: (id: ScreenId
                 Ver como é calculado
               </summary>
               <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
-                Menor valor entre: 25% do faturamento anualizado, 1,2× o Patrimônio Líquido e 3× a geração de caixa
-                operacional anual.
+                Menor valor entre: 25% da receita líquida anualizada, 1,2× o Patrimônio Líquido e 3× a geração de caixa
+                operacional anualizada (DFC). Exercício trimestral (1T2025) é anualizado ×4, semestral (1S2025) ×2 e os demais
+                são tratados como anuais. Critério sem dado no período fica de fora do cálculo.
               </p>
             </details>
           </section>
+
+          {can(store.user.papel, "registrar-parecer") && (
+            <RegistrarDecisao exercicioId={current} opinion={opinion} onRegistrado={() => setHistoricoVersao((v) => v + 1)} />
+          )}
         </aside>
       </div>
       {/* Só aparece no papel/PDF: quem emitiu e quando, para o parecer impresso ter origem. */}
-      <p className="hidden px-8 pb-6 text-xs text-muted-foreground print:block">
+      <p className="hidden px-4 md:px-8 pb-6 text-xs text-muted-foreground print:block">
         Emitido em {new Date().toLocaleString("pt-BR", { dateStyle: "long", timeStyle: "short" })} por {store.user.nome} (
         {store.user.email}) — Central de Balanços.
       </p>

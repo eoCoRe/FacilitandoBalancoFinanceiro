@@ -236,7 +236,7 @@ export function AuditoriaScreen() {
         }
       />
 
-      <div className="flex flex-col gap-4 px-8 py-6">
+      <div className="flex flex-col gap-4 px-4 md:px-8 py-6">
         <form onSubmit={filtrar} className="grid gap-3 rounded-md border border-border bg-card p-4 md:grid-cols-6">
           <input
             placeholder="Usuário (e-mail)"
