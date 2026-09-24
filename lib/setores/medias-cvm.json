@@ -1,0 +1,218 @@
+{
+  "fonte": "CVM — Portal de Dados Abertos: DFP (Demonstrações Financeiras Padronizadas) das companhias abertas",
+  "url": "https://dados.cvm.gov.br/dataset/cia_aberta-doc-dfp",
+  "exercicio": 2025,
+  "geradoEm": "2026-09-24",
+  "estatistica": "mediana",
+  "setoresCvm": {
+    "comercio-varejista": [
+      "Comércio (Atacado e Varejo)"
+    ],
+    "industria": [
+      "Máquinas, Equipamentos, Veículos e Peças",
+      "Máqs., Equip., Veíc. e Peças",
+      "Metalurgia e Siderurgia",
+      "Têxtil e Vestuário",
+      "Alimentos",
+      "Bebidas e Fumo",
+      "Farmacêutico e Higiene",
+      "Petroquímicos e Borracha",
+      "Papel e Celulose",
+      "Embalagens"
+    ],
+    "servicos": [
+      "Serviços Transporte e Logística",
+      "Serviços Médicos",
+      "Serviços médicos",
+      "Comunicação e Informática",
+      "Telecomunicações",
+      "Educação",
+      "Hospedagem e Turismo",
+      "Brinquedos e Lazer"
+    ],
+    "construcao-civil": [
+      "Construção Civil, Mat. Constr. e Decoração",
+      "Const. Civil, Mat. Const. e Decoração"
+    ],
+    "agronegocio": [
+      "Agricultura (Açúcar, Álcool e Cana)"
+    ]
+  },
+  "setores": {
+    "industria": {
+      "empresas": 108,
+      "medianas": {
+        "liquidez-corrente": 1.62,
+        "liquidez-seca": 1.15,
+        "liquidez-geral": 0.95,
+        "liquidez-imediata": 0.24,
+        "endividamento-geral": 63.61,
+        "composicao-endividamento": 48.21,
+        "imobilizacao-pl": 91.07,
+        "margem-bruta": 25.57,
+        "margem-liquida": 4.76,
+        "roe": 11.75,
+        "roa": 3.68,
+        "giro-ativo": 0.75,
+        "pmre": 86.64,
+        "pmrv": 59.9
+      },
+      "amostras": {
+        "liquidez-corrente": 108,
+        "liquidez-seca": 108,
+        "liquidez-geral": 108,
+        "liquidez-imediata": 108,
+        "endividamento-geral": 108,
+        "composicao-endividamento": 108,
+        "imobilizacao-pl": 90,
+        "margem-bruta": 107,
+        "margem-liquida": 107,
+        "roe": 90,
+        "roa": 108,
+        "giro-ativo": 107,
+        "pmre": 105,
+        "pmrv": 107
+      }
+    },
+    "servicos": {
+      "empresas": 183,
+      "medianas": {
+        "liquidez-corrente": 1.38,
+        "liquidez-seca": 1.3,
+        "liquidez-geral": 0.49,
+        "liquidez-imediata": 0.37,
+        "endividamento-geral": 70.73,
+        "composicao-endividamento": 23.4,
+        "imobilizacao-pl": 193.79,
+        "margem-bruta": 35.58,
+        "margem-liquida": 5.14,
+        "roe": 6.16,
+        "roa": 1.68,
+        "giro-ativo": 0.43,
+        "pmre": 0,
+        "pmrv": 38.45
+      },
+      "amostras": {
+        "liquidez-corrente": 181,
+        "liquidez-seca": 181,
+        "liquidez-geral": 181,
+        "liquidez-imediata": 181,
+        "endividamento-geral": 180,
+        "composicao-endividamento": 181,
+        "imobilizacao-pl": 165,
+        "margem-bruta": 173,
+        "margem-liquida": 173,
+        "roe": 165,
+        "roa": 180,
+        "giro-ativo": 173,
+        "pmre": 172,
+        "pmrv": 173
+      }
+    },
+    "comercio-varejista": {
+      "empresas": 51,
+      "medianas": {
+        "liquidez-corrente": 1.53,
+        "liquidez-seca": 0.92,
+        "liquidez-geral": 0.92,
+        "liquidez-imediata": 0.14,
+        "endividamento-geral": 66.54,
+        "composicao-endividamento": 51.74,
+        "imobilizacao-pl": 107.4,
+        "margem-bruta": 35.53,
+        "margem-liquida": 1.91,
+        "roe": 8.69,
+        "roa": 2.28,
+        "giro-ativo": 0.87,
+        "pmre": 86.61,
+        "pmrv": 62.6
+      },
+      "amostras": {
+        "liquidez-corrente": 51,
+        "liquidez-seca": 51,
+        "liquidez-geral": 51,
+        "liquidez-imediata": 51,
+        "endividamento-geral": 51,
+        "composicao-endividamento": 51,
+        "imobilizacao-pl": 48,
+        "margem-bruta": 51,
+        "margem-liquida": 51,
+        "roe": 48,
+        "roa": 51,
+        "giro-ativo": 51,
+        "pmre": 51,
+        "pmrv": 51
+      }
+    },
+    "construcao-civil": {
+      "empresas": 58,
+      "medianas": {
+        "liquidez-corrente": 1.75,
+        "liquidez-seca": 1.3,
+        "liquidez-geral": 1.15,
+        "liquidez-imediata": 0.22,
+        "endividamento-geral": 66.18,
+        "composicao-endividamento": 37.96,
+        "imobilizacao-pl": 31.74,
+        "margem-bruta": 31.19,
+        "margem-liquida": 10.54,
+        "roe": 11.11,
+        "roa": 3.44,
+        "giro-ativo": 0.4,
+        "pmre": 146.79,
+        "pmrv": 137.43
+      },
+      "amostras": {
+        "liquidez-corrente": 58,
+        "liquidez-seca": 58,
+        "liquidez-geral": 58,
+        "liquidez-imediata": 58,
+        "endividamento-geral": 58,
+        "composicao-endividamento": 58,
+        "imobilizacao-pl": 50,
+        "margem-bruta": 56,
+        "margem-liquida": 56,
+        "roe": 50,
+        "roa": 58,
+        "giro-ativo": 56,
+        "pmre": 56,
+        "pmrv": 56
+      }
+    },
+    "agronegocio": {
+      "empresas": 13,
+      "medianas": {
+        "liquidez-corrente": 1.82,
+        "liquidez-seca": 1.66,
+        "liquidez-geral": 0.81,
+        "liquidez-imediata": 0.43,
+        "endividamento-geral": 64.13,
+        "composicao-endividamento": 29.19,
+        "imobilizacao-pl": 117.6,
+        "margem-bruta": 28.86,
+        "margem-liquida": 5.29,
+        "roe": 8.31,
+        "roa": 2.65,
+        "giro-ativo": 0.33,
+        "pmre": 50.4,
+        "pmrv": 31.35
+      },
+      "amostras": {
+        "liquidez-corrente": 13,
+        "liquidez-seca": 13,
+        "liquidez-geral": 13,
+        "liquidez-imediata": 13,
+        "endividamento-geral": 13,
+        "composicao-endividamento": 13,
+        "imobilizacao-pl": 13,
+        "margem-bruta": 13,
+        "margem-liquida": 13,
+        "roe": 13,
+        "roa": 13,
+        "giro-ativo": 13,
+        "pmre": 12,
+        "pmrv": 13
+      }
+    }
+  }
+}

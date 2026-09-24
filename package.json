@@ -14,7 +14,8 @@
     "purge:data": "tsx scripts/purge-expired-data.ts",
     "admin:ensure": "tsx scripts/ensure-admin.ts",
     "smoke": "node scripts/smoke.mjs",
-    "avaliar:extracao": "tsx scripts/avaliar-extracao.ts"
+    "avaliar:extracao": "tsx scripts/avaliar-extracao.ts",
+    "setores:atualizar": "tsx scripts/atualizar-medias-setoriais.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",

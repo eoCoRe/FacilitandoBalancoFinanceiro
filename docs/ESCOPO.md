@@ -15,7 +15,7 @@ Estimativas em **sessões** de trabalho como a de 24/09 (2 a 3 horas cada, eu pr
 | D4 | **Publicar, mas não na Vercel** (plataforma a definir) |
 | D6 | Em explicação |
 | D7, D8, D9 | **SIM** |
-| D10 | Pesquisar a melhor fonte de mercado (recomendação: CVM Dados Abertos, DFP; ver conversa) |
+| D10 | **Feito**: medianas setoriais da CVM (Dados Abertos, DFP 2025), `pnpm setores:atualizar` |
 
 ---
 
@@ -66,7 +66,7 @@ Estimativas em **sessões** de trabalho como a de 24/09 (2 a 3 horas cada, eu pr
 3. **Dois documentos divergem sobre a IA.** O RFC (§5.4/§5.5) fala em **API de LLM externa**; um
    `diagramas_modelo_proprio.md` (citado no `SECURITY.md`, mas não encontrado) falava em **modelo próprio treinado**.
    Precisa escolher um e alinhar a monografia.
-4. **As médias do setor são ilustrativas** (`lib/sector-benchmarks.ts` diz isso). A banca pode perguntar a fonte.
+4. ~~As médias do setor são ilustrativas.~~ **Resolvido (D10)**: mediana das companhias abertas do setor, DFP 2025 da CVM (`pnpm setores:atualizar`).
 5. **O parecer não é salvo.** Ele é recalculado toda vez; não fica registrado "quem decidiu o quê, quando, com qual
    limite". Numa análise de crédito real, o registro da decisão é o produto final.
 6. **Não revisado a fundo:** a lista completa de índices e a fórmula do score (`lib/financial-data.ts`). A leitura
