@@ -56,7 +56,7 @@ function confidenceStatus(confidence: number): "ok" | "atencao" | "risco" {
 
 const STEPS = [
   { title: "Envie o documento", detail: "PDF ou imagem do balanço, DRE ou balancete do cliente." },
-  { title: "Extração automática", detail: "A IA identifica contas, valores e períodos do documento." },
+  { title: "Leitura automática", detail: "O leitor identifica contas, valores e páginas do PDF, direto no seu navegador (o documento não sai do computador)." },
   { title: "Revise e concilie", detail: "Confira o mapeamento sugerido para o Plano de Contas." },
 ]
 
@@ -178,8 +178,8 @@ export function ExtracaoIaScreen({ onNavigate }: { onNavigate: (id: "tabulacao")
     <div className="flex flex-col">
       <PageHeader
         eyebrow="Complementar"
-        title="Extração via IA"
-        subtitle="Transforme demonstrações em PDF ou imagem em dados estruturados de tabulação."
+        title="Extração de PDF"
+        subtitle="Transforme demonstrações em PDF em dados estruturados de tabulação. Você revisa tudo antes de gravar."
         actions={
           <span className="inline-flex items-center gap-1.5 rounded border border-border bg-muted px-2 py-1 font-mono text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
             <Sparkles className="size-3" />
@@ -188,7 +188,7 @@ export function ExtracaoIaScreen({ onNavigate }: { onNavigate: (id: "tabulacao")
         }
       />
 
-      <div className="flex flex-col gap-6 px-8 py-6">
+      <div className="flex flex-col gap-6 px-4 md:px-8 py-6">
         {stage === "idle" && (
           <>
             <input ref={fileInputRef} type="file" accept=".pdf,.png,.jpg,.jpeg" className="hidden" onChange={handleFileChange} />
@@ -322,7 +322,7 @@ export function ExtracaoIaScreen({ onNavigate }: { onNavigate: (id: "tabulacao")
                 <thead>
                   <tr className="border-b border-border">
                     <th className="px-4 py-2.5 text-left text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                      Conta (sugestão da IA)
+                      Conta (sugerida)
                     </th>
                     <th className="w-24 px-4 py-2.5 text-center text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
                       Página

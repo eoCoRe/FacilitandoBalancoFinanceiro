@@ -3,6 +3,9 @@
 
 export class ValidationError extends Error {}
 
+// Não há empresa cadastrada (instalação nova, ou depois da eliminação LGPD). A tela reconhece o código e oferece o cadastro.
+export class NoCompanyError extends Error {}
+
 // Token LGPD ausente/incorreto (ver lib/server/data/lgpd.ts) — 401, não 400: o problema não é
 // a forma do payload, é a credencial de acesso ao endpoint.
 export class UnauthorizedError extends Error {}

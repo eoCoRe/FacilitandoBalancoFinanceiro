@@ -44,6 +44,8 @@ export interface ExtractionEntry {
 interface StoreApi extends FinancialSnapshot {
   status: Status
   loadError: string | null
+  // Código que o servidor mandou junto do erro de carga (ex.: "SEM_EMPRESA": não há empresa cadastrada).
+  loadErrorCode: string | null
   mutationError: string | null
   dismissMutationError: () => void
   reload: () => void
@@ -111,6 +113,7 @@ export function FinancialDataProvider({ children }: { children: ReactNode }) {
   const [data, setData] = useState<FinancialSnapshot>(EMPTY)
   const [status, setStatus] = useState<Status>("loading")
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [loadErrorCode, setLoadErrorCode] = useState<string | null>(null)
   const [mutationError, setMutationError] = useState<string | null>(null)
 
   const ids = useRef<IdIndex>(NO_IDS)
@@ -135,6 +138,7 @@ export function FinancialDataProvider({ children }: { children: ReactNode }) {
       .catch((error) => {
         if (cancelled) return
         setLoadError(errorMessage(error))
+        setLoadErrorCode(error instanceof ApiError ? (error.code ?? null) : null)
         setStatus("error")
       })
     return () => {
@@ -168,6 +172,7 @@ export function FinancialDataProvider({ children }: { children: ReactNode }) {
   const reload = useCallback(() => {
     setStatus("loading")
     setLoadError(null)
+    setLoadErrorCode(null)
     fetchSnapshot()
       .then((result) => {
         applySnapshot(result)
@@ -175,6 +180,7 @@ export function FinancialDataProvider({ children }: { children: ReactNode }) {
       })
       .catch((error) => {
         setLoadError(errorMessage(error))
+        setLoadErrorCode(error instanceof ApiError ? (error.code ?? null) : null)
         setStatus("error")
       })
   }, [applySnapshot])
@@ -439,6 +445,7 @@ export function FinancialDataProvider({ children }: { children: ReactNode }) {
       ...data,
       status,
       loadError,
+      loadErrorCode,
       mutationError,
       dismissMutationError,
       reload,
@@ -456,6 +463,7 @@ export function FinancialDataProvider({ children }: { children: ReactNode }) {
       data,
       status,
       loadError,
+      loadErrorCode,
       mutationError,
       dismissMutationError,
       reload,

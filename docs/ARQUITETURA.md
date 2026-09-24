@@ -120,7 +120,7 @@ não se pode fazer). Perfis cumulativos:
 | consultar (inclui ver a auditoria); lançar valores e extrações | ✅ | ✅ | ✅ |
 | gerir o Plano de Contas; editar a empresa | ❌ | ✅ | ✅ |
 | marcar exercício como auditado; exportar e verificar a auditoria | ❌ | ✅ | ✅ |
-| gerir usuários e a política de 2 etapas; LGPD (exportar/eliminar); selar à mão registros de auditoria pendentes | ❌ | ❌ | ✅ |
+| gerir usuários e a política de 2 etapas; LGPD (exportar/eliminar); selar à mão registros de auditoria pendentes; cadastrar a empresa (só quando não há nenhuma) | ❌ | ❌ | ✅ |
 
 `app/api/authorization.test.ts` percorre **todas** as rotas: cada perfil abaixo do mínimo leva 403 e o mínimo passa; e um
 teste estrutural falha se aparecer uma rota nova sem `requirePermission()`/`requireUser()` (fora de uma lista explícita de

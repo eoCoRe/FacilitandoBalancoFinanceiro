@@ -81,16 +81,16 @@ export function OpiniaoDeVendaScreen({ onNavigate }: { onNavigate: (id: ScreenId
     return (
       <div className="flex flex-col">
         <PageHeader eyebrow="Início" title="Parecer de Crédito" subtitle={`Nenhum exercício tabulado ainda para ${store.companyName}.`} />
-        <div className="px-8 py-6">
+        <div className="px-4 md:px-8 py-6">
           <div className="flex flex-col items-center gap-4 rounded-md border border-dashed border-border bg-card px-6 py-14 text-center">
             <p className="max-w-sm text-sm leading-relaxed text-muted-foreground">
               Para gerar o parecer automático, primeiro cadastre os valores do Balanço e da DRE de pelo menos um
-              exercício — via extração por IA ou lançamento manual na Tabulação.
+              exercício — pela extração de PDF ou lançamento manual na Tabulação.
             </p>
             <div className="flex flex-wrap justify-center gap-2">
               <Button size="sm" className="gap-1.5" onClick={() => onNavigate("extracao-ia")}>
                 <Sparkles className="size-3.5" />
-                Extração via IA
+                Extração de PDF
               </Button>
               <Button variant="outline" size="sm" className="gap-1.5" onClick={() => onNavigate("tabulacao")}>
                 Ir para Tabulação
@@ -132,7 +132,7 @@ export function OpiniaoDeVendaScreen({ onNavigate }: { onNavigate: (id: ScreenId
         }
       />
 
-      <div className="grid gap-5 px-8 py-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="grid gap-5 px-4 md:px-8 py-6 lg:grid-cols-[minmax(0,1fr)_360px]">
         {/* Coluna principal — parecer */}
         <div className="flex flex-col gap-5">
           {/* Cabeçalho do parecer */}
@@ -296,7 +296,7 @@ export function OpiniaoDeVendaScreen({ onNavigate }: { onNavigate: (id: ScreenId
         </aside>
       </div>
       {/* Só aparece no papel/PDF: quem emitiu e quando, para o parecer impresso ter origem. */}
-      <p className="hidden px-8 pb-6 text-xs text-muted-foreground print:block">
+      <p className="hidden px-4 md:px-8 pb-6 text-xs text-muted-foreground print:block">
         Emitido em {new Date().toLocaleString("pt-BR", { dateStyle: "long", timeStyle: "short" })} por {store.user.nome} (
         {store.user.email}) — Central de Balanços.
       </p>

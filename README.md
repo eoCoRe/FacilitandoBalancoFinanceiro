@@ -2,7 +2,7 @@
 
 Plataforma de análise de balanços para analistas de crédito: cadastro do Plano de Contas,
 tabulação do Balanço/DRE por exercício, demonstrações consolidadas, índices financeiros
-calculados automaticamente, parecer de crédito (Opinião de Venda) e a tela de **Extração via IA**,
+calculados automaticamente, parecer de crédito (Opinião de Venda) e a tela de **Extração de PDF**,
 onde o analista confere os valores lidos de um Balanço/DRE em PDF antes de confirmá-los para a
 Tabulação (fluxo *human-in-the-loop*), com histórico de cada extração (o que foi lido, de onde e a que conta foi ligado). Balanço, DRE, DFC, Balancete e Índices exportam em CSV (`Exportar CSV`, na escala escolhida na tela) e o Parecer de Crédito imprime ou salva em PDF (`Exportar parecer`). Hoje a leitura do PDF é feita por um leitor local, no próprio
 navegador (`lib/extraction/`), sem LLM e sem enviar o documento a terceiros.

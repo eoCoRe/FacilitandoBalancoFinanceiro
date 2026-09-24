@@ -1,7 +1,14 @@
 // Cliente HTTP mínimo para as rotas de /api. Erros viram ApiError com uma mensagem já pronta
 // para o usuário (as rotas devolvem `{ error }` em 400/401; o resto vira texto genérico).
 
-export class ApiError extends Error {}
+export class ApiError extends Error {
+  // Código de máquina que o servidor manda junto (ex.: "SEM_EMPRESA"), para a tela reagir sem ler a mensagem.
+  code?: string
+  constructor(message: string, code?: string) {
+    super(message)
+    this.code = code
+  }
+}
 
 // Sessão expirada, conta desativada ou cookie inválido: limpa o cookie ANTES de ir para /login.
 // Sem isso o proxy (que só confere a assinatura) veria um cookie ainda "válido" e devolveria o
@@ -49,13 +56,15 @@ export async function api<T>(
       throw new ApiError("Sua sessão expirou. Faça login novamente.")
     }
     let message = `O servidor respondeu com erro (${response.status}).`
+    let code: string | undefined
     try {
-      const body = (await response.json()) as { error?: unknown }
+      const body = (await response.json()) as { error?: unknown; codigo?: unknown }
       if (typeof body.error === "string" && body.error) message = body.error
+      if (typeof body.codigo === "string") code = body.codigo
     } catch {
       // corpo não-JSON (ex.: página de erro do Next) — mantém a mensagem genérica.
     }
-    throw new ApiError(message)
+    throw new ApiError(message, code)
   }
 
   return (await response.json()) as T

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 import { can, isPapel, PAPEIS, type Permission } from "./permissions"
 
-const TODAS: Permission[] = ["consultar", "lancar-valores", "gerir-plano-de-contas", "editar-empresa", "exportar-auditoria", "auditar-exercicio", "selar-auditoria", "gerir-usuarios", "lgpd"]
+const TODAS: Permission[] = ["consultar", "lancar-valores", "gerir-plano-de-contas", "editar-empresa", "cadastrar-empresa", "exportar-auditoria", "auditar-exercicio", "selar-auditoria", "gerir-usuarios", "lgpd"]
 
 describe("can", () => {
   it("analista consulta e lança, mas não gerencia estrutura, empresa, usuários nem LGPD", () => {
