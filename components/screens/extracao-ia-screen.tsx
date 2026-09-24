@@ -9,10 +9,12 @@ import {
   FileText,
   HelpCircle,
   Loader2,
+  PencilLine,
   Sparkles,
   Upload,
   X,
 } from "lucide-react"
+import { DigitacaoManual } from "@/components/digitacao-manual"
 import { ExtracoesHistorico } from "@/components/extracoes-historico"
 import { PageHeader } from "@/components/page-header"
 import { Button } from "@/components/ui/button"
@@ -31,7 +33,7 @@ import { parseBrNumber } from "@/lib/number-input"
 import { validateUploadFile } from "@/lib/upload-validation"
 import { cn } from "@/lib/utils"
 
-type Stage = "idle" | "processing" | "reviewing" | "unsupported" | "done"
+type Stage = "idle" | "processing" | "reviewing" | "unsupported" | "manual" | "done"
 
 interface ReviewRow extends ExtractedRow {
   mappedCode: string | null
@@ -74,6 +76,15 @@ export function ExtracaoIaScreen({ onNavigate }: { onNavigate: (id: "tabulacao")
   const [unit, setUnit] = useState<DocumentUnit>("reais")
   const [historicoKey, setHistoricoKey] = useState(0)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  // O arquivo fica na memória do navegador para a digitação manual mostrar o documento ao lado.
+  const [file, setFile] = useState<File | null>(null)
+  const [somenteDigitar, setSomenteDigitar] = useState(false)
+  const [manualInicial, setManualInicial] = useState<{ valores: Record<string, number>; unidade: DocumentUnit }>({ valores: {}, unidade: "reais" })
+
+  function abrirDigitacao(valores: Record<string, number>, unidade: DocumentUnit) {
+    setManualInicial({ valores, unidade })
+    setStage("manual")
+  }
 
   const leafOptions = flattenAccounts(store.accounts).filter((r) => !r.account.children)
 
@@ -85,8 +96,14 @@ export function ExtracaoIaScreen({ onNavigate }: { onNavigate: (id: "tabulacao")
     }
     setUploadError(null)
     setFileName(file.name)
+    setFile(file)
     const lastExercicioId = store.exercicios[store.exercicios.length - 1]?.id
     setExercicioId(lastExercicioId ?? "")
+
+    if (somenteDigitar) {
+      abrirDigitacao({}, "reais")
+      return
+    }
 
     const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")
     if (!isPdf) {
@@ -165,8 +182,19 @@ export function ExtracaoIaScreen({ onNavigate }: { onNavigate: (id: "tabulacao")
   function reset() {
     setStage("idle")
     setFileName(null)
+    setFile(null)
     setRows([])
     setUploadError(null)
+  }
+
+  // Da revisão para a digitação: leva o que a leitura achou (e o analista já corrigiu), na unidade do documento.
+  function digitarAPartirDaRevisao() {
+    const valores: Record<string, number> = {}
+    for (const r of rows) {
+      const v = parseInput(r.confirmedText)
+      if (r.mappedCode && v !== null) valores[r.mappedCode] = v
+    }
+    abrirDigitacao(valores, unit)
   }
 
   const mappedCount = rows.filter((r) => r.mappedCode).length
@@ -224,6 +252,10 @@ export function ExtracaoIaScreen({ onNavigate }: { onNavigate: (id: "tabulacao")
                 <FileText className="size-3.5" />
                 Selecionar arquivo
               </Button>
+              <label className="mt-3 flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
+                <input type="checkbox" checked={somenteDigitar} onChange={(e) => setSomenteDigitar(e.target.checked)} className="accent-primary" />
+                Só quero digitar os valores olhando o documento (sem leitura automática)
+              </label>
             </div>
 
             <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -241,7 +273,7 @@ export function ExtracaoIaScreen({ onNavigate }: { onNavigate: (id: "tabulacao")
               <p className="text-xs leading-relaxed text-muted-foreground">
                 A leitura é feita localmente, sem enviar o arquivo pra nenhum serviço externo: funciona bem em PDFs
                 com texto (gerados direto pelo sistema contábil). PDF escaneado ou imagem (PNG/JPG) não tem texto pra
-                ler automaticamente — nesse caso, o lançamento é feito na Tabulação.
+                ler automaticamente — nesse caso, você digita os valores com o documento aberto ao lado.
               </p>
             </div>
           </>
@@ -261,14 +293,18 @@ export function ExtracaoIaScreen({ onNavigate }: { onNavigate: (id: "tabulacao")
             <p className="text-sm font-medium text-foreground">Não foi possível extrair automaticamente</p>
             <p className="max-w-md text-xs leading-relaxed text-muted-foreground">
               &ldquo;{fileName}&rdquo; não tem texto reconhecível para ler (imagem, digitalização ou PDF sem camada de
-              texto). Lance os valores diretamente na Tabulação.
+              texto). Digite os valores com o documento aberto ao lado.
             </p>
-            <div className="mt-2 flex gap-2">
+            <div className="mt-2 flex flex-wrap justify-center gap-2">
               <Button variant="outline" size="sm" onClick={reset}>
                 Tentar outro arquivo
               </Button>
-              <Button size="sm" onClick={() => onNavigate("tabulacao")}>
+              <Button variant="outline" size="sm" onClick={() => onNavigate("tabulacao")}>
                 Ir para Tabulação
+              </Button>
+              <Button size="sm" className="gap-1.5" onClick={() => abrirDigitacao({}, "reais")} disabled={!file}>
+                <PencilLine className="size-3.5" />
+                Digitar olhando o documento
               </Button>
             </div>
           </div>
@@ -428,10 +464,21 @@ export function ExtracaoIaScreen({ onNavigate }: { onNavigate: (id: "tabulacao")
                 {mappedCount} de {rows.length} linha(s) serão gravadas — mapeie as pendentes. As sem conta ficam só no
                 histórico da extração, sem lançar valor.
               </p>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <Button variant="outline" size="sm" onClick={reset}>
                   <X className="size-3.5" />
                   Cancelar
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={digitarAPartirDaRevisao}
+                  disabled={!file}
+                  title="Abre todos os campos do Balanço e da DRE, já com o que foi lido, e o documento ao lado"
+                >
+                  <PencilLine className="size-3.5" />
+                  Digitar com o documento ao lado
                 </Button>
                 <Button size="sm" disabled={mappedCount === 0 || !exercicioId || confirming || invalidCount > 0} onClick={handleConfirm}>
                   <Check className="size-3.5" />
@@ -440,6 +487,23 @@ export function ExtracaoIaScreen({ onNavigate }: { onNavigate: (id: "tabulacao")
               </div>
             </div>
           </>
+        )}
+
+        {stage === "manual" && file && (
+          <DigitacaoManual
+            file={file}
+            exercicioInicial={exercicioId}
+            unidadeInicial={manualInicial.unidade}
+            valoresIniciais={manualInicial.valores}
+            onCancelar={() => setStage(rows.length > 0 ? "reviewing" : "idle")}
+            onConcluido={(quantos, exercicio) => {
+              setConfirmedCount(quantos)
+              setOmitidasCount(0)
+              setExercicioId(exercicio)
+              setHistoricoKey((k) => k + 1)
+              setStage("done")
+            }}
+          />
         )}
 
         {stage === "done" && (

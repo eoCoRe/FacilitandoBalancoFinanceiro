@@ -68,7 +68,8 @@ interface StoreApi extends FinancialSnapshot {
   addAccountNode: (parentCode: string | null, name: string, isGroup: boolean) => Promise<boolean>
   renameAccountNode: (code: string, name: string) => Promise<boolean>
   deleteAccountNode: (code: string) => Promise<boolean>
-  confirmExtraction: (exercicioId: string, entries: ExtractionEntry[], fileName: string) => Promise<boolean>
+  // `origem`: quem leu os valores — o leitor de PDF (padrão) ou o analista digitando olhando o documento.
+  confirmExtraction: (exercicioId: string, entries: ExtractionEntry[], fileName: string, origem?: OrigemExtracao) => Promise<boolean>
   // Registra a decisão de crédito (coordenador ou acima). Devolve o parecer gravado, ou null se o servidor recusou.
   registrarParecer: (exercicioId: string, dados: NovoParecer) => Promise<ParecerRegistrado | null>
 }
@@ -89,7 +90,8 @@ const EMPTY: FinancialSnapshot = {
 const NO_IDS: IdIndex = { exercicioIdByPeriodo: {}, contaIdByCode: {}, dreContaIdByLine: {} }
 
 // Identifica na trilha de auditoria de onde veio a leitura (o parser roda no navegador, sem LLM).
-const EXTRACTION_MODEL = "leitor-pdf-local"
+export type OrigemExtracao = "leitor-pdf-local" | "digitacao-manual"
+const EXTRACTION_MODEL: OrigemExtracao = "leitor-pdf-local"
 
 // Espera o analista parar de digitar antes de gravar — senão cada tecla viraria uma requisição
 // e uma linha na trilha de auditoria.
@@ -414,7 +416,7 @@ export function FinancialDataProvider({ children }: { children: ReactNode }) {
   )
 
   const confirmExtraction = useCallback(
-    async (exercicioId: string, entries: ExtractionEntry[], fileName: string) => {
+    async (exercicioId: string, entries: ExtractionEntry[], fileName: string, origem: OrigemExtracao = EXTRACTION_MODEL) => {
       flushValueWrites()
       const done = await enqueue(async () => {
         const exercicioDbId = ids.current.exercicioIdByPeriodo[exercicioId]
@@ -439,7 +441,7 @@ export function FinancialDataProvider({ children }: { children: ReactNode }) {
         })
         await api("/api/extracoes", {
           method: "POST",
-          body: { exercicioId: exercicioDbId, arquivoOrigem: fileName, modeloLlm: EXTRACTION_MODEL, itens },
+          body: { exercicioId: exercicioDbId, arquivoOrigem: fileName, modeloLlm: origem, itens },
         })
         await Promise.all([refreshAccounts(), refreshDre()])
         return true
