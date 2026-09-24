@@ -136,6 +136,23 @@ rotas públicas).
 | Novo índice financeiro | `lib/financial-data.ts` (`INDICATORS`) |
 | Nova tela | `components/screens/` + item em `lib/navigation.ts` |
 | Texto de e-mail | `lib/server/mail/mail-templates.ts` |
+| Leitor de PDF: novo sinônimo de conta | `SYNONYMS` em `lib/extraction/account-matcher.ts`; meça com `pnpm avaliar:extracao` |
+
+## 6.1 Como o leitor de PDF decide (Extração)
+
+Tudo roda no navegador, sem IA externa (`lib/extraction/`), e o analista revisa antes de gravar:
+
+1. **Texto → linhas**: o pdfjs devolve texto solto com coordenadas; `line-reconstruction.ts` junta por altura (y).
+2. **Linha → rótulo + valor** (`number-parsing.ts`): formato brasileiro, negativo entre parênteses ou com `-` no fim
+   (sinal de crédito dos balancetes); pedaços de CNPJ e de ano não contam como valor. Um cabeçalho com anos
+   ("Set/2024 | Dez/2023") diz qual coluna é o exercício **mais recente**, que nem sempre é a última.
+3. **Rótulo → conta** (`account-matcher.ts`): nome igual, sinônimo conhecido ou distância de edição (mínimo 70%).
+   Os títulos de seção do documento (Ativo Circulante, Passivo Não Circulante...) restringem os candidatos à seção
+   certa. As linhas de entrada da DRE também são candidatas (`dre:<linha>`); as calculadas (Receita Líquida, Lucro
+   Bruto...) são reconhecidas só para não serem confundidas com as de entrada.
+4. **Sinais e unidade** (`pdf-extraction.ts`): passivo em sinal de crédito vira positivo, deduções da DRE ficam
+   negativas; o documento em reais é convertido para **milhares** (a unidade do sistema) na confirmação — detectado
+   pelo texto ("em milhares", "R$ mil") e ajustável na tela.
 
 ## 7. Decisões que valem lembrar
 
