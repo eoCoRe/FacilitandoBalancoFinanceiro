@@ -68,6 +68,7 @@ LGPD se aplica integralmente.
 | Exportar a trilha de auditoria em CSV; verificar a integridade da trilha | ❌ | ✅ | ✅ |
 | Selar à mão registros de auditoria pendentes (ação excepcional, registrada na trilha) | ❌ | ❌ | ✅ |
 | Marcar/desmarcar um exercício como auditado | ❌ | ✅ | ✅ |
+| Registrar a decisão de crédito (parecer: decisão, limite aprovado, validade, justificativa) | ❌ | ✅ | ✅ |
 | Gerir usuários; exportar/eliminar dados (LGPD) | ❌ | ❌ | ✅ |
 
 **Login com Google** (implementado, ainda não ativado): só entra quem já foi cadastrado por um administrador (o e-mail precisa estar verificado pelo Google e o `state`, o PKCE e o `nonce` são conferidos). Exige `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` e `APP_URL`; sem eles o botão não aparece. Os passos do fluxo têm testes unitários e de rota com o Google simulado; **o fluxo completo contra o Google de verdade depende de credenciais e ainda não foi exercitado**.

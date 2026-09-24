@@ -38,6 +38,13 @@ enum ExtracaoStatus {
   ERRO
 }
 
+// Decisão de crédito registrada por quem tem alçada (coordenador ou acima).
+enum DecisaoCredito {
+  APROVADO
+  APROVADO_COM_RESSALVAS
+  REPROVADO
+}
+
 model Empresa {
   id          Int         @id @default(autoincrement())
   cnpj        String      @unique
@@ -45,6 +52,7 @@ model Empresa {
   setor       String?
   exercicios  Exercicio[]
   auditLogs   AuditLog[]
+  pareceres   Parecer[]
 
   @@map("empresa")
 }
@@ -57,6 +65,7 @@ model Exercicio {
   auditado  Boolean    @default(false)
   valores   Valor[]
   extracoes Extracao[]
+  pareceres Parecer[]
 
   @@unique([empresaId, periodo])
   @@map("exercicio")
@@ -239,4 +248,31 @@ model PoliticaSeguranca {
   doisFatoresObrigatorio Boolean @default(false) @map("dois_fatores_obrigatorio")
 
   @@map("politica_seguranca")
+}
+
+// Parecer de crédito REGISTRADO: a decisão (com limite, validade e justificativa) e a análise automática como ela
+// estava no momento (classificação, score, limite sugerido e critérios, recalculados no servidor). Não se edita nem se
+// apaga: uma decisão nova entra como outro parecer, e o histórico mostra todos (ver app/api/pareceres).
+model Parecer {
+  id              Int            @id @default(autoincrement())
+  empresaId       Int            @map("empresa_id")
+  empresa         Empresa        @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  exercicioId     Int            @map("exercicio_id")
+  exercicio       Exercicio      @relation(fields: [exercicioId], references: [id], onDelete: Cascade)
+  registradoPor   String         @map("registrado_por")
+  criadoEm        DateTime       @default(now()) @map("criado_em")
+  // Análise automática (lib/financial-data.ts, buildSalesOpinion), em reais.
+  classificacao   String
+  score           Int
+  valorSolicitado Decimal        @map("valor_solicitado") @db.Decimal(18, 2)
+  limiteSugerido  Decimal?       @map("limite_sugerido") @db.Decimal(18, 2)
+  criterios       Json
+  // Decisão de quem registrou.
+  decisao         DecisaoCredito
+  limiteAprovado  Decimal?       @map("limite_aprovado") @db.Decimal(18, 2)
+  validadeAte     DateTime?      @map("validade_ate") @db.Date
+  justificativa   String
+
+  @@index([empresaId, criadoEm])
+  @@map("parecer")
 }

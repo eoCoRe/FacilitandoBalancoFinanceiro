@@ -307,6 +307,19 @@ try {
     assert.equal(await valorNaOriginal(), antes)
     // e quem está na original não grava no exercício da outra
     assert.equal((await analista.call("PUT", "/api/valores", { contaId: folha.id, exercicioId: exercicio.json.id, valor: 1 })).status, 400)
+
+    // parecer registrado (na empresa temporária: some com a eliminação abaixo), com a análise recalculada no servidor
+    const parecer = await admin.call("POST", "/api/pareceres", {
+      exercicioId: exercicio.json.id,
+      valorSolicitado: 50000,
+      decisao: "REPROVADO",
+      justificativa: "Teste de fumaça: dados insuficientes para aprovar.",
+    })
+    assert.equal(parecer.status, 201, JSON.stringify(parecer.json))
+    assert.equal(parecer.json.limiteAprovado, null)
+    assert.ok(parecer.json.criterios.length > 0)
+    assert.equal((await analista.call("POST", "/api/pareceres", { exercicioId: exercicio.json.id })).status, 403)
+    assert.equal((await admin.call("GET", "/api/pareceres")).json.pareceres.length, 1)
     // a nova tem a sua cadeia de auditoria; eliminá-la leva a cadeia inteira, sem furar a da original
     const elim = await admin.call("DELETE", "/api/lgpd/eliminacao", { solicitadoPor: "teste de fumaça" })
     assert.equal(elim.status, 200, JSON.stringify(elim.json))

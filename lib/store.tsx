@@ -21,6 +21,7 @@ import {
 import type { Account } from "./financial-data"
 import { dreLineIdFromCode } from "./extraction/pdf-extraction"
 import { sectorLabel } from "./sector-benchmarks"
+import type { Decisao, ParecerRegistrado } from "./parecer"
 
 export type { AuditEntry, Exercicio }
 
@@ -30,6 +31,14 @@ export type { AuditEntry, Exercicio }
 // extração) esperam o servidor e recarregam o que mudou.
 
 type Status = "loading" | "ready" | "error"
+
+export interface NovoParecer {
+  valorSolicitado: number
+  decisao: Decisao
+  limiteAprovado: number | null
+  validadeAte: string | null
+  justificativa: string
+}
 
 export interface ExtractionEntry {
   // null = o leitor viu a linha mas ela não foi ligada a nenhuma conta: só rastreabilidade, não lança valor.
@@ -60,6 +69,8 @@ interface StoreApi extends FinancialSnapshot {
   renameAccountNode: (code: string, name: string) => Promise<boolean>
   deleteAccountNode: (code: string) => Promise<boolean>
   confirmExtraction: (exercicioId: string, entries: ExtractionEntry[], fileName: string) => Promise<boolean>
+  // Registra a decisão de crédito (coordenador ou acima). Devolve o parecer gravado, ou null se o servidor recusou.
+  registrarParecer: (exercicioId: string, dados: NovoParecer) => Promise<ParecerRegistrado | null>
 }
 
 const EMPTY: FinancialSnapshot = {
@@ -438,6 +449,20 @@ export function FinancialDataProvider({ children }: { children: ReactNode }) {
     [enqueue, flushValueWrites, refreshAccounts, refreshDre],
   )
 
+  const registrarParecer = useCallback(
+    async (exercicioId: string, dados: NovoParecer) => {
+      const done = await enqueue(async () => {
+        const exercicioDbId = ids.current.exercicioIdByPeriodo[exercicioId]
+        if (!exercicioDbId) throw new ApiError(`Exercício ${exercicioId} não encontrado.`)
+        const parecer = await api<ParecerRegistrado>("/api/pareceres", { method: "POST", body: { exercicioId: exercicioDbId, ...dados } })
+        await refreshAudit()
+        return parecer
+      })
+      return done ?? null
+    },
+    [enqueue, refreshAudit],
+  )
+
   const dismissMutationError = useCallback(() => setMutationError(null), [])
 
   const value = useMemo<StoreApi>(
@@ -458,6 +483,7 @@ export function FinancialDataProvider({ children }: { children: ReactNode }) {
       renameAccountNode,
       deleteAccountNode,
       confirmExtraction,
+      registrarParecer,
     }),
     [
       data,
@@ -476,6 +502,7 @@ export function FinancialDataProvider({ children }: { children: ReactNode }) {
       renameAccountNode,
       deleteAccountNode,
       confirmExtraction,
+      registrarParecer,
     ],
   )
 

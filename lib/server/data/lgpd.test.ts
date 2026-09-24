@@ -7,6 +7,7 @@ const { prisma } = vi.hoisted(() => ({
     valor: { count: vi.fn() },
     extracao: { count: vi.fn() },
     auditLog: { count: vi.fn() },
+    parecer: { count: vi.fn() },
     lgpdErasureLog: { create: vi.fn() },
     $transaction: vi.fn(),
   },
@@ -50,6 +51,7 @@ describe("exportEmpresaData", () => {
             }),
           }),
           auditLogs: true,
+          pareceres: true,
         }),
       }),
     )
@@ -69,6 +71,7 @@ describe("eraseEmpresaData", () => {
     prisma.valor.count.mockResolvedValue(40)
     prisma.extracao.count.mockResolvedValue(2)
     prisma.auditLog.count.mockResolvedValue(15)
+    prisma.parecer.count.mockResolvedValue(2)
 
     const resultado = await eraseEmpresaData(1, "Analista Renata")
 
@@ -77,13 +80,13 @@ describe("eraseEmpresaData", () => {
         empresaId: 1,
         cnpj: "12.345.678/0001-90",
         razaoSocial: "Farmácia Bem-Estar Ltda",
-        registrosApagados: { exercicios: 3, valores: 40, extracoes: 2, auditLogs: 15 },
+        registrosApagados: { exercicios: 3, valores: 40, extracoes: 2, auditLogs: 15, pareceres: 2 },
         solicitadoPor: "Analista Renata",
       },
     })
     expect(prisma.empresa.delete).toHaveBeenCalledWith({ where: { id: 1 } })
     expect(prisma.$transaction).toHaveBeenCalledTimes(1)
-    expect(resultado.registrosApagados).toEqual({ exercicios: 3, valores: 40, extracoes: 2, auditLogs: 15 })
+    expect(resultado.registrosApagados).toEqual({ exercicios: 3, valores: 40, extracoes: 2, auditLogs: 15, pareceres: 2 })
   })
 
   it("usa 'Sistema' como solicitante padrão quando não informado", async () => {
@@ -92,6 +95,7 @@ describe("eraseEmpresaData", () => {
     prisma.valor.count.mockResolvedValue(0)
     prisma.extracao.count.mockResolvedValue(0)
     prisma.auditLog.count.mockResolvedValue(0)
+    prisma.parecer.count.mockResolvedValue(0)
 
     await eraseEmpresaData(1)
 

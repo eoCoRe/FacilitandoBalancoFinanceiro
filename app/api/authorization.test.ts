@@ -11,6 +11,7 @@ vi.mock("@/lib/db", () => ({ prisma: {} }))
 import * as empresa from "./empresa/route"
 import * as empresas from "./empresas/route"
 import * as empresasSelecionar from "./empresas/selecionar/route"
+import * as pareceres from "./pareceres/route"
 import * as exercicios from "./exercicios/route"
 import * as exerciciosId from "./exercicios/[id]/route"
 import * as planoDeContas from "./plano-de-contas/route"
@@ -53,6 +54,8 @@ const ROTAS: { nome: string; min: Papel; chamar: () => Promise<Response> }[] = [
   { nome: "POST /api/empresa", min: "COORDENADOR", chamar: () => empresa.POST(json("POST", {})) },
   { nome: "GET /api/empresas", min: "ANALISTA", chamar: () => empresas.GET() },
   { nome: "POST /api/empresas/selecionar", min: "ANALISTA", chamar: () => empresasSelecionar.POST(json("POST", { id: 1 })) },
+  { nome: "GET /api/pareceres", min: "ANALISTA", chamar: () => pareceres.GET() },
+  { nome: "POST /api/pareceres", min: "COORDENADOR", chamar: () => pareceres.POST(json("POST", {})) },
   { nome: "PATCH /api/empresa", min: "COORDENADOR", chamar: () => empresa.PATCH(json("PATCH", { setor: "X" })) },
   { nome: "POST /api/exercicios", min: "ANALISTA", chamar: () => exercicios.POST(json("POST", { periodo: "1T2030" })) },
   { nome: "PATCH /api/exercicios/:id", min: "COORDENADOR", chamar: () => exerciciosId.PATCH(json("PATCH", { auditado: true }), params) },

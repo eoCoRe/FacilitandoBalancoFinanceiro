@@ -3,7 +3,9 @@
 import { useMemo, useState } from "react"
 import { ArrowRight, CheckCircle2, AlertTriangle, ChevronDown, XCircle, Gavel, FileText, Sparkles } from "lucide-react"
 import { PageHeader } from "@/components/page-header"
+import { HistoricoPareceres, RegistrarDecisao } from "@/components/parecer-registro"
 import { Button } from "@/components/ui/button"
+import { can } from "@/lib/permissions"
 import { useFinancialStore } from "@/lib/store"
 import {
   buildSalesOpinion,
@@ -69,6 +71,7 @@ export function OpiniaoDeVendaScreen({ onNavigate }: { onNavigate: (id: ScreenId
     [store.accounts, store.dreByExercicio, store.dfc, current],
   )
   const [requestedValue, setRequestedValue] = useState<number>(Math.round(defaultLimit * 0.8))
+  const [historicoVersao, setHistoricoVersao] = useState(0)
 
   const opinion = useMemo(
     () =>
@@ -208,9 +211,11 @@ export function OpiniaoDeVendaScreen({ onNavigate }: { onNavigate: (id: ScreenId
               ))}
             </div>
           </section>
+
+          <HistoricoPareceres recarregar={historicoVersao} />
         </div>
 
-        {/* Coluna lateral — entrada e limite */}
+        {/* Coluna lateral — entrada, limite e registro da decisão */}
         <aside className="flex flex-col gap-5">
           <section className="rounded-md border border-border bg-card p-5">
             <label htmlFor="valor-solicitacao" className="text-sm font-medium text-foreground">
@@ -294,6 +299,10 @@ export function OpiniaoDeVendaScreen({ onNavigate }: { onNavigate: (id: ScreenId
               </p>
             </details>
           </section>
+
+          {can(store.user.papel, "registrar-parecer") && (
+            <RegistrarDecisao exercicioId={current} opinion={opinion} onRegistrado={() => setHistoricoVersao((v) => v + 1)} />
+          )}
         </aside>
       </div>
       {/* Só aparece no papel/PDF: quem emitiu e quando, para o parecer impresso ter origem. */}

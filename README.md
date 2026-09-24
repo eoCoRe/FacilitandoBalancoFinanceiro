@@ -101,7 +101,7 @@ com opção de o administrador exigir por perfil. Recuperação e código por e-
 SMTP (`SMTP_*` no `.env`); sem ele, em desenvolvimento o e-mail aparece no console do
 servidor e em produção esses recursos ficam desligados. O aplicativo autenticador não depende de e-mail.
 Três perfis, cumulativos: **analista** (consulta e lança valores/extrações), **coordenador**
-(+ Plano de Contas, cadastrar e editar empresas, marcar exercício como auditado e exportar a auditoria) e **administrador** (+ usuários e LGPD). A regra
+(+ Plano de Contas, cadastrar e editar empresas, registrar a decisão de crédito, marcar exercício como auditado e exportar a auditoria) e **administrador** (+ usuários e LGPD). A regra
 está em `lib/permissions.ts` e é imposta no servidor em toda rota de `app/api/`; detalhes e
 limitações em `SECURITY.md`.
 
