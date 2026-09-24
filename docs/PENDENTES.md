@@ -35,3 +35,7 @@ sinônimos e distância de edição. **Não há IA nenhuma.** O TCC exige IA, en
 
 - [ ] Extração de um balanço real ponta a ponta: seletor "Valores do documento em", DRE preenchida, índices.
 - [ ] Tabulação: editar valor com centavos e digitar vírgula.
+- [ ] Trocar de empresa pelo cartão "Empresa" da barra lateral e cadastrar uma nova.
+- [ ] Índices: coluna "Mediana do setor" (CVM, DFP 2025) e a nota com a fonte no rodapé.
+- [ ] Parecer: registrar uma decisão e ver o histórico (coordenador ou administrador).
+- [ ] Demonstrações: alternar Valores / AV % / AH % no Balanço e na DRE, e exportar o CSV.
