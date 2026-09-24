@@ -150,3 +150,13 @@ describe("POST /api/plano-de-contas", () => {
     expect(prisma.conta.findUnique).not.toHaveBeenCalled()
   })
 })
+
+describe("GET /api/plano-de-contas — várias empresas", () => {
+  it("lê só os valores da empresa em análise", async () => {
+    prisma.conta.findMany.mockResolvedValue([])
+    await GET()
+    expect(prisma.conta.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ include: { valores: { where: { exercicio: { empresaId: 1 } }, include: { exercicio: true } } } }),
+    )
+  })
+})

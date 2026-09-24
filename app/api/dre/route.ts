@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
 import { requirePermission } from "@/lib/server/auth/authz"
+import { getEmpresaAtual } from "@/lib/server/data/empresa"
 import { handleRouteError } from "@/lib/server/http"
 import { computeDre, DRE_LINES, DRE_MEMO_LINE, type DreValues } from "@/lib/financial-data"
 
@@ -10,16 +11,17 @@ import { computeDre, DRE_LINES, DRE_MEMO_LINE, type DreValues } from "@/lib/fina
 export async function GET() {
   try {
     await requirePermission("consultar")
-    return await buildDre()
+    return await buildDre((await getEmpresaAtual()).id)
   } catch (error) {
     return handleRouteError(error)
   }
 }
 
-async function buildDre() {
+async function buildDre(empresaId: number) {
   const contas = await prisma.conta.findMany({
     where: { tipo: "DRE" },
-    include: { valores: { include: { exercicio: true } } },
+    // Só os valores da empresa em análise: a conta é global, o valor é de um exercício (e o exercício, de uma empresa).
+    include: { valores: { where: { exercicio: { empresaId } }, include: { exercicio: true } } },
     orderBy: { id: "asc" },
   })
 

@@ -283,7 +283,13 @@ try {
   })
 
   await check("várias empresas: cadastrar outra, trocar, dados separados, e eliminar (LGPD) uma não fura a auditoria da outra", async () => {
-    const original = (await admin.call("GET", "/api/empresa")).json.id
+    const empresaOriginal = (await admin.call("GET", "/api/empresa")).json
+    const original = empresaOriginal.id
+    const periodo = empresaOriginal.exercicios[0]?.periodo ?? "2099"
+    const folhas = (nos) => nos.flatMap((n) => (n.subcontas?.length ? folhas(n.subcontas) : [n]))
+    const valorNaOriginal = async () => folhas((await analista.call("GET", "/api/plano-de-contas")).json.contas)[0].valores[periodo]
+    const antes = await valorNaOriginal()
+
     const criada = await admin.call("POST", "/api/empresa", { cnpj: cnpjAleatorio(), razaoSocial: "Empresa do teste de fumaça" })
     assert.equal(criada.status, 201, JSON.stringify(criada.json))
     // quem cadastrou passa a ver a nova (vazia); o analista, em outro navegador, continua na que estava
@@ -291,7 +297,16 @@ try {
     assert.equal(atual.id, criada.json.id)
     assert.equal(atual.exercicios.length, 0)
     assert.equal((await analista.call("GET", "/api/empresa")).json.id, original)
-    assert.ok((await admin.call("POST", "/api/exercicios", { periodo: "2099" })).status < 300)
+
+    // MESMO período nas duas empresas, valor diferente na mesma conta: cada uma vê só o seu
+    const exercicio = await admin.call("POST", "/api/exercicios", { periodo })
+    assert.ok(exercicio.status < 300, JSON.stringify(exercicio.json))
+    const folha = folhas((await admin.call("GET", "/api/plano-de-contas")).json.contas)[0]
+    assert.equal((await admin.call("PUT", "/api/valores", { contaId: folha.id, exercicioId: exercicio.json.id, valor: 123456 })).status, 200)
+    assert.equal(folhas((await admin.call("GET", "/api/plano-de-contas")).json.contas)[0].valores[periodo], 123456)
+    assert.equal(await valorNaOriginal(), antes)
+    // e quem está na original não grava no exercício da outra
+    assert.equal((await analista.call("PUT", "/api/valores", { contaId: folha.id, exercicioId: exercicio.json.id, valor: 1 })).status, 400)
     // a nova tem a sua cadeia de auditoria; eliminá-la leva a cadeia inteira, sem furar a da original
     const elim = await admin.call("DELETE", "/api/lgpd/eliminacao", { solicitadoPor: "teste de fumaça" })
     assert.equal(elim.status, 200, JSON.stringify(elim.json))

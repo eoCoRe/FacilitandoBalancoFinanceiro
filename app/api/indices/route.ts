@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db"
 import { computeDre, INDICATORS, makeIndicatorContext, type DreValues } from "@/lib/financial-data"
 import { requirePermission } from "@/lib/server/auth/authz"
 import { buildBpAccountTree } from "@/lib/server/data/contas"
+import { getEmpresaAtual } from "@/lib/server/data/empresa"
 import { handleRouteError } from "@/lib/server/http"
 import { requirePositiveInt, ValidationError } from "@/lib/server/validation"
 
@@ -21,14 +22,15 @@ export async function GET(request: Request) {
     }
 
     const exercicioId = requirePositiveInt(Number(exercicioIdParam), "exercicioId")
-    const exercicio = await prisma.exercicio.findUnique({ where: { id: exercicioId } })
-    if (!exercicio) throw new ValidationError("Exercício não encontrado.")
+    const [exercicio, empresa] = await Promise.all([prisma.exercicio.findUnique({ where: { id: exercicioId } }), getEmpresaAtual()])
+    if (!exercicio || exercicio.empresaId !== empresa.id) throw new ValidationError("Exercício não encontrado.")
+    const empresaId = empresa.id
 
     const [accounts, dreContas] = await Promise.all([
-      buildBpAccountTree(),
+      buildBpAccountTree(empresaId),
       prisma.conta.findMany({
         where: { tipo: "DRE" },
-        include: { valores: { include: { exercicio: true } } },
+        include: { valores: { where: { exercicio: { empresaId } }, include: { exercicio: true } } },
       }),
     ])
 

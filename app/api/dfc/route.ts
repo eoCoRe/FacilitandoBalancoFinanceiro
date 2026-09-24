@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
 import { requirePermission } from "@/lib/server/auth/authz"
+import { getEmpresaAtual } from "@/lib/server/data/empresa"
 import { handleRouteError } from "@/lib/server/http"
 
 // DFC é somente leitura e fora do escopo funcional do RFC (ver a nota em
@@ -9,16 +10,17 @@ import { handleRouteError } from "@/lib/server/http"
 export async function GET() {
   try {
     await requirePermission("consultar")
-    return await buildDfc()
+    return await buildDfc((await getEmpresaAtual()).id)
   } catch (error) {
     return handleRouteError(error)
   }
 }
 
-async function buildDfc() {
+async function buildDfc(empresaId: number) {
   const contas = await prisma.conta.findMany({
     where: { tipo: "DFC" },
-    include: { valores: { include: { exercicio: true } } },
+    // Só os valores da empresa em análise: a conta é global, o valor é de um exercício (e o exercício, de uma empresa).
+    include: { valores: { where: { exercicio: { empresaId } }, include: { exercicio: true } } },
     orderBy: { id: "asc" },
   })
 

@@ -5,6 +5,7 @@ const { prisma } = vi.hoisted(() => ({
     indice: { findMany: vi.fn() },
     exercicio: { findUnique: vi.fn() },
     conta: { findMany: vi.fn() },
+    empresa: { findFirst: vi.fn() },
   },
 }))
 
@@ -19,6 +20,7 @@ function buildRequest(query = "") {
 beforeEach(() => {
   vi.clearAllMocks()
   prisma.indice.findMany.mockResolvedValue([{ id: 1, nome: "Liquidez Corrente", formula: "...", unidade: "ratio" }])
+  prisma.empresa.findFirst.mockResolvedValue({ id: 1 })
 })
 
 describe("GET /api/indices", () => {
@@ -45,7 +47,7 @@ describe("GET /api/indices", () => {
   })
 
   it("calcula os índices do exercício a partir das contas BP e DRE", async () => {
-    prisma.exercicio.findUnique.mockResolvedValue({ id: 2, periodo: "1T2026" })
+    prisma.exercicio.findUnique.mockResolvedValue({ id: 2, empresaId: 1, periodo: "1T2026" })
     prisma.conta.findMany.mockImplementation(({ where }: { where: { tipo: string } }) => {
       if (where.tipo === "BP") {
         return Promise.resolve([
@@ -88,7 +90,7 @@ describe("GET /api/indices", () => {
   })
 
   it("devolve null (não crasha) para índices que dependem da DRE quando não há DRE lançada (RN04)", async () => {
-    prisma.exercicio.findUnique.mockResolvedValue({ id: 2, periodo: "1T2026" })
+    prisma.exercicio.findUnique.mockResolvedValue({ id: 2, empresaId: 1, periodo: "1T2026" })
     prisma.conta.findMany.mockResolvedValue([]) // nem BP nem DRE têm conta lançada
 
     const response = await GET(buildRequest("?exercicioId=2"))
@@ -97,5 +99,14 @@ describe("GET /api/indices", () => {
     expect(response.status).toBe(200)
     const margemLiquida = body.valores.find((v: { id: string }) => v.id === "margem-liquida")
     expect(margemLiquida.valor).toBeNull()
+  })
+})
+
+describe("GET /api/indices — várias empresas", () => {
+  it("exercício de outra empresa: 400, como se não existisse", async () => {
+    prisma.exercicio.findUnique.mockResolvedValue({ id: 2, empresaId: 7, periodo: "1T2026" })
+    const response = await GET(buildRequest("?exercicioId=2"))
+    expect(response.status).toBe(400)
+    expect(prisma.conta.findMany).not.toHaveBeenCalled()
   })
 })

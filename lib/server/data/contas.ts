@@ -6,10 +6,11 @@ import type { Account } from "@/lib/financial-data"
 // usada pelo frontend (sumAccount, findAccountByName), sem duplicar a lógica de soma no
 // servidor. Formato de árvore próprio de app/api/plano-de-contas/route.ts (ContaNode) não
 // é reaproveitado aqui de propósito: são consumidores diferentes com formas diferentes.
-export async function buildBpAccountTree(): Promise<Account[]> {
+export async function buildBpAccountTree(empresaId: number): Promise<Account[]> {
   const contas = await prisma.conta.findMany({
     where: { tipo: "BP" },
-    include: { valores: { include: { exercicio: true } } },
+    // Só os valores da empresa em análise: a conta é global, o valor é de um exercício (e o exercício, de uma empresa).
+    include: { valores: { where: { exercicio: { empresaId } }, include: { exercicio: true } } },
     orderBy: { codigo: "asc" },
   })
 
