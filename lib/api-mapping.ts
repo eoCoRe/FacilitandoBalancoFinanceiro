@@ -12,9 +12,12 @@ import type { UserIdentity } from "./permissions"
 import { DEFAULT_SECTOR_ID, SECTORS } from "./sector-benchmarks"
 
 export interface Exercicio {
+  // O período ("1T2026"): é a chave que as telas usam nos valores por exercício.
   id: string
   label: string
   auditado: boolean
+  // Id do exercício no banco, usado pelo store para gravar.
+  dbId: number
 }
 
 export interface AuditEntry {
@@ -77,14 +80,6 @@ export interface FinancialSnapshot {
   auditLog: AuditEntry[]
 }
 
-// O store trabalha com códigos/períodos (a chave que as telas usam); a API, com ids de banco.
-// Estes índices fazem a ponte na hora de gravar.
-export interface IdIndex {
-  exercicioIdByPeriodo: Record<string, number>
-  contaIdByCode: Record<string, number>
-  dreContaIdByLine: Record<string, number>
-}
-
 // "1.10" vem antes de "1.2" na ordenação por texto que o banco faz; aqui compara por segmento numérico.
 export function compareCodes(a: string, b: string): number {
   const pa = a.split(".").map(Number)
@@ -96,21 +91,18 @@ export function compareCodes(a: string, b: string): number {
   return 0
 }
 
-export function mapContas(nodes: ContaNodePayload[]): { accounts: Account[]; contaIdByCode: Record<string, number> } {
-  const contaIdByCode: Record<string, number> = {}
-
+// Cada conta leva o próprio id do banco (`dbId`), então não há um segundo índice código → id para manter em dia.
+export function mapContas(nodes: ContaNodePayload[]): Account[] {
   function toAccount(node: ContaNodePayload): Account {
-    contaIdByCode[node.codigo] = node.id
     // Grupo = `children` (mesmo vazio); analítica = `values` (mesmo vazio, "não preenchido").
     if (node.ehGrupo || (node.subcontas?.length ?? 0) > 0) {
       const children = [...(node.subcontas ?? [])].sort((a, b) => compareCodes(a.codigo, b.codigo)).map(toAccount)
-      return { code: node.codigo, name: node.descricao, children }
+      return { code: node.codigo, name: node.descricao, dbId: node.id, children }
     }
-    return { code: node.codigo, name: node.descricao, values: { ...node.valores } }
+    return { code: node.codigo, name: node.descricao, dbId: node.id, values: { ...node.valores } }
   }
 
-  const accounts = [...nodes].sort((a, b) => compareCodes(a.codigo, b.codigo)).map(toAccount)
-  return { accounts, contaIdByCode }
+  return [...nodes].sort((a, b) => compareCodes(a.codigo, b.codigo)).map(toAccount)
 }
 
 // A API devolve a DRE já com os totalizadores; o store guarda só as linhas de entrada, porque
@@ -163,13 +155,9 @@ export function mapSnapshot(payloads: {
   dre: DrePayload
   dfc: DfcPayload
   auditoria: AuditoriaPayload
-}): { snapshot: FinancialSnapshot; ids: IdIndex } {
+}): { snapshot: FinancialSnapshot; dreContaIdByLine: Record<string, number> } {
   const { empresa } = payloads
-  const { accounts, contaIdByCode } = mapContas(payloads.contas.contas)
   const { dreByExercicio, dreContaIdByLine } = mapDre(payloads.dre)
-
-  const exercicioIdByPeriodo: Record<string, number> = {}
-  for (const ex of empresa.exercicios) exercicioIdByPeriodo[ex.periodo] = ex.id
 
   return {
     snapshot: {
@@ -177,12 +165,12 @@ export function mapSnapshot(payloads: {
       companyName: empresa.razaoSocial,
       cnpj: empresa.cnpj,
       sectorId: sectorIdFromLabel(empresa.setor),
-      exercicios: empresa.exercicios.map((ex) => ({ id: ex.periodo, label: ex.periodo, auditado: ex.auditado })),
-      accounts,
+      exercicios: empresa.exercicios.map((ex) => ({ id: ex.periodo, label: ex.periodo, auditado: ex.auditado, dbId: ex.id })),
+      accounts: mapContas(payloads.contas.contas),
       dreByExercicio,
       dfc: mapDfc(payloads.dfc),
       auditLog: mapAuditoria(payloads.auditoria),
     },
-    ids: { exercicioIdByPeriodo, contaIdByCode, dreContaIdByLine },
+    dreContaIdByLine,
   }
 }

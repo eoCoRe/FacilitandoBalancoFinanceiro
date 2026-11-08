@@ -28,8 +28,8 @@ describe("compareCodes", () => {
 })
 
 describe("mapContas", () => {
-  it("vira grupo (children) ou analítica (values) e indexa id por código", () => {
-    const { accounts, contaIdByCode } = mapContas([
+  it("vira grupo (children) ou analítica (values), e cada conta leva o próprio id do banco", () => {
+    const accounts = mapContas([
       node({
         id: 1,
         codigo: "1",
@@ -39,29 +39,28 @@ describe("mapContas", () => {
     ])
 
     expect(accounts).toEqual([
-      { code: "1", name: "Conta 1", children: [{ code: "1.1", name: "Conta 1.1", values: { "1T2026": 100 } }] },
+      { code: "1", name: "Conta 1", dbId: 1, children: [{ code: "1.1", name: "Conta 1.1", dbId: 2, values: { "1T2026": 100 } }] },
     ])
-    expect(contaIdByCode).toEqual({ "1": 1, "1.1": 2 })
   })
 
   it("mantém um grupo recém-criado (sem filhas) como grupo, para aceitar subcontas", () => {
-    const { accounts } = mapContas([node({ id: 5, codigo: "3", ehGrupo: true })])
-    expect(accounts[0]).toEqual({ code: "3", name: "Conta 3", children: [] })
+    const accounts = mapContas([node({ id: 5, codigo: "3", ehGrupo: true })])
+    expect(accounts[0]).toEqual({ code: "3", name: "Conta 3", dbId: 5, children: [] })
     expect(accounts[0].values).toBeUndefined()
   })
 
   it("mantém uma analítica sem lançamentos com values vazio (não preenchido ≠ zero)", () => {
-    const { accounts } = mapContas([node({ id: 5, codigo: "3" })])
-    expect(accounts[0]).toEqual({ code: "3", name: "Conta 3", values: {} })
+    const accounts = mapContas([node({ id: 5, codigo: "3" })])
+    expect(accounts[0]).toEqual({ code: "3", name: "Conta 3", dbId: 5, values: {} })
   })
 
   it("trata como grupo quem tem subcontas mesmo se ehGrupo vier falso", () => {
-    const { accounts } = mapContas([node({ id: 1, codigo: "1", subcontas: [node({ id: 2, codigo: "1.1" })] })])
+    const accounts = mapContas([node({ id: 1, codigo: "1", subcontas: [node({ id: 2, codigo: "1.1" })] })])
     expect(accounts[0].children).toHaveLength(1)
   })
 
   it("ordena filhas e raízes pela ordem numérica dos códigos", () => {
-    const { accounts } = mapContas([
+    const accounts = mapContas([
       node({ id: 3, codigo: "10" }),
       node({
         id: 1,
@@ -130,8 +129,8 @@ describe("sectorIdFromLabel", () => {
 })
 
 describe("mapSnapshot", () => {
-  it("monta o snapshot e o índice de ids a partir das respostas da API", () => {
-    const { snapshot, ids } = mapSnapshot({
+  it("monta o snapshot a partir das respostas da API, com o id do banco em cada exercício e conta", () => {
+    const { snapshot } = mapSnapshot({
       me: { user: { id: 3, nome: "Ana", email: "ana@teste.com", papel: "COORDENADOR", doisFatoresAtivo: false, totpAtivo: false, doisFatoresObrigatorio: false } },
       empresa: {
         id: 1,
@@ -155,11 +154,10 @@ describe("mapSnapshot", () => {
       cnpj: "12.345.678/0001-90",
       sectorId: "servicos",
       exercicios: [
-        { id: "4T2024", label: "4T2024", auditado: false },
-        { id: "1T2025", label: "1T2025", auditado: false },
+        { id: "4T2024", label: "4T2024", auditado: false, dbId: 4 },
+        { id: "1T2025", label: "1T2025", auditado: false, dbId: 5 },
       ],
+      accounts: [{ code: "1", dbId: 1 }],
     })
-    expect(ids.exercicioIdByPeriodo).toEqual({ "4T2024": 4, "1T2025": 5 })
-    expect(ids.contaIdByCode).toEqual({ "1": 1 })
   })
 })
