@@ -6,6 +6,8 @@
 export interface Account {
   code: string
   name: string
+  // Id da conta no banco, quando ela veio da API. É por ele que o store grava; o código é o que a tela mostra.
+  dbId?: number
   // Contas analíticas (folha) recebem valores por exercício. Ausência de valor
   // para um exercício = "não preenchido" (distinto de zero), usado para sinalizar
   // dados insuficientes (RN04).

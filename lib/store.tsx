@@ -16,7 +16,6 @@ import {
   type EmpresaPayload,
   type Exercicio,
   type FinancialSnapshot,
-  type IdIndex,
 } from "./api-mapping"
 import type { Account } from "./financial-data"
 import { dreLineIdFromCode } from "./extraction/pdf-extraction"
@@ -87,8 +86,6 @@ const EMPTY: FinancialSnapshot = {
   auditLog: [],
 }
 
-const NO_IDS: IdIndex = { exercicioIdByPeriodo: {}, contaIdByCode: {}, dreContaIdByLine: {} }
-
 // Identifica na trilha de auditoria de onde veio a leitura (o parser roda no navegador, sem LLM).
 export type OrigemExtracao = "leitor-pdf-local" | "digitacao-manual"
 const EXTRACTION_MODEL: OrigemExtracao = "leitor-pdf-local"
@@ -112,12 +109,65 @@ async function fetchSnapshot() {
   return mapSnapshot({ me, empresa, contas, dre, dfc, auditoria })
 }
 
+// Grava (ou apaga, com undefined) o valor de uma conta num exercício. Balanço e DRE usam a mesma rota.
+function putValor(contaId: number, exercicioId: number, valor: number | undefined) {
+  return api("/api/valores", { method: "PUT", body: { contaId, exercicioId, valor: valor ?? null }, keepalive: true })
+}
+
+function findAccount(accounts: Account[], code: string): Account | undefined {
+  for (const account of accounts) {
+    if (account.code === code) return account
+    const found = account.children && findAccount(account.children, code)
+    if (found) return found
+  }
+  return undefined
+}
+
+// As telas identificam contas pelo código e exercícios pelo período; o id do banco está no próprio objeto.
+function requireContaId(snapshot: FinancialSnapshot, code: string): number {
+  const id = findAccount(snapshot.accounts, code)?.dbId
+  if (!id) throw new ApiError(`Conta ${code} não encontrada.`)
+  return id
+}
+
+function requireExercicioId(snapshot: FinancialSnapshot, periodo: string): number {
+  const id = snapshot.exercicios.find((e) => e.id === periodo)?.dbId
+  if (!id) throw new ApiError(`Exercício ${periodo} não encontrado.`)
+  return id
+}
+
 function mapAccountTree(accounts: Account[], code: string, fn: (a: Account) => Account): Account[] {
   return accounts.map((account) => {
     if (account.code === code) return fn(account)
     if (account.children) return { ...account, children: mapAccountTree(account.children, code, fn) }
     return account
   })
+}
+
+function withAccountValue(snapshot: FinancialSnapshot, code: string, exercicioId: string, value: number | undefined): FinancialSnapshot {
+  return {
+    ...snapshot,
+    accounts: mapAccountTree(snapshot.accounts, code, (account) => {
+      const values = { ...account.values }
+      if (value === undefined) delete values[exercicioId]
+      else values[exercicioId] = value
+      return { ...account, values }
+    }),
+  }
+}
+
+function withDreValue(snapshot: FinancialSnapshot, exercicioId: string, lineId: string, value: number | undefined): FinancialSnapshot {
+  const current = { ...snapshot.dreByExercicio[exercicioId] }
+  if (value === undefined) delete current[lineId]
+  else current[lineId] = value
+  return { ...snapshot, dreByExercicio: { ...snapshot.dreByExercicio, [exercicioId]: current } }
+}
+
+interface PendingValueWrite {
+  timer: ReturnType<typeof setTimeout>
+  send: () => void
+  // Valor da célula antes da primeira edição ainda não gravada: é para ele que a tela volta se o servidor recusar.
+  previous: number | undefined
 }
 
 const StoreContext = createContext<StoreApi | undefined>(undefined)
@@ -129,16 +179,28 @@ export function FinancialDataProvider({ children }: { children: ReactNode }) {
   const [loadErrorCode, setLoadErrorCode] = useState<string | null>(null)
   const [mutationError, setMutationError] = useState<string | null>(null)
 
-  const ids = useRef<IdIndex>(NO_IDS)
+  // Sempre igual ao último estado: as gravações rodam depois, na fila, e leem daqui o id do banco.
+  const dataRef = useRef<FinancialSnapshot>(EMPTY)
+  // A DRE é fixa (linhas definidas no código), cada linha de entrada ligada a uma conta do banco.
+  const dreContaIds = useRef<Record<string, number>>({})
   // Gravações do servidor entram numa fila única para chegarem na ordem em que o usuário agiu.
   const queue = useRef<Promise<unknown>>(Promise.resolve())
   const pendingWrites = useRef(0)
-  const valueWrites = useRef(new Map<string, { timer: ReturnType<typeof setTimeout>; send: () => void }>())
+  const valueWrites = useRef(new Map<string, PendingValueWrite>())
 
-  const applySnapshot = useCallback((result: Awaited<ReturnType<typeof fetchSnapshot>>) => {
-    ids.current = result.ids
-    setData(result.snapshot)
+  // Toda mudança do snapshot passa por aqui, para o ref acompanhar o estado sem esperar o próximo render.
+  const updateData = useCallback((fn: (prev: FinancialSnapshot) => FinancialSnapshot) => {
+    dataRef.current = fn(dataRef.current)
+    setData(dataRef.current)
   }, [])
+
+  const applySnapshot = useCallback(
+    (result: Awaited<ReturnType<typeof fetchSnapshot>>) => {
+      dreContaIds.current = result.dreContaIdByLine
+      updateData(() => result.snapshot)
+    },
+    [updateData],
+  )
 
   useEffect(() => {
     let cancelled = false
@@ -170,7 +232,7 @@ export function FinancialDataProvider({ children }: { children: ReactNode }) {
         .then(({ user }) => {
           // Perfil rebaixado (ou 2 etapas ligadas/desligadas) noutro lugar: a tela passa a esconder o que a pessoa não
           // pode mais fazer, sem esperar um 403 numa gravação. Mantém o mesmo objeto se nada mudou.
-          setData((prev) => (JSON.stringify(prev.user) === JSON.stringify(user) ? prev : { ...prev, user }))
+          updateData((prev) => (JSON.stringify(prev.user) === JSON.stringify(user) ? prev : { ...prev, user }))
         })
         .catch(() => {}) // um 401 já leva ao login (api-client); outros erros passageiros ficam para a próxima conferência
     }
@@ -180,7 +242,7 @@ export function FinancialDataProvider({ children }: { children: ReactNode }) {
       clearInterval(timer)
       document.removeEventListener("visibilitychange", recheck)
     }
-  }, [status])
+  }, [status, updateData])
 
   const reload = useCallback(() => {
     setStatus("loading")
@@ -200,38 +262,33 @@ export function FinancialDataProvider({ children }: { children: ReactNode }) {
 
   const refreshAccounts = useCallback(async () => {
     const { contas } = await api<{ contas: ContaNodePayload[] }>("/api/plano-de-contas")
-    const { accounts, contaIdByCode } = mapContas(contas)
-    ids.current = { ...ids.current, contaIdByCode }
-    setData((prev) => ({ ...prev, accounts }))
-  }, [])
+    const accounts = mapContas(contas)
+    updateData((prev) => ({ ...prev, accounts }))
+  }, [updateData])
 
   const refreshDre = useCallback(async () => {
     const { dreByExercicio, dreContaIdByLine } = mapDre(await api<DrePayload>("/api/dre"))
-    ids.current = { ...ids.current, dreContaIdByLine }
-    setData((prev) => ({ ...prev, dreByExercicio }))
-  }, [])
+    dreContaIds.current = dreContaIdByLine
+    updateData((prev) => ({ ...prev, dreByExercicio }))
+  }, [updateData])
 
   const refreshAudit = useCallback(async () => {
     const auditoria = await api<AuditoriaPayload>("/api/auditoria")
-    setData((prev) => ({ ...prev, auditLog: mapAuditoria(auditoria) }))
-  }, [])
+    updateData((prev) => ({ ...prev, auditLog: mapAuditoria(auditoria) }))
+  }, [updateData])
 
-  // Roda `task` depois de tudo que já está na fila. Em caso de erro, mostra a mensagem e volta
-  // ao estado do servidor (descartando o que foi aplicado otimisticamente). Devolve undefined
-  // se falhou.
+  // Roda `task` depois de tudo que já está na fila. Em caso de erro, mostra a mensagem e chama
+  // `rollback`, que desfaz só o que esta tarefa aplicou na tela: edições de outras células que
+  // ainda esperam para ser gravadas ficam como estão. Devolve undefined se falhou.
   const enqueue = useCallback(
-    <T,>(task: () => Promise<T>): Promise<T | undefined> => {
+    <T,>(task: () => Promise<T>, rollback?: () => void): Promise<T | undefined> => {
       pendingWrites.current++
       const result = queue.current.then(async (): Promise<T | undefined> => {
         try {
           return await task()
         } catch (error) {
           setMutationError(errorMessage(error))
-          try {
-            applySnapshot(await fetchSnapshot())
-          } catch {
-            // servidor fora do ar — mantém o que está na tela; a mensagem acima já avisa.
-          }
+          rollback?.()
           return undefined
         } finally {
           pendingWrites.current--
@@ -242,7 +299,7 @@ export function FinancialDataProvider({ children }: { children: ReactNode }) {
       queue.current = result
       return result
     },
-    [applySnapshot, refreshAudit],
+    [refreshAudit],
   )
 
   const flushValueWrites = useCallback(() => {
@@ -252,16 +309,23 @@ export function FinancialDataProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  // Uma gravação pendente por célula (conta × exercício): a última digitada vence.
+  // Uma gravação pendente por célula (conta × exercício): a última digitada vence. Se o servidor
+  // recusar, `restore` recebe o valor de antes para devolver à célula.
   const scheduleValueWrite = useCallback(
-    (key: string, task: () => Promise<unknown>) => {
+    (key: string, current: number | undefined, write: () => Promise<unknown>, restore: (previous: number | undefined) => void) => {
       const existing = valueWrites.current.get(key)
       if (existing) clearTimeout(existing.timer)
+      const previous = existing ? existing.previous : current
       const send = () => {
         valueWrites.current.delete(key)
-        void enqueue(task)
+        void enqueue(write, () => {
+          // Já há uma edição nova desta célula esperando: ela vai sobrescrever a tela, então só corrige o ponto de volta dela.
+          const pending = valueWrites.current.get(key)
+          if (pending) pending.previous = previous
+          else restore(previous)
+        })
       }
-      valueWrites.current.set(key, { timer: setTimeout(send, VALUE_WRITE_DELAY_MS), send })
+      valueWrites.current.set(key, { timer: setTimeout(send, VALUE_WRITE_DELAY_MS), send, previous })
     },
     [enqueue],
   )
@@ -276,12 +340,31 @@ export function FinancialDataProvider({ children }: { children: ReactNode }) {
     }
   }, [flushValueWrites])
 
+  // Mudança estrutural: grava o que estava esperando, roda `task` na fila e relê o que mudou.
+  // Nada foi aplicado na tela antes, então uma recusa não tem o que desfazer. Devolve false se falhou.
+  const mutateAccounts = useCallback(
+    async (task: () => Promise<unknown>, refresh: () => Promise<unknown> = refreshAccounts) => {
+      flushValueWrites()
+      const done = await enqueue(async () => {
+        await task()
+        await refresh()
+        return true
+      })
+      return done === true
+    },
+    [enqueue, flushValueWrites, refreshAccounts],
+  )
+
   const setSector = useCallback(
     (sectorId: string) => {
-      setData((prev) => ({ ...prev, sectorId }))
-      void enqueue(() => api("/api/empresa", { method: "PATCH", body: { setor: sectorLabel(sectorId) } }))
+      const previous = dataRef.current.sectorId
+      updateData((prev) => ({ ...prev, sectorId }))
+      void enqueue(
+        () => api("/api/empresa", { method: "PATCH", body: { setor: sectorLabel(sectorId) } }),
+        () => updateData((prev) => (prev.sectorId === sectorId ? { ...prev, sectorId: previous } : prev)),
+      )
     },
-    [enqueue],
+    [enqueue, updateData],
   )
 
   const addExercicio = useCallback(
@@ -293,170 +376,131 @@ export function FinancialDataProvider({ children }: { children: ReactNode }) {
           method: "POST",
           body: { periodo },
         })
-        ids.current = {
-          ...ids.current,
-          exercicioIdByPeriodo: { ...ids.current.exercicioIdByPeriodo, [exercicio.periodo]: exercicio.id },
-        }
-        setData((prev) => ({
+        updateData((prev) => ({
           ...prev,
-          exercicios: [...prev.exercicios, { id: exercicio.periodo, label: exercicio.periodo, auditado: false }],
+          exercicios: [...prev.exercicios, { id: exercicio.periodo, label: exercicio.periodo, auditado: false, dbId: exercicio.id }],
         }))
         return exercicio.periodo
       })
       return created ?? null
     },
-    [enqueue, flushValueWrites],
+    [enqueue, flushValueWrites, updateData],
   )
 
   const setExercicioAuditado = useCallback(
     (exercicioId: string, auditado: boolean) => {
-      setData((prev) => ({
-        ...prev,
-        exercicios: prev.exercicios.map((e) => (e.id === exercicioId ? { ...e, auditado } : e)),
-      }))
-      void enqueue(async () => {
-        const exercicioDbId = ids.current.exercicioIdByPeriodo[exercicioId]
-        if (!exercicioDbId) throw new ApiError(`Exercício ${exercicioId} não encontrado.`)
-        await api(`/api/exercicios/${exercicioDbId}`, { method: "PATCH", body: { auditado } })
-      })
+      const setAuditado = (value: boolean) =>
+        updateData((prev) => ({
+          ...prev,
+          exercicios: prev.exercicios.map((e) => (e.id === exercicioId ? { ...e, auditado: value } : e)),
+        }))
+      setAuditado(auditado)
+      void enqueue(
+        () => api(`/api/exercicios/${requireExercicioId(dataRef.current, exercicioId)}`, { method: "PATCH", body: { auditado } }),
+        () => setAuditado(!auditado),
+      )
     },
-    [enqueue],
+    [enqueue, updateData],
   )
 
   const updateAccountValue = useCallback(
     (code: string, exercicioId: string, value: number | undefined) => {
-      setData((prev) => ({
-        ...prev,
-        accounts: mapAccountTree(prev.accounts, code, (account) => {
-          const values = { ...account.values }
-          if (value === undefined) delete values[exercicioId]
-          else values[exercicioId] = value
-          return { ...account, values }
-        }),
-      }))
-      scheduleValueWrite(`bp:${code}:${exercicioId}`, () => {
-        const contaId = ids.current.contaIdByCode[code]
-        const exercicioDbId = ids.current.exercicioIdByPeriodo[exercicioId]
-        if (!contaId || !exercicioDbId) throw new ApiError(`Conta ${code} ou exercício ${exercicioId} não encontrado.`)
-        return api("/api/valores", {
-          method: "PUT",
-          body: { contaId, exercicioId: exercicioDbId, valor: value ?? null },
-          keepalive: true,
-        })
-      })
+      const cell = () => findAccount(dataRef.current.accounts, code)?.values?.[exercicioId]
+      const current = cell()
+      updateData((prev) => withAccountValue(prev, code, exercicioId, value))
+      scheduleValueWrite(
+        `bp:${code}:${exercicioId}`,
+        current,
+        () => putValor(requireContaId(dataRef.current, code), requireExercicioId(dataRef.current, exercicioId), value),
+        (previous) => {
+          if (cell() === value) updateData((prev) => withAccountValue(prev, code, exercicioId, previous))
+        },
+      )
     },
-    [scheduleValueWrite],
+    [scheduleValueWrite, updateData],
   )
 
   const updateDreValue = useCallback(
     (exercicioId: string, lineId: string, value: number | undefined) => {
-      setData((prev) => {
-        const current = { ...prev.dreByExercicio[exercicioId] }
-        if (value === undefined) delete current[lineId]
-        else current[lineId] = value
-        return { ...prev, dreByExercicio: { ...prev.dreByExercicio, [exercicioId]: current } }
-      })
-      scheduleValueWrite(`dre:${lineId}:${exercicioId}`, () => {
-        const contaId = ids.current.dreContaIdByLine[lineId]
-        const exercicioDbId = ids.current.exercicioIdByPeriodo[exercicioId]
-        if (!contaId || !exercicioDbId) throw new ApiError(`Linha ${lineId} ou exercício ${exercicioId} não encontrado.`)
-        return api("/api/valores", {
-          method: "PUT",
-          body: { contaId, exercicioId: exercicioDbId, valor: value ?? null },
-          keepalive: true,
-        })
-      })
+      const cell = () => dataRef.current.dreByExercicio[exercicioId]?.[lineId]
+      const current = cell()
+      updateData((prev) => withDreValue(prev, exercicioId, lineId, value))
+      scheduleValueWrite(
+        `dre:${lineId}:${exercicioId}`,
+        current,
+        () => {
+          const contaId = dreContaIds.current[lineId]
+          if (!contaId) throw new ApiError(`Linha ${lineId} não encontrada.`)
+          return putValor(contaId, requireExercicioId(dataRef.current, exercicioId), value)
+        },
+        (previous) => {
+          if (cell() === value) updateData((prev) => withDreValue(prev, exercicioId, lineId, previous))
+        },
+      )
     },
-    [scheduleValueWrite],
+    [scheduleValueWrite, updateData],
   )
 
   const addAccountNode = useCallback(
-    async (parentCode: string | null, name: string, isGroup: boolean) => {
-      flushValueWrites()
-      const done = await enqueue(async () => {
-        const parentId = parentCode === null ? null : ids.current.contaIdByCode[parentCode]
-        if (parentCode !== null && !parentId) throw new ApiError(`Conta ${parentCode} não encontrada.`)
-        await api("/api/plano-de-contas", { method: "POST", body: { parentId, nome: name, ehGrupo: isGroup } })
-        await refreshAccounts()
-        return true
-      })
-      return done === true
-    },
-    [enqueue, flushValueWrites, refreshAccounts],
+    (parentCode: string | null, name: string, isGroup: boolean) =>
+      mutateAccounts(() => {
+        const parentId = parentCode === null ? null : requireContaId(dataRef.current, parentCode)
+        return api("/api/plano-de-contas", { method: "POST", body: { parentId, nome: name, ehGrupo: isGroup } })
+      }),
+    [mutateAccounts],
   )
 
   const renameAccountNode = useCallback(
-    async (code: string, name: string) => {
-      flushValueWrites()
-      const done = await enqueue(async () => {
-        const contaId = ids.current.contaIdByCode[code]
-        if (!contaId) throw new ApiError(`Conta ${code} não encontrada.`)
-        await api(`/api/plano-de-contas/${contaId}`, { method: "PATCH", body: { nome: name } })
-        await refreshAccounts()
-        return true
-      })
-      return done === true
-    },
-    [enqueue, flushValueWrites, refreshAccounts],
+    (code: string, name: string) =>
+      mutateAccounts(() => api(`/api/plano-de-contas/${requireContaId(dataRef.current, code)}`, { method: "PATCH", body: { nome: name } })),
+    [mutateAccounts],
   )
 
   const deleteAccountNode = useCallback(
-    async (code: string) => {
-      flushValueWrites()
-      const done = await enqueue(async () => {
-        const contaId = ids.current.contaIdByCode[code]
-        if (!contaId) throw new ApiError(`Conta ${code} não encontrada.`)
-        await api(`/api/plano-de-contas/${contaId}`, { method: "DELETE" })
-        await refreshAccounts()
-        return true
-      })
-      return done === true
-    },
-    [enqueue, flushValueWrites, refreshAccounts],
+    (code: string) => mutateAccounts(() => api(`/api/plano-de-contas/${requireContaId(dataRef.current, code)}`, { method: "DELETE" })),
+    [mutateAccounts],
   )
 
   const confirmExtraction = useCallback(
-    async (exercicioId: string, entries: ExtractionEntry[], fileName: string, origem: OrigemExtracao = EXTRACTION_MODEL) => {
-      flushValueWrites()
-      const done = await enqueue(async () => {
-        const exercicioDbId = ids.current.exercicioIdByPeriodo[exercicioId]
-        if (!exercicioDbId) throw new ApiError(`Exercício ${exercicioId} não encontrado.`)
-        const itens = entries.map((entry) => {
-          // Código "dre:<linha>" = linha de entrada da DRE (ver lib/extraction/pdf-extraction.ts); o resto, Balanço.
-          const dreLineId = entry.code === null ? null : dreLineIdFromCode(entry.code)
-          const contaId =
-            entry.code === null
-              ? null
-              : dreLineId !== null
-                ? ids.current.dreContaIdByLine[dreLineId]
-                : ids.current.contaIdByCode[entry.code]
-          if (entry.code !== null && !contaId) throw new ApiError(`Conta ${entry.code} não encontrada.`)
-          return {
-            contaId,
-            valor: entry.value,
-            confianca: entry.confidence,
-            paginaOrigem: entry.page,
-            rotulo: entry.label?.slice(0, 200),
-          }
-        })
-        await api("/api/extracoes", {
-          method: "POST",
-          body: { exercicioId: exercicioDbId, arquivoOrigem: fileName, modeloLlm: origem, itens },
-        })
-        await Promise.all([refreshAccounts(), refreshDre()])
-        return true
-      })
-      return done === true
-    },
-    [enqueue, flushValueWrites, refreshAccounts, refreshDre],
+    (exercicioId: string, entries: ExtractionEntry[], fileName: string, origem: OrigemExtracao = EXTRACTION_MODEL) =>
+      mutateAccounts(
+        () => {
+          const snapshot = dataRef.current
+          const itens = entries.map((entry) => {
+            // Código "dre:<linha>" = linha de entrada da DRE (ver lib/extraction/pdf-extraction.ts); o resto, Balanço.
+            const dreLineId = entry.code === null ? null : dreLineIdFromCode(entry.code)
+            let contaId: number | null = null
+            if (dreLineId !== null) {
+              contaId = dreContaIds.current[dreLineId] ?? null
+              if (!contaId) throw new ApiError(`Conta ${entry.code} não encontrada.`)
+            } else if (entry.code !== null) {
+              contaId = requireContaId(snapshot, entry.code)
+            }
+            return {
+              contaId,
+              valor: entry.value,
+              confianca: entry.confidence,
+              paginaOrigem: entry.page,
+              rotulo: entry.label?.slice(0, 200),
+            }
+          })
+          return api("/api/extracoes", {
+            method: "POST",
+            body: { exercicioId: requireExercicioId(snapshot, exercicioId), arquivoOrigem: fileName, modeloLlm: origem, itens },
+          })
+        },
+        () => Promise.all([refreshAccounts(), refreshDre()]),
+      ),
+    [mutateAccounts, refreshAccounts, refreshDre],
   )
 
   const registrarParecer = useCallback(
     async (exercicioId: string, dados: NovoParecer) => {
       const done = await enqueue(async () => {
-        const exercicioDbId = ids.current.exercicioIdByPeriodo[exercicioId]
-        if (!exercicioDbId) throw new ApiError(`Exercício ${exercicioId} não encontrado.`)
-        const parecer = await api<ParecerRegistrado>("/api/pareceres", { method: "POST", body: { exercicioId: exercicioDbId, ...dados } })
+        const parecer = await api<ParecerRegistrado>("/api/pareceres", {
+          method: "POST",
+          body: { exercicioId: requireExercicioId(dataRef.current, exercicioId), ...dados },
+        })
         await refreshAudit()
         return parecer
       })
